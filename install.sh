@@ -33,6 +33,12 @@ ln -sf "$SCRIPT_DIR/easydateien" "$CONFIG_DIR/easydateien"
 ln -sf "$SCRIPT_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
 chmod +x "$SCRIPT_DIR/easydateien" "$SCRIPT_DIR/easydateien_konfigurator.py"
 
+if command -v clang >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/easydateien_clip.m" ]; then
+    echo "Kompiliere natives macOS-Clipboard-Modul..."
+    clang -O3 -framework AppKit -framework Foundation "$SCRIPT_DIR/easydateien_clip.m" -o "$CONFIG_DIR/easydateien_clip"
+    chmod +x "$CONFIG_DIR/easydateien_clip"
+fi
+
 # 3. Standard-Konfiguration initialisieren, falls noch nicht vorhanden
 if [ ! -f "$CONFIG_DIR/config.json" ]; then
     echo "Erstelle Standard-Konfiguration in $CONFIG_DIR/config.json..."

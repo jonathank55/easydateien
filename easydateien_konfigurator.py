@@ -72,6 +72,7 @@ KEYBINDING_ITEMS = [
     ("select", "Element auswählen / abwählen (*)", "[SPACE, v]"),
     ("select_all", "Alle Elemente auswählen / abwählen", "[V, a]"),
     ("rename", "Element umbenennen (r)", "[r]"),
+    ("undo", "Letzte Aktion rückgängig machen (Z / u)", "[Z, u]"),
     ("zip", "ZIP-Archiv erstellen (z)", "[z]"),
     ("cut", "Auswahl ausschneiden (×)", "[x]"),
     ("copy", "Auswahl kopieren / yank (y / c)", "[y, c]"),

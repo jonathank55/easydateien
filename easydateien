@@ -25,6 +25,7 @@ from typing import List, Dict, Set, Optional, Tuple
 HOME_DIR = os.path.expanduser("~")
 CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+CLIP_HELPER_PATH = os.path.join(CONFIG_DIR, "easydateien_clip")
 
 # Farbcodes nach optimi-Farbnorm
 C_RESET = "\033[0m"
@@ -133,30 +134,107 @@ def format_mtime(mtime: float) -> str:
         return "---"
 
 
+def ensure_clip_helper() -> Optional[str]:
+    """Stellt sicher, dass das native macOS Clipboard-Helper-Tool kompiliert und bereit ist."""
+    if os.path.exists(CLIP_HELPER_PATH) and os.access(CLIP_HELPER_PATH, os.X_OK):
+        return CLIP_HELPER_PATH
+    os.makedirs(os.path.dirname(CLIP_HELPER_PATH), exist_ok=True)
+    c_code = """#import <AppKit/AppKit.h>
+#import <Foundation/Foundation.h>
+
+int main(int argc, const char * argv[]) {
+    @autoreleasepool {
+        if (argc < 2) return 1;
+        NSString *action = [NSString stringWithUTF8String:argv[1]];
+        NSPasteboard *pb = [NSPasteboard generalPasteboard];
+
+        if ([action isEqualToString:@"set"] && argc > 2) {
+            [pb clearContents];
+            NSMutableArray *urls = [NSMutableArray array];
+            NSMutableArray *paths = [NSMutableArray array];
+            for (int i = 2; i < argc; i++) {
+                NSString *p = [NSString stringWithUTF8String:argv[i]];
+                NSURL *url = [NSURL fileURLWithPath:p];
+                if (url) {
+                    [urls addObject:url];
+                    [paths addObject:p];
+                }
+            }
+            if ([urls count] > 0) {
+                [pb writeObjects:urls];
+                NSString *allPaths = [paths componentsJoinedByString:@"\\n"];
+                [pb setString:allPaths forType:NSPasteboardTypeString];
+            }
+            return 0;
+        } else if ([action isEqualToString:@"get"]) {
+            NSArray *classes = @[[NSURL class]];
+            NSDictionary *options = @{NSPasteboardURLReadingFileURLsOnlyKey: @YES};
+            NSArray *urls = [pb readObjectsForClasses:classes options:options];
+            if (urls && [urls count] > 0) {
+                for (NSURL *url in urls) {
+                    printf("%s\\n", [[url path] UTF8String]);
+                }
+                return 0;
+            }
+            NSString *str = [pb stringForType:NSPasteboardTypeString];
+            if (str && [str length] > 0) {
+                printf("%s\\n", [str UTF8String]);
+            }
+            return 0;
+        }
+    }
+    return 0;
+}
+"""
+    tmp_m = "/tmp/easydateien_clip_src.m"
+    try:
+        with open(tmp_m, "w", encoding="utf-8") as f:
+            f.write(c_code)
+        res = subprocess.run(["clang", "-O3", "-framework", "AppKit", "-framework", "Foundation", tmp_m, "-o", CLIP_HELPER_PATH], capture_output=True)
+        if res.returncode == 0:
+            return CLIP_HELPER_PATH
+    except Exception:
+        pass
+    return None
+
+
 def sync_to_macos_clipboard(paths: List[str]):
-    """Synchronisiert Dateipfade in die macOS-Zwischenablage (Finder & pbcopy)."""
+    """Synchronisiert Dateipfade nativ in die macOS-Zwischenablage für Finder (Cmd+V) und Texteditoren."""
     if not paths:
         return
     abs_paths = [os.path.abspath(p) for p in paths if os.path.exists(p)]
     if not abs_paths:
         return
+    helper = ensure_clip_helper()
+    if helper:
+        try:
+            res = subprocess.run([helper, "set"] + abs_paths, capture_output=True, timeout=2.0)
+            if res.returncode == 0:
+                return
+        except Exception:
+            pass
+    # AppleScript-Fallback
     try:
         items = ", ".join([f'(POSIX file "{p.replace(chr(34), chr(92)+chr(34))}" as alias)' for p in abs_paths])
-        as_code = f'tell application "Finder" to set the clipboard to {{{items}}}'
-        subprocess.run(["osascript", "-e", as_code], capture_output=True, timeout=1.0)
-    except Exception:
-        pass
-    try:
-        p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
-        p.communicate(input="\n".join(abs_paths).encode("utf-8"))
+        as_code = f'set the clipboard to {{{items}}}'
+        subprocess.run(["osascript", "-e", as_code], capture_output=True, timeout=2.0)
     except Exception:
         pass
 
 
 def get_macos_clipboard_files() -> List[str]:
-    """Liest Dateipfade aus der macOS-Zwischenablage."""
+    """Liest echte Dateiobjekte und Pfade aus dem macOS-Pasteboard."""
+    helper = ensure_clip_helper()
+    if helper:
+        try:
+            out = subprocess.check_output([helper, "get"], text=True, timeout=2.0)
+            lines = [l.strip() for l in out.splitlines() if l.strip() and os.path.exists(l.strip())]
+            if lines:
+                return lines
+        except Exception:
+            pass
     try:
-        out = subprocess.check_output(["pbpaste"], text=True)
+        out = subprocess.check_output(["pbpaste"], text=True, timeout=1.0)
         lines = [l.strip() for l in out.splitlines() if l.strip() and os.path.exists(l.strip())]
         if lines:
             return lines
@@ -172,6 +250,16 @@ def copy_text_to_clipboard(text: str):
         p.communicate(input=text.encode("utf-8"))
     except Exception:
         pass
+
+
+class UndoAction:
+    """Repräsentiert eine umkehrbare Dateiaktion im Undo-Stack."""
+    __slots__ = ("action_type", "description", "data")
+
+    def __init__(self, action_type: str, description: str, data: dict):
+        self.action_type = action_type
+        self.description = description
+        self.data = data
 
 
 class FileEntry:
@@ -354,6 +442,8 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
             return "BACKSPACE"
         elif raw in (bytes([3]), bytes([4])):
             return "QUIT"
+        elif raw == bytes([26]):  # Ctrl+Z
+            return "UNDO"
 
         if raw[0] >= 0xC0:
             needed = 2 if raw[0] < 0xE0 else (3 if raw[0] < 0xF0 else 4)
@@ -389,6 +479,8 @@ class EasyDateienApp:
         self.status_expiry_moves: int = 0
         self.filter_query: str = ""
 
+        self.undo_stack: List[UndoAction] = []
+
         self.active_dialog: Optional[str] = None
         self.dialog_input: str = ""
         self.dialog_cursor: int = 0
@@ -417,6 +509,7 @@ class EasyDateienApp:
         self.cached_file_preview_path: Optional[str] = None
         self.cached_file_preview_lines: List[str] = []
 
+        ensure_clip_helper()
         self.refresh_items()
 
     def load_config(self) -> dict:
@@ -570,13 +663,16 @@ class EasyDateienApp:
             return
         success = 0
         last_name = ""
+        pasted_records = []
+        is_cut = (self.clipboard_mode == "cut")
+
         for src in sources:
             if not os.path.exists(src):
                 continue
             name = os.path.basename(src)
             dest = os.path.join(self.current_dir, name)
             if os.path.abspath(src) == os.path.abspath(dest):
-                if self.clipboard_mode == "cut":
+                if is_cut:
                     continue
                 base, ext = os.path.splitext(name)
                 c = 1
@@ -584,17 +680,24 @@ class EasyDateienApp:
                     dest = os.path.join(self.current_dir, f"{base} ({c}){ext}")
                     c += 1
             try:
-                if self.clipboard_mode == "cut":
+                if is_cut:
                     shutil.move(src, dest)
+                    pasted_records.append((src, dest))
                 else:
                     if os.path.isdir(src):
                         shutil.copytree(src, dest)
                     else:
                         shutil.copy2(src, dest)
+                    pasted_records.append((None, dest))
                 success += 1
                 last_name = os.path.basename(dest)
             except Exception:
                 pass
+
+        if pasted_records:
+            desc = f"Einfügen von {len(pasted_records)} Element(en)"
+            self.undo_stack.append(UndoAction("paste", desc, {"is_cut": is_cut, "records": pasted_records}))
+
         self.clipboard_mode = None
         self.clipboard_paths = []
         self.refresh_items()
@@ -627,9 +730,96 @@ class EasyDateienApp:
             self.selected_paths.clear()
             self.refresh_items()
             self.select_filename(os.path.basename(dest))
+            self.undo_stack.append(UndoAction("create_zip", f"ZIP {os.path.basename(dest)}", {"path": dest}))
             self.set_status(f"ZIP erstellt: {os.path.basename(dest)}", "success")
         except Exception as e:
             self.set_status(f"Fehler: {e}", "error")
+
+    def undo_last_action(self):
+        """Macht die letzte Dateioperation (Löschen, Umbenennen, Erstellen, Einfügen, ZIP) rückgängig."""
+        if not self.undo_stack:
+            self.set_status("Nichts zum Rückgängigmachen vorhanden", "info")
+            return
+
+        action = self.undo_stack.pop()
+        trash_dir = os.path.expanduser("~/.Trash")
+
+        try:
+            if action.action_type == "trash":
+                restored = 0
+                for orig_p, trash_p in action.data.get("records", []):
+                    if os.path.exists(trash_p):
+                        os.makedirs(os.path.dirname(orig_p), exist_ok=True)
+                        dest_target = orig_p
+                        if os.path.exists(dest_target):
+                            stem, ext = os.path.splitext(orig_p)
+                            c = 1
+                            while os.path.exists(dest_target):
+                                dest_target = f"{stem}_restored_{c}{ext}"
+                                c += 1
+                        shutil.move(trash_p, dest_target)
+                        restored += 1
+                self.refresh_items()
+                self.set_status(f"Rückgängig: {restored} Element(e) aus Papierkorb wiederhergestellt", "success")
+
+            elif action.action_type == "rename":
+                old_p = action.data.get("old_path")
+                new_p = action.data.get("new_path")
+                if new_p and os.path.exists(new_p) and not os.path.exists(old_p):
+                    os.rename(new_p, old_p)
+                    self.refresh_items()
+                    self.select_filename(os.path.basename(old_p))
+                    self.set_status(f"Rückgängig: Name in „{os.path.basename(old_p)}“ zurückgesetzt", "success")
+
+            elif action.action_type == "create":
+                p = action.data.get("path")
+                if p and os.path.exists(p):
+                    dest_p = os.path.join(trash_dir, os.path.basename(p))
+                    c = 1
+                    stem, ext = os.path.splitext(os.path.basename(p))
+                    while os.path.exists(dest_p):
+                        dest_p = os.path.join(trash_dir, f"{stem}_{int(time.time())}_{c}{ext}")
+                        c += 1
+                    shutil.move(p, dest_p)
+                    self.refresh_items()
+                    self.set_status(f"Rückgängig: {os.path.basename(p)} gelöscht", "success")
+
+            elif action.action_type == "create_zip":
+                p = action.data.get("path")
+                if p and os.path.exists(p):
+                    dest_p = os.path.join(trash_dir, os.path.basename(p))
+                    c = 1
+                    stem, ext = os.path.splitext(os.path.basename(p))
+                    while os.path.exists(dest_p):
+                        dest_p = os.path.join(trash_dir, f"{stem}_{int(time.time())}_{c}{ext}")
+                        c += 1
+                    shutil.move(p, dest_p)
+                    self.refresh_items()
+                    self.set_status(f"Rückgängig: {os.path.basename(p)} gelöscht", "success")
+
+            elif action.action_type == "paste":
+                is_cut = action.data.get("is_cut", False)
+                records = action.data.get("records", [])
+                reverted = 0
+                for src_p, dest_p in records:
+                    if dest_p and os.path.exists(dest_p):
+                        if is_cut and src_p:
+                            os.makedirs(os.path.dirname(src_p), exist_ok=True)
+                            shutil.move(dest_p, src_p)
+                            reverted += 1
+                        else:
+                            trash_dest = os.path.join(trash_dir, os.path.basename(dest_p))
+                            c = 1
+                            stem, ext = os.path.splitext(os.path.basename(dest_p))
+                            while os.path.exists(trash_dest):
+                                trash_dest = os.path.join(trash_dir, f"{stem}_{int(time.time())}_{c}{ext}")
+                                c += 1
+                            shutil.move(dest_p, trash_dest)
+                            reverted += 1
+                self.refresh_items()
+                self.set_status(f"Rückgängig: Einfügen von {reverted} Element(en) zurückgesetzt", "success")
+        except Exception as e:
+            self.set_status(f"Fehler bei Rückgängig: {e}", "error")
 
     def toggle_sort(self):
         modes = ["mtime", "name", "size", "ext"]
@@ -1211,7 +1401,7 @@ class EasyDateienApp:
                     mode_lbl = f"{C_BOLD_BLUE}NOR{C_RESET}"
 
                 left_b = f" {mode_lbl}  "
-                ctrl = f"{C_GRAY}[↑↓] Nav  [Enter] Open  [e] Edit  [n] Neu  [r] Rename  [/] Suche  [d] Del  [y/c] Copy  [x] Cut  [p] Paste  [g] Go  [m] Menu  [q] Quit{C_RESET}"
+                ctrl = f"{C_GRAY}[↑↓] Nav  [Enter] Open  [e] Edit  [n] Neu  [r] Rename  [Z/u] Undo  [d] Del  [y/c] Copy  [x] Cut  [p] Paste  [g] Go  [q] Quit{C_RESET}"
                 avail_ctrl = max(1, term_cols - str_width(left_b))
                 st_line = pad_to_width(f"{left_b}{truncate_to_width(ctrl, avail_ctrl)}", term_cols)
 
@@ -1316,24 +1506,36 @@ class EasyDateienApp:
         if self.active_dialog == "trash_confirm":
             if key in ("y", "Y", "j", "J", "ENTER"):
                 targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
-                count = 0
+                trash_dir = os.path.expanduser("~/.Trash")
+                os.makedirs(trash_dir, exist_ok=True)
+                moved_records = []
+
                 for t in targets:
+                    if not os.path.exists(t):
+                        continue
+                    base_name = os.path.basename(t)
+                    dest_p = os.path.join(trash_dir, base_name)
+                    c = 1
+                    stem, ext = os.path.splitext(base_name)
+                    while os.path.exists(dest_p):
+                        dest_p = os.path.join(trash_dir, f"{stem}_{int(time.time())}_{c}{ext}")
+                        c += 1
                     try:
-                        res = subprocess.run(["trash", t], capture_output=True)
-                        if res.returncode == 0:
-                            count += 1
-                        else:
-                            as_del = f'tell application "Finder" to delete (POSIX file "{os.path.abspath(t)}" as alias)'
-                            subprocess.run(["osascript", "-e", as_del], capture_output=True)
-                            count += 1
+                        shutil.move(t, dest_p)
+                        moved_records.append((t, dest_p))
                     except Exception:
                         pass
+
+                if moved_records:
+                    desc = f"{len(moved_records)} Element(e) löschen" if len(moved_records) > 1 else f"Löschen von {os.path.basename(moved_records[0][0])}"
+                    self.undo_stack.append(UndoAction("trash", desc, {"records": moved_records}))
+
                 self.selected_paths.clear()
                 self.clipboard_paths = [p for p in self.clipboard_paths if p not in targets]
                 if not self.clipboard_paths:
                     self.clipboard_mode = None
                 self.refresh_items()
-                self.set_status(f"{count} Elemente in Papierkorb verschoben", "success")
+                self.set_status(f"{len(moved_records)} Elemente in Papierkorb verschoben (Z = Rückgängig)", "success")
             else:
                 self.set_status("Löschen abgebrochen")
             self.active_dialog = None
@@ -1401,9 +1603,11 @@ class EasyDateienApp:
                     return True
                 try:
                     os.rename(target_it.path, new_path)
+                    desc = f"Umbenennen von {target_it.name} in {val}"
+                    self.undo_stack.append(UndoAction("rename", desc, {"old_path": target_it.path, "new_path": new_path}))
                     self.refresh_items()
                     self.select_filename(val)
-                    self.set_status(f"Umbenannt in: {val}", "success")
+                    self.set_status(f"Umbenannt in: {val} (Z = Rückgängig)", "success")
                 except Exception as e:
                     self.set_status(f"Fehler beim Umbenennen: {e}", "error")
                 return True
@@ -1421,10 +1625,11 @@ class EasyDateienApp:
                 try:
                     if is_dir_target:
                         os.makedirs(target_p, exist_ok=True)
-                        self.set_status(f"Ordner erstellt: {clean_name}", "success")
+                        self.set_status(f"Ordner erstellt: {clean_name} (Z = Rückgängig)", "success")
                     else:
                         open(target_p, "a").close()
-                        self.set_status(f"Datei erstellt: {clean_name}", "success")
+                        self.set_status(f"Datei erstellt: {clean_name} (Z = Rückgängig)", "success")
+                    self.undo_stack.append(UndoAction("create", f"Erstellen von {clean_name}", {"path": target_p}))
                     self.refresh_items()
                     self.select_filename(clean_name)
                 except Exception as e:
@@ -1588,6 +1793,11 @@ class EasyDateienApp:
                         cx, cy = int(p[1]), int(p[2])
                         if self.handle_mouse_right_click(cx, cy):
                             needs_redraw = True
+                    continue
+
+                if key in ("Z", "u", "UNDO"):
+                    self.undo_last_action()
+                    needs_redraw = True
                     continue
 
                 if key == "ESC":
@@ -1790,7 +2000,7 @@ class EasyDateienApp:
                         self.dialog_target_item = item
                         needs_redraw = True
                     continue
-                elif key in ("z", "Z"):
+                elif key in ("z",):
                     self.create_zip_archive()
                     needs_redraw = True
                     continue
@@ -1911,7 +2121,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.3.1", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.0", help="Programmversion anzeigen")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
 
