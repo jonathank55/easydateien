@@ -17,6 +17,7 @@ import termios
 import tty
 import subprocess
 import argparse
+import re
 
 CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
 CONFIG_FILE = os.environ.get("EASYDATEIEN_CONFIG", os.path.join(CONFIG_DIR, "config.json"))
@@ -29,6 +30,36 @@ RESET = "\033[0m"
 HIDE_CURSOR = "\033[?25l"
 SHOW_CURSOR = "\033[?25h"
 CLEAR_LINE = "\033[2K"
+
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+
+def visible_len(text: str) -> int:
+    """Berechnet die reale sichtbare Zeichenbreite ohne ANSI-Steuersequenzen."""
+    return len(ANSI_ESCAPE_RE.sub("", text))
+
+
+def truncate_end(text: str, max_w: int) -> str:
+    """Kürzt einen Text deterministisch am Ende mit '...' ab, falls er max_w überschreitet."""
+    if max_w <= 0:
+        return ""
+    if len(text) <= max_w:
+        return text
+    if max_w <= 3:
+        return text[:max_w]
+    return text[: max_w - 3] + "..."
+
+
+def pad_visible(text: str, width: int, align: str = "left") -> str:
+    """Füllt einen String unter Berücksichtigung von ANSI-Steuerzeichen passgenau auf."""
+    vlen = visible_len(text)
+    if vlen > width:
+        plain = ANSI_ESCAPE_RE.sub("", text)
+        return truncate_end(plain, width)
+    pad = " " * (width - vlen)
+    if align == "right":
+        return pad + text
+    return text + pad
 
 
 DEFAULT_KEYMAP = {
@@ -55,26 +86,26 @@ DEFAULT_KEYMAP = {
 }
 
 ACTION_NAMES = {
-    "up": "Cursor nach oben",
-    "down": "Cursor nach unten",
-    "left": "Übergeordneter Ordner (Zurück)",
-    "right": "Hineingehen / Öffnen",
-    "open": "Datei oder Ordner öffnen",
-    "select": "Auswahl umschalten (Markieren)",
-    "select_all": "Alle markieren / abwählen",
-    "cut": "Ausschneiden (x)",
-    "copy": "Kopieren (c)",
-    "paste": "Einfügen / Einsetzen (p)",
+    "up": "Cursor nach oben bewegen",
+    "down": "Cursor nach unten bewegen",
+    "left": "Übergeordnetes Verzeichnis (Zurück)",
+    "right": "Ordner öffnen (bei Datei: Doppel-→ für nano)",
+    "open": "Systemweit öffnen (open, Finder für Ordner)",
+    "select": "Element auswählen / abwählen (*)",
+    "select_all": "Alle Elemente auswählen / abwählen",
+    "cut": "Auswahl ausschneiden (×)",
+    "copy": "Auswahl kopieren (+)",
+    "paste": "Zwischenspeicher einfügen (p)",
     "trash": "In den Papierkorb verschieben (d)",
     "toggle_hidden": "Versteckte Dateien umschalten (./z)",
     "config_menu": "Konfigurationsmenü öffnen (m)",
     "goto_downloads": "Gehe zu Downloads (g d)",
     "goto_documents": "Gehe zu Dokumente (g f)",
-    "goto_home": "Gehe zu Benutzerordner (g h / ~)",
+    "goto_home": "Gehe zu Home-Verzeichnis (g h / ~)",
     "goto_interactive": "Pfad manuell eingeben (g i)",
-    "goto_clipboard": "Gehe zu kopiertem Pfad (g p)",
+    "goto_clipboard": "Gehe zu Pfad in Zwischenablage (g p)",
     "zip": "ZIP-Archiv erstellen (c z)",
-    "quit": "Beenden (q / ESC)",
+    "quit": "EasyDateien beenden (q)",
 }
 
 
@@ -87,7 +118,8 @@ def get_default_config() -> dict:
         "show_hidden": False,
         "preview": False,
         "columns_enabled": True,
-        "divider_style": "horizontal",
+        "divider_style": "vertikal",
+        "show_controls": True,
         "esc_to_quit": False,
         "mouse_support": True,
         "text_editor": "nano %s",
@@ -389,8 +421,9 @@ def select_menu_interactive(
     options: list[str],
     default_idx: int = 0,
     subtitle: str | None = None,
+    preserve_screen: bool = False,
 ) -> int | None:
-    """Interaktives Auswahldialogmenü mit flüssiger Pfeiltasten- und Mausnavigation im SCHNELLSTART-Design."""
+    """Interaktives Auswahldialogmenü mit flüssiger Pfeiltasten- und Mausnavigation im Yazi-Box-Design."""
     total = len(options)
     if total == 0:
         return None
@@ -423,7 +456,10 @@ def select_menu_interactive(
         pass
 
     tty.setcbreak(fd, termios.TCSADRAIN)
-    sys.stdout.write(HIDE_CURSOR)
+    if not preserve_screen:
+        sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
+    else:
+        sys.stdout.write(HIDE_CURSOR)
     if mouse_enabled:
         sys.stdout.write("\033[?1000h\033[?1006h")
     sys.stdout.write("\033[2J\033[H")
@@ -442,61 +478,88 @@ def select_menu_interactive(
 
             if needs_redraw:
                 term_cols, term_rows = curr_size
-                margin = "  " if term_cols >= 80 else (" " if term_cols >= 45 else "")
+                inner_w = max(10, term_cols - 2)
                 opt_row_map.clear()
                 lines = []
-                lines.append(f"{margin}{BOLD}{title}{RESET}")
-                lines.append(f"{margin}{get_divider('─', max(1, term_cols - 2 * len(margin)))}")
+
+                # 1. Top border
+                lines.append(f"╭{'─' * inner_w}╮")
+
+                # 2. Titel
+                t_trunc = truncate_end(title, max(4, inner_w - 4))
+                title_line = pad_visible(f"  {BOLD}{t_trunc}{RESET}", inner_w)
+                lines.append(f"│{title_line}│")
+
+                # 3. Subtitel (falls vorhanden)
                 if subtitle:
-                    lines.append(f"{margin}{ITALIC}{subtitle}{RESET}")
-                    lines.append("")
+                    s_trunc = truncate_end(subtitle, max(4, inner_w - 4))
+                    sub_line = pad_visible(f"  {ITALIC}{s_trunc}{RESET}", inner_w)
+                    lines.append(f"│{sub_line}│")
 
-                fixed_lines_count = len(lines) + 2
-                avail_rows = max(3, term_rows - fixed_lines_count)
+                # 4. Trenner
+                lines.append(f"├{'─' * inner_w}┤")
 
-                top_padding = max(0, (term_rows - (fixed_lines_count + min(total, avail_rows))) // 2)
+                # 5. Budget für Optionen
+                fixed_bottom = 3
+                avail_rows = max(1, term_rows - len(lines) - fixed_bottom)
 
                 if total <= avail_rows:
-                    for idx, opt in enumerate(options):
-                        is_sel = (idx == selected_idx)
-                        row_num = top_padding + len(lines) + 1
-                        opt_row_map[row_num] = idx
-                        if is_sel:
-                            lines.append(f"{margin}  {BOLD}▸ {opt}{RESET}")
-                        else:
-                            lines.append(f"{margin}    {opt}")
+                    start_idx = 0
+                    end_idx = total
+                    has_up = False
+                    has_down = False
                 else:
-                    window_size = max(2, avail_rows - 2)
-                    half = window_size // 2
-                    start_idx = max(0, min(selected_idx - half, total - window_size))
-                    end_idx = min(total, start_idx + window_size)
+                    show_count = max(1, avail_rows - 2)
+                    half = show_count // 2
+                    start_idx = max(0, min(selected_idx - half, total - show_count))
+                    end_idx = min(total, start_idx + show_count)
+                    has_up = (start_idx > 0)
+                    has_down = (end_idx < total)
 
-                    if start_idx > 0:
-                        lines.append(f"{margin}  ▲ ... ({start_idx} weitere oben)")
-                    for idx in range(start_idx, end_idx):
-                        opt = options[idx]
-                        is_sel = (idx == selected_idx)
-                        row_num = top_padding + len(lines) + 1
-                        opt_row_map[row_num] = idx
-                        if is_sel:
-                            lines.append(f"{margin}  {BOLD}▸ {opt}{RESET}")
-                        else:
-                            lines.append(f"{margin}    {opt}")
-                    if end_idx < total:
-                        lines.append(f"{margin}  ▼ ... ({total - end_idx} weitere unten)")
+                if has_up:
+                    up_txt = pad_visible(f"  {ITALIC}▲ ... ({start_idx} weitere oben){RESET}", inner_w)
+                    lines.append(f"│{up_txt}│")
 
-                lines.append(f"{margin}{get_divider('─', max(1, term_cols - 2 * len(margin)))}")
+                for idx in range(start_idx, end_idx):
+                    opt = options[idx]
+                    is_sel = (idx == selected_idx)
+                    row_num = len(lines) + 1
+                    opt_row_map[row_num] = idx
+
+                    opt_w = max(4, inner_w - 6)
+                    opt_trunc = truncate_end(opt, opt_w)
+                    if is_sel:
+                        line_txt = pad_visible(f"  {BOLD}▸ {opt_trunc}{RESET}", inner_w)
+                    else:
+                        line_txt = pad_visible(f"    {opt_trunc}", inner_w)
+                    lines.append(f"│{line_txt}│")
+
+                if has_down:
+                    down_txt = pad_visible(f"  {ITALIC}▼ ... ({total - end_idx} weitere unten){RESET}", inner_w)
+                    lines.append(f"│{down_txt}│")
+
+                # 6. Auffüllen mit leeren Kasten-Zeilen
+                while len(lines) + fixed_bottom < term_rows:
+                    lines.append(f"│{' ' * inner_w}│")
+
+                # 7. Unterer Trenner & Hilfstext & Abschluss
+                lines.append(f"├{'─' * inner_w}┤")
                 hints = "[↑/↓/j/k] Navigieren  [Enter/→] Auswählen  [ESC/q] Zurück"
-                if len(hints) > term_cols - 2 * len(margin):
+                if visible_len(hints) > inner_w - 4:
                     hints = "[↑/↓] Nav  [Enter] OK  [ESC] Zurück"
-                lines.append(f"{margin}{ITALIC}{hints}{RESET}")
+                hints_trunc = truncate_end(hints, max(4, inner_w - 4))
+                hints_line = pad_visible(f"  {ITALIC}{hints_trunc}{RESET}", inner_w)
+                lines.append(f"│{hints_line}│")
+                lines.append(f"╰{'─' * inner_w}╯")
 
+                # Bildschirmausgabe ohne Zeilenüberlauf und ohne Scrollen
                 sys.stdout.write("\033[H")
-                for _ in range(top_padding):
-                    sys.stdout.write(f"\r{CLEAR_LINE}\n")
-                for line in lines:
-                    sys.stdout.write(f"\r{CLEAR_LINE}{line}\n")
-                sys.stdout.write("\033[J")
+                out_lines = lines[:term_rows]
+                for i, line in enumerate(out_lines):
+                    if i == len(out_lines) - 1:
+                        sys.stdout.write(f"\r\033[2K{line}")
+                    else:
+                        sys.stdout.write(f"\r\033[2K{line}\n")
                 sys.stdout.flush()
                 needs_redraw = False
 
@@ -552,6 +615,8 @@ def select_menu_interactive(
             sys.stdout.write("\033[?1006l\033[?1000l")
             sys.stdout.flush()
         sys.stdout.write(SHOW_CURSOR)
+        if not preserve_screen:
+            sys.stdout.write("\033[?1049l")
         sys.stdout.flush()
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
@@ -562,20 +627,8 @@ def configure_single_keybinding(cfg: dict, action_key: str):
     current_keys = cfg["keybindings"].get(action_key, [])
     keys_str = ", ".join(current_keys)
 
-    sys.stdout.write("\033[2J\033[H")
-    sys.stdout.flush()
-    print(f"\n\t{BOLD}Tastenbelegung anpassen: {act_name}{RESET}")
-    print(f"\t{get_divider('─')}")
-    print(f"\tAktuell zugewiesen: {BOLD}[{keys_str}]{RESET}\n")
-    print("\tOptionen:")
-    print("\t  [1] Neue Taste zuweisen (Ersetzen)")
-    print("\t  [2] Zusätzliche Taste ergänzen")
-    print("\t  [3] Belegung auf Standard zurücksetzen")
-    print("\t  [ESC] Abbrechen\n")
-    print(f"\t{get_divider('─')}")
-
     choice = select_menu_interactive(
-        f"Aktion: {act_name}",
+        f"TASTE FÜR: {act_name}",
         [
             f"Taste ersetzen (Aktuell: {keys_str})",
             "Zusätzliche Taste hinzufügen",
@@ -583,6 +636,7 @@ def configure_single_keybinding(cfg: dict, action_key: str):
             "Abbrechen",
         ],
         subtitle="Drücken Sie Enter bei der gewünschten Option",
+        preserve_screen=True,
     )
 
     if choice is None or choice == 3:
@@ -631,21 +685,24 @@ def configure_single_keybinding(cfg: dict, action_key: str):
 
 
 def menu_keybindings(cfg: dict):
-    """Untermenü zum Durchsehen und Bearbeiten aller Tastenbelegungen."""
+    """Untermenü zum Durchsehen und Bearbeiten aller Tastenbelegungen ohne Springen."""
+    cur_idx = 0
     while True:
         actions = list(ACTION_NAMES.keys())
         options = []
         for act in actions:
             name = ACTION_NAMES[act]
             keys = ", ".join(cfg["keybindings"].get(act, []))
-            options.append(f"{name:<38} [{keys}]")
-        options.append("Alle Tastenbelegungen auf Standard zurücksetzen")
-        options.append("Zurück zum Hauptmenü")
+            options.append(f"{name:<45} [{keys}]")
+        options.append(f"{'Alle Tastenbelegungen auf Standard zurücksetzen':<45} [Standard]")
+        options.append(f"{'Zurück zum Hauptmenü':<45} [Zurück]")
 
         choice = select_menu_interactive(
             "TASTENBELEGUNGEN BEARBEITEN",
             options,
+            default_idx=cur_idx,
             subtitle="Wählen Sie eine Aktion aus, um ihre Tastenbelegung zu ändern",
+            preserve_screen=True,
         )
 
         if choice is None or choice == len(options) - 1:
@@ -653,156 +710,338 @@ def menu_keybindings(cfg: dict):
         elif choice == len(options) - 2:
             cfg["keybindings"] = dict(DEFAULT_KEYMAP)
             save_config(cfg)
+            cur_idx = choice
         else:
+            cur_idx = choice
             selected_action = actions[choice]
             configure_single_keybinding(cfg, selected_action)
 
 
-def menu_sort_criteria(cfg: dict):
-    """Auswahl des Sortierkriteriums."""
-    criteria = [
-        ("mtime", "Änderungsdatum (Neueste / Älteste Dateien)"),
-        ("name", "Dateiname (Alphabetisch A-Z / Z-A)"),
-        ("size", "Dateigröße (Größte / Kleinste Dateien)"),
-        ("ext", "Dateiendung / Dateityp (.pdf, .txt, ...)"),
-    ]
-    cur = cfg.get("sort_by", "mtime")
-    def_idx = 0
-    options = []
-    for idx, (val, desc) in enumerate(criteria):
-        is_cur = (val == cur)
-        mark = " (Aktiv)" if is_cur else ""
-        if is_cur:
-            def_idx = idx
-        options.append(f"{desc}{mark}")
-    options.append("Abbrechen / Zurück")
-
-    choice = select_menu_interactive("SORTIERKRITERIUM WÄHLEN", options, default_idx=def_idx)
-    if choice is not None and choice < len(criteria):
-        cfg["sort_by"] = criteria[choice][0]
-        save_config(cfg)
-
-
-def menu_dividers(cfg: dict):
-    """Auswahl des Trennlinien-Stils (horizontal / vertikal / keine)."""
-    options = [
-        "Horizontal (Klassische horizontale Linien oben und unten)",
-        "Vertikal (Spaltentrennung mit vertikalem Trennstrich │)",
-        "Keine (Puristisches, linienfreies Layout mit Leerräumen)",
-        "Abbrechen / Zurück",
-    ]
-    cur = cfg.get("divider_style", "horizontal").lower()
-    def_idx = 0 if cur == "horizontal" else (1 if cur == "vertikal" else (2 if cur == "keine" else 0))
-    choice = select_menu_interactive("TRENNUNGSLINIEN WÄHLEN", options, default_idx=def_idx)
-    if choice == 0:
-        cfg["divider_style"] = "horizontal"
-        save_config(cfg)
-    elif choice == 1:
-        cfg["divider_style"] = "vertikal"
-        save_config(cfg)
-    elif choice == 2:
-        cfg["divider_style"] = "keine"
-        save_config(cfg)
-
-
-def run_konfigurator() -> dict:
-    """Startet das interaktive Konfigurationsmenü im SCHNELLSTART-Design."""
+def run_konfigurator(standalone: bool = True) -> dict:
+    """Interaktiver Konfigurator für EasyDateien ohne Flackern und ohne Rumspringen."""
     cfg = load_config()
 
-    while True:
-        hidden_status = "[Ein]" if cfg.get("show_hidden", False) else "[Aus]"
-        dir_first_status = "[Ein]" if cfg.get("sort_dir_first", True) else "[Aus]"
-        sort_rev_status = "[Neueste/Z-A zuerst]" if cfg.get("sort_reverse", True) else "[Älteste/A-Z zuerst]"
-        sort_by_name = {
-            "mtime": "Änderungsdatum",
-            "name": "Dateiname",
-            "size": "Dateigröße",
-            "ext": "Dateiendung",
-        }.get(cfg.get("sort_by", "mtime"), "Änderungsdatum")
-        cols_enabled = cfg.get("columns_enabled", True)
-        cols_status = "[Ein]" if cols_enabled else "[Aus]"
-        esc_quit = cfg.get("esc_to_quit", False)
-        esc_status = "[Ein]" if esc_quit else "[Aus]"
-        mouse_supp = cfg.get("mouse_support", True)
-        mouse_status = "[Ein]" if mouse_supp else "[Aus]"
-        div_style = cfg.get("divider_style", "horizontal").lower()
-        div_display = {"horizontal": "Horizontal", "vertikal": "Vertikal", "keine": "Keine"}.get(div_style, "Horizontal")
-        editor_cmd = cfg.get("text_editor", "nano %s")
-        opener_cmd = cfg.get("opener", "open %s")
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return cfg
 
-        menu_items = [
-            "Tastenbelegungen ansehen & anpassen",
-            f"Spaltendarstellung:                 {BOLD}{cols_status}{RESET}",
-            f"Maussteuerung:                     {BOLD}{mouse_status}{RESET}",
-            f"Trennungslinien:                   {BOLD}[{div_display}]{RESET}",
-            f"Mit ESC beenden:                   {BOLD}{esc_status}{RESET}",
-            f"Versteckte Dateien anzeigen:       {BOLD}{hidden_status}{RESET}",
-            f"Text- & Code-Editor festlegen:    {BOLD}[{editor_cmd}]{RESET}",
-            f"Standard-Öffner (Medien etc.):    {BOLD}[{opener_cmd}]{RESET}",
-            f"Sortierkriterium festlegen:        {BOLD}[{sort_by_name}]{RESET}",
-            f"Sortierrichtung:                   {BOLD}{sort_rev_status}{RESET}",
-            f"Ordner immer zuerst anzeigen:      {BOLD}{dir_first_status}{RESET}",
-            "Auf Standardeinstellungen zurücksetzen (Yazi-Konfiguration)",
-            "Zurück zu EasyDateien",
-        ]
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    tty.setcbreak(fd, termios.TCSADRAIN)
 
-        choice = select_menu_interactive(
-            "EASYDATEIEN — KONFIGURATIONSMENÜ",
-            menu_items,
-            subtitle="Konfiguration wird automatisch in ~/.config/easydateien/config.json gesichert",
-        )
+    mouse_enabled = cfg.get("mouse_support", True)
+    if standalone:
+        sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
+    else:
+        sys.stdout.write(HIDE_CURSOR)
 
-        if choice is None or choice == 12:
-            break
-        elif choice == 0:
-            menu_keybindings(cfg)
-        elif choice == 1:
-            # Spaltendarstellung ein/aus
-            cfg["columns_enabled"] = not cfg.get("columns_enabled", True)
-            save_config(cfg)
-        elif choice == 2:
-            # Maussteuerung ein/aus
-            cfg["mouse_support"] = not cfg.get("mouse_support", True)
-            save_config(cfg)
-        elif choice == 3:
-            # Trennungslinien vertikal / horizontal / keine
-            menu_dividers(cfg)
-        elif choice == 4:
-            # Mit ESC beenden ein/aus
-            cfg["esc_to_quit"] = not cfg.get("esc_to_quit", False)
-            save_config(cfg)
-        elif choice == 5:
-            # Versteckte Dateien ein/aus
-            cfg["show_hidden"] = not cfg.get("show_hidden", False)
-            save_config(cfg)
-        elif choice == 6:
-            # Text-Editor bearbeiten
-            prompt = "Text-/Code-Editor-Befehl eingeben (%s = Dateipfad, z. B. nano %s): "
-            new_ed = edit_line_interactive(prompt, initial=cfg.get("text_editor", "nano %s"))
-            if new_ed and new_ed.strip():
-                cfg["text_editor"] = new_ed.strip()
-                save_config(cfg)
-        elif choice == 7:
-            # Standard-Öffner bearbeiten
-            prompt = "Standard-Öffner-Befehl eingeben (%s = Dateipfad): "
-            new_opener = edit_line_interactive(prompt, initial=cfg.get("opener", "open %s"))
-            if new_opener and new_opener.strip():
-                cfg["opener"] = new_opener.strip()
-                save_config(cfg)
-        elif choice == 8:
-            menu_sort_criteria(cfg)
-        elif choice == 9:
-            # Sortierrichtung umkehren
-            cfg["sort_reverse"] = not cfg.get("sort_reverse", True)
-            save_config(cfg)
-        elif choice == 10:
-            # Ordner zuerst
-            cfg["sort_dir_first"] = not cfg.get("sort_dir_first", True)
-            save_config(cfg)
-        elif choice == 11:
-            # Reset auf Standardwerte
-            cfg = get_default_config()
-            save_config(cfg)
+    if mouse_enabled:
+        sys.stdout.write("\033[?1000h\033[?1006h")
+
+    sys.stdout.flush()
+
+    selected_idx = 0
+    feedback_msg = "Werte direkt mit Enter / Leertaste / Pfeiltaste umschalten"
+    last_size = None
+    needs_redraw = True
+    opt_row_map = {}
+
+    DIVIDER_OPTIONS = ["vertikal", "horizontal", "keine"]
+    SORT_OPTIONS = ["mtime", "name", "size", "ext"]
+
+    try:
+        while True:
+            curr_size = shutil.get_terminal_size((80, 24))
+            if curr_size != last_size:
+                last_size = curr_size
+                needs_redraw = True
+
+            show_ctrls = cfg.get("show_controls", True)
+            ctrls_status = "Ein" if show_ctrls else "Aus"
+            cols_status = "Ein" if cfg.get("columns_enabled", True) else "Aus"
+            mouse_status = "Ein" if cfg.get("mouse_support", True) else "Aus"
+            div_style = cfg.get("divider_style", "vertikal").lower()
+            div_display = {"vertikal": "Vertikal", "horizontal": "Horizontal", "keine": "Keine"}.get(div_style, "Vertikal")
+            esc_status = "Ein" if cfg.get("esc_to_quit", False) else "Aus"
+            hidden_status = "Ein" if cfg.get("show_hidden", False) else "Aus"
+            ed_cmd = cfg.get("text_editor", "nano %s")
+            op_cmd = cfg.get("opener", "open %s")
+            sort_by = cfg.get("sort_by", "mtime")
+            sort_by_name = {
+                "mtime": "Änderungsdatum",
+                "name": "Dateiname",
+                "size": "Dateigröße",
+                "ext": "Dateiendung",
+            }.get(sort_by, "Änderungsdatum")
+
+            sort_rev = cfg.get("sort_reverse", True)
+            if sort_by in ("name", "ext"):
+                sort_rev_display = "Z - A (Absteigend)" if sort_rev else "A - Z (Aufsteigend)"
+            elif sort_by == "size":
+                sort_rev_display = "Größte zuerst" if sort_rev else "Kleinste zuerst"
+            else:
+                sort_rev_display = "Neueste zuerst" if sort_rev else "Älteste zuerst"
+
+            dir_first_status = "Ein" if cfg.get("sort_dir_first", True) else "Aus"
+
+            menu_items = [
+                ("Tastenbelegungen bearbeiten:", "Ansehen & Ändern"),
+                ("Steuerung in Statusleiste:", ctrls_status),
+                ("Spaltendarstellung:", cols_status),
+                ("Maussteuerung:", mouse_status),
+                ("Trennungslinien:", div_display),
+                ("Mit ESC beenden:", esc_status),
+                ("Versteckte Dateien anzeigen:", hidden_status),
+                ("Text- & Code-Editor:", ed_cmd),
+                ("Standard-Öffner (System):", op_cmd),
+                ("Sortierkriterium:", sort_by_name),
+                ("Sortierrichtung:", sort_rev_display),
+                ("Ordner immer zuerst anzeigen:", dir_first_status),
+                ("Standardeinstellungen:", "Zurücksetzen"),
+                ("Konfiguration schließen:", "Zurück zu Dateien"),
+            ]
+            total = len(menu_items)
+            if selected_idx >= total:
+                selected_idx = total - 1
+            if selected_idx < 0:
+                selected_idx = 0
+
+            if needs_redraw:
+                term_cols, term_rows = curr_size
+                inner_w = max(10, term_cols - 2)
+                opt_row_map.clear()
+                lines = []
+
+                # 1. Top border
+                lines.append(f"╭{'─' * inner_w}╮")
+
+                # 2. Titel
+                t_trunc = truncate_end("EASYDATEIEN — KONFIGURATIONSMENÜ", max(4, inner_w - 4))
+                title_line = pad_visible(f"  {BOLD}{t_trunc}{RESET}", inner_w)
+                lines.append(f"│{title_line}│")
+
+                # 3. Subtitel / Rückmeldung
+                s_trunc = truncate_end(feedback_msg, max(4, inner_w - 4))
+                sub_line = pad_visible(f"  {ITALIC}{s_trunc}{RESET}", inner_w)
+                lines.append(f"│{sub_line}│")
+
+                # 4. Trenner
+                lines.append(f"├{'─' * inner_w}┤")
+
+                # 5. Budget für Optionen
+                fixed_bottom = 3
+                avail_rows = max(1, term_rows - len(lines) - fixed_bottom)
+
+                if total <= avail_rows:
+                    start_idx = 0
+                    end_idx = total
+                    has_up = False
+                    has_down = False
+                else:
+                    show_count = max(1, avail_rows - 2)
+                    half = show_count // 2
+                    start_idx = max(0, min(selected_idx - half, total - show_count))
+                    end_idx = min(total, start_idx + show_count)
+                    has_up = (start_idx > 0)
+                    has_down = (end_idx < total)
+
+                if has_up:
+                    up_txt = pad_visible(f"  {ITALIC}▲ ... ({start_idx} weitere oben){RESET}", inner_w)
+                    lines.append(f"│{up_txt}│")
+
+                # Berechne gleichmäßige Spaltenbreiten
+                content_w = max(10, inner_w - 6)
+                label_col_w = min(30, max(14, content_w - 24))
+
+                for idx in range(start_idx, end_idx):
+                    lbl, val = menu_items[idx]
+                    is_sel = (idx == selected_idx)
+                    row_num = len(lines) + 1
+                    opt_row_map[row_num] = idx
+
+                    val_max_w = max(6, content_w - label_col_w - 2)
+                    lbl_trunc = truncate_end(lbl, label_col_w)
+                    val_str = f"[{truncate_end(val, val_max_w - 2)}]"
+
+                    formatted_content = f"{lbl_trunc:<{label_col_w}}  {val_str}"
+                    formatted_content = truncate_end(formatted_content, content_w)
+
+                    if is_sel:
+                        line_txt = pad_visible(f"  {BOLD}▸ {formatted_content}{RESET}", inner_w)
+                    else:
+                        line_txt = pad_visible(f"    {formatted_content}", inner_w)
+                    lines.append(f"│{line_txt}│")
+
+                if has_down:
+                    down_txt = pad_visible(f"  {ITALIC}▼ ... ({total - end_idx} weitere unten){RESET}", inner_w)
+                    lines.append(f"│{down_txt}│")
+
+                while len(lines) + fixed_bottom < term_rows:
+                    lines.append(f"│{' ' * inner_w}│")
+
+                lines.append(f"├{'─' * inner_w}┤")
+                hints = "[↑/↓] Bewegen  [Enter/Space/→] Toggeln  [ESC/q] Zurück"
+                if visible_len(hints) > inner_w - 4:
+                    hints = "[↑/↓] Nav  [Enter] Toggeln  [ESC] Zurück"
+                hints_trunc = truncate_end(hints, max(4, inner_w - 4))
+                hints_line = pad_visible(f"  {ITALIC}{hints_trunc}{RESET}", inner_w)
+                lines.append(f"│{hints_line}│")
+                lines.append(f"╰{'─' * inner_w}╯")
+
+                # Bildschirmausgabe direkt überschreiben
+                sys.stdout.write("\033[H")
+                out_lines = lines[:term_rows]
+                for i, line in enumerate(out_lines):
+                    if i == len(out_lines) - 1:
+                        sys.stdout.write(f"\r\033[2K{line}")
+                    else:
+                        sys.stdout.write(f"\r\033[2K{line}\n")
+                sys.stdout.flush()
+                needs_redraw = False
+
+            def apply_action(action_idx: int) -> bool:
+                """Wendet eine Aktion direkt an ohne Extramenü beim Toggeln."""
+                nonlocal feedback_msg
+                if action_idx == 0:
+                    menu_keybindings(cfg)
+                    feedback_msg = "Tastenbelegungen ansehen und anpassen"
+                    return True
+                elif action_idx == 1:
+                    cfg["show_controls"] = not cfg.get("show_controls", True)
+                    save_config(cfg)
+                    feedback_msg = f"Steuerung in Statusleiste: {'[Ein]' if cfg['show_controls'] else '[Aus]'}"
+                    return True
+                elif action_idx == 2:
+                    cfg["columns_enabled"] = not cfg.get("columns_enabled", True)
+                    save_config(cfg)
+                    feedback_msg = f"Spaltendarstellung: {'[Ein]' if cfg['columns_enabled'] else '[Aus]'}"
+                    return True
+                elif action_idx == 3:
+                    cfg["mouse_support"] = not cfg.get("mouse_support", True)
+                    save_config(cfg)
+                    feedback_msg = f"Maussteuerung: {'[Ein]' if cfg['mouse_support'] else '[Aus]'}"
+                    return True
+                elif action_idx == 4:
+                    cur = cfg.get("divider_style", "vertikal").lower()
+                    next_div = DIVIDER_OPTIONS[(DIVIDER_OPTIONS.index(cur) + 1) % len(DIVIDER_OPTIONS)] if cur in DIVIDER_OPTIONS else "vertikal"
+                    cfg["divider_style"] = next_div
+                    save_config(cfg)
+                    div_disp = {"vertikal": "Vertikal", "horizontal": "Horizontal", "keine": "Keine"}.get(next_div, "Vertikal")
+                    feedback_msg = f"Trennungslinien: [{div_disp}]"
+                    return True
+                elif action_idx == 5:
+                    cfg["esc_to_quit"] = not cfg.get("esc_to_quit", False)
+                    save_config(cfg)
+                    feedback_msg = f"Mit ESC beenden: {'[Ein]' if cfg['esc_to_quit'] else '[Aus]'}"
+                    return True
+                elif action_idx == 6:
+                    cfg["show_hidden"] = not cfg.get("show_hidden", False)
+                    save_config(cfg)
+                    feedback_msg = f"Versteckte Dateien: {'[Ein]' if cfg['show_hidden'] else '[Aus]'}"
+                    return True
+                elif action_idx == 7:
+                    new_ed = edit_line_interactive("Editor-Befehl (%s = Pfad): ", initial=cfg.get("text_editor", "nano %s"))
+                    if new_ed and new_ed.strip():
+                        cfg["text_editor"] = new_ed.strip()
+                        save_config(cfg)
+                        feedback_msg = f"Editor gesetzt auf: [{new_ed.strip()}]"
+                    return True
+                elif action_idx == 8:
+                    new_op = edit_line_interactive("Öffner-Befehl (%s = Pfad): ", initial=cfg.get("opener", "open %s"))
+                    if new_op and new_op.strip():
+                        cfg["opener"] = new_op.strip()
+                        save_config(cfg)
+                        feedback_msg = f"Standard-Öffner gesetzt auf: [{new_op.strip()}]"
+                    return True
+                elif action_idx == 9:
+                    cur_s = cfg.get("sort_by", "mtime")
+                    next_s = SORT_OPTIONS[(SORT_OPTIONS.index(cur_s) + 1) % len(SORT_OPTIONS)] if cur_s in SORT_OPTIONS else "mtime"
+                    cfg["sort_by"] = next_s
+                    save_config(cfg)
+                    s_name = {"mtime": "Änderungsdatum", "name": "Dateiname", "size": "Dateigröße", "ext": "Dateiendung"}.get(next_s, "Änderungsdatum")
+                    feedback_msg = f"Sortierkriterium: [{s_name}]"
+                    return True
+                elif action_idx == 10:
+                    cfg["sort_reverse"] = not cfg.get("sort_reverse", True)
+                    save_config(cfg)
+                    s_by = cfg.get("sort_by", "mtime")
+                    s_rev = cfg["sort_reverse"]
+                    if s_by in ("name", "ext"):
+                        r_name = "Z - A (Absteigend)" if s_rev else "A - Z (Aufsteigend)"
+                    elif s_by == "size":
+                        r_name = "Größte zuerst" if s_rev else "Kleinste zuerst"
+                    else:
+                        r_name = "Neueste zuerst" if s_rev else "Älteste zuerst"
+                    feedback_msg = f"Sortierrichtung: [{r_name}]"
+                    return True
+                elif action_idx == 11:
+                    cfg["sort_dir_first"] = not cfg.get("sort_dir_first", True)
+                    save_config(cfg)
+                    feedback_msg = f"Ordner zuerst: {'[Ein]' if cfg['sort_dir_first'] else '[Aus]'}"
+                    return True
+                elif action_idx == 12:
+                    cfg.clear()
+                    cfg.update(get_default_config())
+                    save_config(cfg)
+                    feedback_msg = "Standardeinstellungen erfolgreich wiederhergestellt!"
+                    return True
+                elif action_idx == 13:
+                    return False
+                return True
+
+            key = read_key(fd, timeout=0.05)
+            if not key:
+                continue
+
+            if key == "MOUSE_WHEEL_UP":
+                selected_idx = (selected_idx - 1) % total
+                needs_redraw = True
+            elif key == "MOUSE_WHEEL_DOWN":
+                selected_idx = (selected_idx + 1) % total
+                needs_redraw = True
+            elif key.startswith("MOUSE_CLICK:"):
+                parts = key.split(":")
+                if len(parts) == 3:
+                    try:
+                        click_y = int(parts[2])
+                        if click_y in opt_row_map:
+                            clicked_idx = opt_row_map[click_y]
+                            selected_idx = clicked_idx
+                            if not apply_action(clicked_idx):
+                                break
+                            needs_redraw = True
+                    except Exception:
+                        pass
+                continue
+            elif key.startswith("MOUSE_"):
+                continue
+            elif key in ("UP", "k"):
+                selected_idx = (selected_idx - 1) % total
+                needs_redraw = True
+            elif key in ("DOWN", "j", "TAB"):
+                selected_idx = (selected_idx + 1) % total
+                needs_redraw = True
+            elif key == "HOME":
+                selected_idx = 0
+                needs_redraw = True
+            elif key == "END":
+                selected_idx = total - 1
+                needs_redraw = True
+            elif key in ("ENTER", "SPACE", "RIGHT", "l"):
+                if not apply_action(selected_idx):
+                    break
+                needs_redraw = True
+            elif key in ("ESC", "LEFT", "h", "QUIT", "q"):
+                break
+
+    finally:
+        if mouse_enabled:
+            sys.stdout.write("\033[?1006l\033[?1000l")
+            sys.stdout.flush()
+        sys.stdout.write(SHOW_CURSOR)
+        if standalone:
+            sys.stdout.write("\033[?1049l")
+        sys.stdout.flush()
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
     return cfg
 

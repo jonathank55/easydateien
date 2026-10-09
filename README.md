@@ -15,25 +15,25 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
 - **Monochrome Typografie (ohne ANSI-Farben):**  
   Verzichtet bewusst auf bunte ANSI-Farbcodes und setzt ausschließlich auf standardisierte typografische Auszeichnungen (Fettdruck und Kursivschrift) des jeweiligen Terminal-Farbschemas. Garantiert makellose Lesbarkeit auf sowohl hellen als auch dunklen Hintergründen.
 
-- **Benutzeroberfläche im SCHNELLSTART-Design & volle Fensterfüllung:**  
-  Strukturierter, vertikal austarierter Aufbau mit dezenten Trennlinien, präzisem Cursor (`▸`) und reaktiver Status- und Befehlszeile. Der gesamte Terminal-Viewport wird wie bei Yazi bis zum unteren Rand ausgefüllt, sodass Trennlinien und Spalten auch bei wenigen Dateien durchgängig sauber anliegen.
+- **Benutzeroberfläche im Yazi-Kasten-Design & vollständige Fensterfüllung:**  
+  Präziser, randloser Kastenaufbau mit echten abgerundeten Ecken (`╭`, `╮`, `╰`, `╯`) und Spaltentrennlinien (`┬`, `┴`, `│`), der sich nahtlos über die gesamte Terminalbreite und -höhe erstreckt. Durch die Nutzung des Alternate-Screen-Buffers (`\033[?1049h`) und strikte Zeilenbudgetierung ist ein Verrutschen oder Scrollen des Terminalfensters technisch ausgeschlossen.
 
 - **Volladaptive Größenanpassung (Window-Resize in Echtzeit):**  
-  Reagiert unverzüglich auf jede Veränderung der Terminalfenstergröße (`SIGWINCH`). Sämtliche Spaltenbreiten, Randabstände und Fenstergrenzen werden in Echtzeit mathematisch exakt berechnet. Zu lange Datei- und Ordnernamen werden dynamisch berechnet und am Ende sauber mit `...` abgeschnitten — kein Zeilenumbruch, kein Bildschirmflackern, selbst auf kleinsten Fenstern (< 40 Zeichen Breite oder < 8 Zeilen Höhe).
+  Reagiert unverzüglich auf jede Veränderung der Terminalfenstergröße (`SIGWINCH`). Sämtliche Spaltenbreiten, Kastenränder und Statusangaben werden in Echtzeit berechnet. Zu lange Datei- und Ordnernamen werden dynamisch berechnet und am Ende sauber mit `...` abgeschnitten — kein Zeilenumbruch, kein Bildschirmflackern, selbst auf kleinsten Fenstern (< 40 Zeichen Breite oder < 6 Zeilen Höhe).
 
 - **Dynamische Spaltenanzahl (Miller-Columns nach Yazi-Vorbild):**  
-  Passt die Anzahl der angezeigten Spalten vollautomatisch und flüssig an die Breite des Terminalfensters an:  
-  - **Schmale Fenster (< 60 Zeichen):** 1 Spalte (Fokus auf aktuellen Ordner mit maximaler Zeichenbreite für Dateinamen)  
-  - **Mittlere Fenster (60–100 Zeichen):** 2 Spalten (Eltern-Ordner links zur Orientierung + Aktueller Ordner rechts)  
-  - **Breite Fenster (>= 100 Zeichen):** 3 Spalten (Eltern-Ordner links + Aktueller Ordner mittig + Kindordner-Inhalt bzw. Datei-Details rechts)  
+  Die Spaltenansicht bleibt erhalten, bis das Fenster wirklich zu schmal wird:  
+  - **Breite Fenster (>= 68 Zeichen):** 3 Spalten (Eltern-Ordner links + Aktueller Ordner mittig + Kindordner bzw. Datei-Details rechts)  
+  - **Mittlere Fenster (38–67 Zeichen):** 2 Spalten (Eltern-Ordner links zur Orientierung + Aktueller Ordner rechts)  
+  - **Kompakte Fenster (< 38 Zeichen):** 1 Spalte (Fokus auf aktuellen Ordner)  
   - Über das Konfigurationsmenü kann die Spaltendarstellung bei Bedarf ein- oder ausgeschaltet werden.
 
 - **Vollständige Mausnavigation & Scrollen:**  
-  Durch das gesamte Programm kann mit der Maus navigiert werden:  
+  Durch das gesamte Programm kann flüssig mit der Maus navigiert werden:  
   - **Mausrad nach oben / unten:** Flüssiges Scrollen durch die Dateiliste  
-  - **Linksklick:** Element auswählen; erneuter Klick auf das ausgewählte Element oder Doppelklick öffnet die Datei in `nano` / Standard-App bzw. betritt den Ordner  
+  - **Linksklick:** Element auswählen; Doppelklick öffnet die Datei bzw. betritt den Ordner  
   - **Klick auf linke Spalte:** Sofortiges Zurückwechseln in den übergeordneten Ordner  
-  - **Klick auf rechte Spalte:** Kindordner betreten bzw. Datei-Details öffnen  
+  - **Klick auf rechte Spalte:** Kindordner betreten bzw. Datei-Details ansehen  
   - **Rechtsklick:** Element markieren bzw. Markierung umschalten (`*`)  
   - Im Konfigurationsmenü über `Maussteuerung: [Ein / Aus]` jederzeit anpassbar.
 
@@ -41,7 +41,9 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
   Flüssige Steuerung über Standard-Pfeiltasten (`↑`, `↓`, `←`, `→`) oder klassische Vim-Keys (`h`, `j`, `k`, `l`).  
   - `↑` / `k`: Nach oben navigieren  
   - `↓` / `j`: Nach unten navigieren  
-  - `→` / `l` / `Enter`: In Ordner hineingehen bzw. Datei öffnen  
+  - `Enter`: Datei oder Ordner mit macOS-Standardbefehl (`open`) öffnen (bei Ordnern öffnet sich der Finder)  
+  - `→` / `l` (einfach): In Ordner hineingehen (Navigation innerhalb von EasyDateien)  
+  - `→` / `l` (doppelt gedrückt auf Datei): Datei direkt im Terminal-Editor `nano` bearbeiten  
   - `←` / `h`: Zum übergeordneten Ordner zurückkehren  
   - `g d`: Direkt zu `~/Downloads` springen  
   - `g f`: Direkt zu `~/Documents` springen  
@@ -49,11 +51,11 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
   - `g i`: Interaktive Pfadeingabe mit Eingabezeile  
   - `g p`: Zu im Zwischenspeicher liegendem Pfad navigieren  
 
-- **Standard-Editor `nano` für Text, Markdown & Code:**  
-  Sämtliche Text-, Markdown- und Quellcodedateien (`.txt`, `.md`, `.py`, `.sh`, `.json`, `.toml`, `.yaml`, `.c`, `.js`, `.html`, `.css`, `Makefile`, etc.) öffnen sich per `Enter` direkt und nahtlos im Terminal-Editor `nano`. Nach dem Beenden (`Ctrl+X`) kehren Sie ohne Flackern sofort in EasyDateien zurück. Medien- und Binärdateien (Bilder, PDFs, Videos) öffnen sich über macOS `open`.
+- **Editor `nano` per Doppeldruck auf `→`:**  
+  Wird die rechte Pfeiltaste auf einer Datei doppelt gedrückt, öffnet sich diese sofort im Terminal-Editor `nano` (oder dem in der Konfiguration hinterlegten Editor). Nach Beenden mit `Ctrl+X` kehrt man nahtlos ohne Flackern zurück.
 
 - **Vorschau bewusst deaktiviert:**  
-  Für maximale Darstellungsgeschwindigkeit und minimale Ablenkung ist die Dateivorschau dauerhaft deaktiviert.
+  Für maximale Darstellungsgeschwindigkeit und minimale Ablenkung ist die Dateivorschau dauerhaft deaktiviert; bei markierten Dateien werden in der rechten Spalte übersichtliche Metadaten (Größe, Datum, Zugriffsrechte) angezeigt.
 
 - **Auswahldarstellung ohne störende Klammern & Dateioperationen:**  
   - Auswahl: `*` (z. B. `▸ * datei.txt`)  
@@ -72,15 +74,17 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
   - `r`: Datei im Finder anzeigen (`reveal`)  
 
 - **Interaktives Konfigurationsmenü (Taste `m`):**  
-  Wie bei SCHNELLSTART verfügt EasyDateien über einen vollwertigen interaktiven Konfigurator:
+  Wie bei SCHNELLSTART verfügt EasyDateien über einen vollwertigen interaktiven Konfigurator mit direktem In-Place-Toggeln ohne störende Untermenüs:
   - **Tastenbelegungen bearbeiten:** Jede Aktion kann interaktiv auf eine neue Taste umbelegt oder mit Alternativtasten belegt werden.
+  - **Steuerung in Statusleiste:** `[Ein]` / `[Aus]` (zeigt die Tastensteuerung im Yazi-Badge-Design oder klassische Dateimetadaten).
   - **Spaltendarstellung:** `[Ein]` / `[Aus]` (Ein = mehrspaltiges Miller-Layout, Aus = klassische 1-Spalten-Ansicht).
   - **Maussteuerung:** `[Ein]` / `[Aus]` umschalten.
-  - **Trennungslinien:** `[Horizontal]`, `[Vertikal]` oder `[Keine]` für ein puristisches Layout.
+  - **Trennungslinien:** `[Vertikal]`, `[Horizontal]` oder `[Keine]` direkt durchschalten.
   - **Mit ESC beenden:** `[Ein]` / `[Aus]` (standardmäßig deaktiviert; ESC hebt stattdessen Auswahlen/Zwischenspeicher auf).
   - **Versteckte Dateien anzeigen:** `[Ein]` / `[Aus]` umschalten.
   - **Text- & Code-Editor festlegen:** z. B. `nano %s`, `vim %s`, `micro %s` oder `code %s`.
   - **Standard-Öffner anpassen:** z. B. `open %s`.
+  - **Sortierkriterium & Sortierrichtung:** Direktes Durchschalten der Kriterien und Sortierreihenfolge.
   - **Sortierkriterien anpassen:** Sortieren nach Änderungsdatum (`mtime`), Dateiname (`name`), Dateigröße (`size`) oder Dateiendung (`ext`).
   - **Sortierrichtung:** `[Neueste/Z-A zuerst]` oder `[Älteste/A-Z zuerst]`.
   - **Ordner immer zuerst anzeigen:** `[Ein]` / `[Aus]`.
