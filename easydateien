@@ -582,6 +582,7 @@ class EasyDateienApp:
         self.last_click_idx: Optional[int] = None
         self.last_right_arrow_time: float = 0.0
         self.last_right_arrow_path: str = ""
+        self.status_expiry_moves: int = 0
         self.last_layout: Dict = {}
 
         # Integrierte Konsole / Terminal (Taste 't')
@@ -767,7 +768,7 @@ class EasyDateienApp:
                 target_path = os.path.abspath(os.path.join(self.current_dir, target_path))
             if os.path.isdir(target_path):
                 self.change_directory(target_path)
-                self.console_output_lines.append(f"Verzeichnis: {self.get_short_dir(target_path)}")
+                self.console_output_lines.append(f"{self.get_short_dir(target_path)}")
             else:
                 self.console_output_lines.append(f"cd: Verzeichnis nicht gefunden: {target}")
             return
@@ -1163,7 +1164,7 @@ class EasyDateienApp:
             if os.path.isdir(exp):
                 self.change_directory(exp)
             else:
-                self.status_message = f"Kein gültiges Verzeichnis: {target}"
+                self.status_message = f"Kein gültiges {target}"
 
     def toggle_hidden_files(self):
         """Schaltet die Anzeige versteckter Dateien um."""
@@ -1174,22 +1175,55 @@ class EasyDateienApp:
         self.status_message = f"Versteckte Dateien: {'Eingeblendet' if new_val else 'Ausgeblendet'}"
 
     def open_config_menu(self):
-        """Öffnet das interaktive Konfigurationsmenü."""
+        """Öffnet das interaktive Konfigurationsmenü und stellt sicher, dass alle Einstellungen sofort wirksam werden."""
+        fd = sys.stdin.fileno() if sys.stdin.isatty() else None
+
         mouse_on = self.config.get("mouse_support", True)
         if mouse_on:
             sys.stdout.write("\033[?1006l\033[?1000l")
             sys.stdout.flush()
         sys.stdout.write(SHOW_CURSOR)
         sys.stdout.flush()
+
         self.config = run_konfigurator(standalone=False)
-        self.show_console = self.config.get("show_console", self.show_console)
-        self.console_position = self.config.get("console_position", self.console_position)
-        sys.stdout.write(HIDE_CURSOR)
+
+        # 1. Terminal sofort wieder in den cbreak-Modus versetzen
+        if fd is not None:
+            tty.setcbreak(fd, termios.TCSADRAIN)
+
+        # 2. Mausmodus sofort an neue Konfiguration anpassen
         if self.config.get("mouse_support", True):
             sys.stdout.write("\033[?1000h\033[?1006h")
+        else:
+            sys.stdout.write("\033[?1006l\033[?1000l")
+
+        # 3. Konsolenstatus und Position synchronisieren
+        self.show_console = self.config.get("show_console", False)
+        self.console_position = self.config.get("console_position", "unten").lower()
+        if self.console_position not in ("unten", "rechts", "links"):
+            self.console_position = "unten"
+        if not self.show_console:
+            self.console_focused = False
+
+        # 4. Sämtliche Verzeichnis-Caches leeren (Sortierung, versteckte Dateien etc. greifen sofort)
+        self.cached_parent_dir = None
+        self.cached_parent_items = []
+        self.cached_parent_mtime = -1.0
+        self.cached_child_path = None
+        self.cached_child_items = []
+        self.cached_child_mtime = -1.0
+
+        # 5. Cursor wieder verstecken & Bildschirm sauber leeren
+        sys.stdout.write(HIDE_CURSOR)
+        sys.stdout.write("\033[2J\033[H")
         sys.stdout.flush()
+
+        # 6. Dateiliste sofort neu einlesen
         self.refresh_items()
-        self.status_message = "Konfiguration übernommen."
+
+        # 7. Visuelle Rückmeldung setzen
+        self.status_message = "✓ Konfiguration übernommen."
+        self.status_expiry_moves = 3
 
     def get_effective_columns(self, term_cols: int) -> int:
         """Ermittelt die Spaltenanzahl (1, 2 oder 3) basierend auf Spaltendarstellung und Fensterbreite."""
@@ -1308,7 +1342,7 @@ class EasyDateienApp:
 
         # 3. Trennungslinien & Kasten-Konfiguration
         div_style = self.config.get("divider_style", "vertikal").lower()
-        if div_style not in ("vertikal", "horizontal", "außen", "keine"):
+        if div_style not in ("alle", "vertikal", "horizontal", "außen", "keine"):
             div_style = "vertikal"
 
         has_top_border = (div_style in ("vertikal", "horizontal", "außen")) and (term_rows >= 4)
@@ -1795,7 +1829,7 @@ class EasyDateienApp:
             elif div_style == "horizontal":
                 mid_sep = "─" * term_cols
             else:
-                mid_sep = pad_visible(f"── Konsole: {self.get_short_dir(self.current_dir)} ──", term_cols)
+                mid_sep = pad_visible("── Konsole ──", term_cols)
 
             mid_sep = pad_visible(mid_sep, term_cols)
             all_lines.append(mid_sep)

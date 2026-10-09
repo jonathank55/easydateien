@@ -264,3 +264,13 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
 
 Veröffentlicht unter der [MIT-Lizenz](LICENSE).  
 Copyright (c) 2026 Jonathan Klatchko.
+
+
+---
+
+## Note / Danksagung
+
+Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt ist stark von Yazi inspiriert, soll jedoch eine wesentlich simplere, minimalistische und monochrome Alternative bieten (und hat technisch nichts direkt mit Yazi zu tun).
+
+- Offizielle Website von Yazi: [https://yazi-rs.github.io](https://yazi-rs.github.io)
+- Yazi GitHub Repository: [https://github.com/sxyazi/yazi](https://github.com/sxyazi/yazi)

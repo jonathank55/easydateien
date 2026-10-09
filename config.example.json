@@ -5,7 +5,7 @@
   "show_hidden": false,
   "preview": false,
   "columns_enabled": true,
-  "divider_style": "vertikal",
+  "divider_style": "alle",
   "show_controls": true,
   "show_console": false,
   "console_position": "unten",
@@ -16,26 +16,78 @@
   "edit_opener": "open -e %s",
   "finder_opener": "open -R %s",
   "keybindings": {
-    "up": ["UP", "k"],
-    "down": ["DOWN", "j"],
-    "left": ["LEFT", "h"],
-    "right": ["RIGHT", "l"],
-    "open": ["ENTER"],
-    "select": ["SPACE", "v"],
-    "select_all": ["V", "a"],
-    "cut": ["x"],
-    "copy": ["y", "c"],
-    "paste": ["p"],
-    "trash": ["d"],
-    "toggle_hidden": [".", "z"],
-    "config_menu": ["m", "C"],
-    "goto_downloads": ["gd"],
-    "goto_documents": ["gf"],
-    "goto_home": ["gh", "~"],
-    "goto_interactive": ["gi"],
-    "goto_clipboard": ["gp"],
-    "zip": ["cz"],
-    "toggle_console": ["t"],
-    "quit": ["q"]
+    "up": [
+      "UP",
+      "k"
+    ],
+    "down": [
+      "DOWN",
+      "j"
+    ],
+    "left": [
+      "LEFT",
+      "h"
+    ],
+    "right": [
+      "RIGHT",
+      "l"
+    ],
+    "open": [
+      "ENTER"
+    ],
+    "select": [
+      "SPACE",
+      "v"
+    ],
+    "select_all": [
+      "V",
+      "a"
+    ],
+    "cut": [
+      "x"
+    ],
+    "copy": [
+      "y",
+      "c"
+    ],
+    "paste": [
+      "p"
+    ],
+    "trash": [
+      "d"
+    ],
+    "toggle_hidden": [
+      ".",
+      "z"
+    ],
+    "config_menu": [
+      "m",
+      "C"
+    ],
+    "goto_downloads": [
+      "gd"
+    ],
+    "goto_documents": [
+      "gf"
+    ],
+    "goto_home": [
+      "gh",
+      "~"
+    ],
+    "goto_interactive": [
+      "gi"
+    ],
+    "goto_clipboard": [
+      "gp"
+    ],
+    "zip": [
+      "cz"
+    ],
+    "toggle_console": [
+      "t"
+    ],
+    "quit": [
+      "q"
+    ]
   }
 }
