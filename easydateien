@@ -52,7 +52,6 @@ def sync_to_macos_clipboard(paths: List[str]):
     if not paths: return
     abs_paths = [os.path.abspath(p) for p in paths if os.path.exists(p)]
     if not abs_paths: return
-    # Nativ für Finder, Mail & WhatsApp
     try:
         items = ", ".join([f'(POSIX file "{p.replace(chr(34), chr(92)+chr(34))}" as alias)' for p in abs_paths])
         as_code = f'tell application "Finder" to set the clipboard to {{{items}}}'
@@ -131,8 +130,8 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
         if raw == b"\x1b":
             seq = b""
             while True:
-                r, _, _ = select.select([fd], [], [], 0.03)
-                if not r: break
+                r2, _, _ = select.select([fd], [], [], 0.03)
+                if not r2: break
                 c = os.read(fd, 1)
                 if not c: break
                 seq += c
@@ -154,17 +153,12 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
                 except Exception: pass
                 return "MOUSE_EVENT"
             mapping = {b"[A":"UP", b"[B":"DOWN", b"[C":"RIGHT", b"[D":"LEFT", b"[H":"HOME", b"[F":"END", b"[5~":"PAGE_UP", b"[6~":"PAGE_DOWN", b"[3~":"DELETE"}
-            return mapping.get(seq, "ESC")
-        if raw in (bytes([13]), bytes([10])):
-            return "ENTER"
-        elif raw == b" ":
-            return " "
-        elif raw == b"\t":
-            return "TAB"
-        elif raw in (bytes([127]), bytes([8])):
-            return "BACKSPACE"
-        elif raw in (bytes([3]), bytes([4])):
-            return "QUIT"
+            return mapping.get(seq, "")
+        if raw in (bytes([13]), bytes([10])): return "ENTER"
+        elif raw == b" ": return " "
+        elif raw == b"\t": return "TAB"
+        elif raw in (bytes([127]), bytes([8])): return "BACKSPACE"
+        elif raw in (bytes([3]), bytes([4])): return "QUIT"
         if raw[0] >= 0xC0:
             needed = 2 if raw[0] < 0xE0 else (3 if raw[0] < 0xF0 else 4)
             ch_b = raw
@@ -176,8 +170,7 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
             except Exception: return ""
         try: return raw.decode("utf-8")
         except Exception: return ""
-    except Exception:
-        return ""
+    except Exception: return ""
 
 class EasyDateienApp:
     def __init__(self, initial_path: Optional[str] = None):
@@ -220,8 +213,7 @@ class EasyDateienApp:
         }
         if os.path.exists(CONFIG_FILE):
             try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    cfg.update(json.load(f))
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f: cfg.update(json.load(f))
             except Exception: pass
         return cfg
 
@@ -869,7 +861,7 @@ class EasyDateienApp:
             inner_cw = max(4, term_cols - 2 if div_style in ("alle", "vertikal", "außen") else term_cols)
             c_lines = self.get_console_display_lines(inner_cw, console_h)
             for cl in c_lines:
-                all_lines.append(f"│{cl}│" if div_style in ("alle", "vertikal", "außen") else cl)
+                all_lines.append(f"│{cl}│" if div_style in ("alle", "vertikal", "außen") else pad_visible(cl, term_cols))
             if has_bottom_border:
                 c_bot = f"╰{'─' * (term_cols - 2)}╯" if div_style in ("alle", "vertikal", "außen") else ("─" * term_cols if div_style == "horizontal" else "")
                 if c_bot: all_lines.append(pad_visible(c_bot, term_cols))
@@ -969,7 +961,8 @@ class EasyDateienApp:
         except Exception: pass
         tty.setcbreak(fd, termios.TCSADRAIN)
         sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
-        if self.config.get("mouse_support", True):
+        mouse_enabled = self.config.get("mouse_support", True)
+        if mouse_enabled:
             sys.stdout.write("\033[?1000h\033[?1006h")
         sys.stdout.write("\033[2J\033[H"); sys.stdout.flush()
         last_size = None
@@ -982,10 +975,12 @@ class EasyDateienApp:
                     last_size = curr_size; needs_redraw = True
                 if needs_redraw:
                     lines = self.build_screen(term_cols, term_rows)
-                    sys.stdout.write("\033[H")
+                    out_buf = ["\033[H"]
                     for i, l in enumerate(lines[:term_rows]):
-                        if i > 0: sys.stdout.write("\n")
-                        sys.stdout.write(f"\r\033[2K{l}")
+                        if i > 0: out_buf.append("\n")
+                        out_buf.append(f"\r\033[2K{l}")
+                    out_buf.append("\033[J")
+                    sys.stdout.write("".join(out_buf))
                     sys.stdout.flush()
                     needs_redraw = False
                 key = read_key(fd, timeout=0.05)
@@ -1170,7 +1165,7 @@ class EasyDateienApp:
                     except Exception as e: self.status_message = f"Fehler Konfigurator: {e}"
                     tty.setcbreak(fd, termios.TCSADRAIN)
                     sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
-                    if self.config.get("mouse_support", True): sys.stdout.write("\033[?1000h\033[?1006h")
+                    if mouse_enabled: sys.stdout.write("\033[?1000h\033[?1006h")
                     sys.stdout.write("\033[2J\033[H"); sys.stdout.flush()
                     self.refresh_items()
                     self.status_message = "Einstellungen übernommen"
@@ -1181,7 +1176,8 @@ class EasyDateienApp:
                     continue
                 elif key == "QUIT" or key == "q": break
         finally:
-            sys.stdout.write("\033[?1006l\033[?1000l" + SHOW_CURSOR + "\033[?1049l"); sys.stdout.flush()
+            if mouse_enabled: sys.stdout.write("\033[?1006l\033[?1000l")
+            sys.stdout.write(SHOW_CURSOR + "\033[?1049l"); sys.stdout.flush()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 def main():

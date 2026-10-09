@@ -38,6 +38,17 @@ KEYBINDING_ITEMS = [
     ("back", "Zurück zum Hauptmenü", "[Zurück]"),
 ]
 
+MAIN_MENU_ITEMS = [
+    ("divider", "Trennungslinien-Stil", "alle"),
+    ("columns", "3-Spalten-Layout", "Ein"),
+    ("controls", "Steuerungshilfe unten", "Aus"),
+    ("mouse", "Mausunterstützung", "Ein"),
+    ("console", "Terminal-Konsole", "Aus"),
+    ("keybindings", "Tastenbelegungen ansehen...", "Öffnen"),
+    ("reset", "Auf Standardwerte zurücksetzen", "Standard"),
+    ("quit", "Konfigurator beenden", "Beenden"),
+]
+
 def load_config() -> dict:
     cfg = dict(DEFAULT_CONFIG)
     if os.path.exists(CONFIG_FILE):
@@ -51,96 +62,126 @@ def save_config(cfg: dict):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
-def read_key():
-    fd = sys.stdin.fileno()
-    r, _, _ = select.select([fd], [], [], 0.05)
-    if not r: return ""
-    ch = os.read(fd, 1)
-    if ch == b"\x1b":
-        seq = b""
-        while True:
-            r2, _, _ = select.select([fd], [], [], 0.03)
-            if not r2: break
-            seq += os.read(fd, 1)
-        if not seq: return "ESC"
-        if seq == b"[A": return "UP"
-        if seq == b"[B": return "DOWN"
-        if seq == b"[C": return "RIGHT"
-        if seq == b"[D": return "LEFT"
-        return "ESC"
-    if ch in (b"\r", b"\n"): return "ENTER"
-    try: return ch.decode("utf-8")
+def read_key(fd: int, timeout: float = 0.05) -> str:
+    try:
+        r, _, _ = select.select([fd], [], [], timeout)
+        if not r: return ""
+        raw = os.read(fd, 1)
+        if not raw: return ""
+        if raw == b"\x1b":
+            seq = b""
+            while True:
+                r2, _, _ = select.select([fd], [], [], 0.03)
+                if not r2: break
+                c = os.read(fd, 1)
+                if not c: break
+                seq += c
+                if seq.startswith(b"[<"):
+                    if seq.endswith(b"M") or seq.endswith(b"m") or len(seq) >= 30: break
+                elif len(seq) >= 2 and seq[-1:] in b"ABCDHFS~": break
+                elif len(seq) >= 6: break
+            if not seq: return "ESC"
+            if seq.startswith(b"[<") and (seq.endswith(b"M") or seq.endswith(b"m")):
+                try:
+                    is_rel = seq.endswith(b"m")
+                    b_s, x_s, y_s = seq[2:-1].decode("ascii").split(";")
+                    b_c = int(b_s)
+                    if b_c == 64: return "WHEEL_UP"
+                    elif b_c == 65: return "WHEEL_DOWN"
+                    elif not is_rel and b_c == 0: return f"CLICK:{int(x_s)}:{int(y_s)}"
+                except Exception: pass
+                return "MOUSE"
+            mapping = {b"[A":"UP", b"[B":"DOWN", b"[C":"RIGHT", b"[D":"LEFT", b"[H":"HOME", b"[F":"END", b"[5~":"PAGE_UP", b"[6~":"PAGE_DOWN"}
+            return mapping.get(seq, "")
+        if raw in (bytes([13]), bytes([10])): return "ENTER"
+        elif raw == b" ": return "SPACE"
+        elif raw == b"\t": return "TAB"
+        elif raw in (bytes([3]), bytes([4])): return "QUIT"
+        try: return raw.decode("utf-8")
+        except Exception: return ""
     except Exception: return ""
 
 def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str):
     term_cols, term_rows = shutil.get_terminal_size((80, 24))
-    box_w = max(40, min(term_cols, 80))
-    inner = box_w - 2
-    out = ["\033[H"]
-    out.append("╭" + "─" * inner + "╮")
-    out.append("│  " + title[:inner - 4].ljust(inner - 2) + "│")
-    out.append("│  " + subtitle[:inner - 4].ljust(inner - 2) + "│")
-    out.append("├" + "─" * inner + "┤")
-    # Scrollbarer Inhaltsbereich bei kleiner Terminalhöhe
-    avail_h = max(5, term_rows - 8)
-    if len(rows) > avail_h:
-        start = max(0, min(cur_idx - avail_h // 2, len(rows) - avail_h))
-        view_rows = rows[start : start + avail_h]
+    # Exakte Box-Breite: Niemals größer als das Terminal (verhindert Zeilenumbruch)
+    box_w = max(24, min(term_cols, 74))
+    inner = max(4, box_w - 2)
+    fixed_h = 7
+    avail_items = max(3, term_rows - fixed_h)
+    if len(rows) > avail_items:
+        start = max(0, min(cur_idx - avail_items // 2, len(rows) - avail_items))
+        view_rows = rows[start : start + avail_items]
     else:
         start = 0
         view_rows = rows
+
+    lines = []
+    lines.append("╭" + "─" * inner + "╮")
+    t_disp = title if len(title) <= inner - 4 else title[:inner - 6] + ".."
+    lines.append("│  " + t_disp + " " * (inner - 2 - len(t_disp)) + "│")
+    s_disp = subtitle if len(subtitle) <= inner - 4 else subtitle[:inner - 6] + ".."
+    lines.append("│  " + s_disp + " " * (inner - 2 - len(s_disp)) + "│")
+    lines.append("├" + "─" * inner + "┤")
     for i, (key, label, tag) in enumerate(view_rows):
         actual_idx = start + i
         is_sel = (actual_idx == cur_idx)
         pfx = "  ▸ " if is_sel else "    "
-        tag_str = f" {tag}"
-        avail_lbl = max(4, inner - len(pfx) - len(tag_str) - 2)
-        lbl_trunc = label if len(label) <= avail_lbl else label[:avail_lbl-2] + ".."
-        pad = " " * max(1, inner - len(pfx) - len(lbl_trunc) - len(tag_str))
+        tag_str = f" {tag}" if tag else ""
+        avail_lbl = max(2, inner - len(pfx) - len(tag_str))
+        lbl_trunc = label if len(label) <= avail_lbl else label[:avail_lbl - 2] + ".."
+        pad = " " * max(0, avail_lbl - len(lbl_trunc))
         content = f"{pfx}{lbl_trunc}{pad}{tag_str}"
-        line_txt = content.ljust(inner)
-        if is_sel: line_txt = "\033[1m" + line_txt + "\033[0m"
-        out.append("│" + line_txt + "│")
-    out.append("├" + "─" * inner + "┤")
-    out.append("│  " + footer[:inner - 4].ljust(inner - 2) + "│")
-    out.append("╰" + "─" * inner + "╯")
-    for l in out[:term_rows]:
-        sys.stdout.write(f"\r\033[2K{l}\n")
-    sys.stdout.flush()
+        if len(content) > inner: content = content[:inner]
+        elif len(content) < inner: content += " " * (inner - len(content))
+        if is_sel: lines.append(f"│\033[1m{content}\033[0m│")
+        else: lines.append(f"│{content}│")
+    lines.append("├" + "─" * inner + "┤")
+    f_disp = footer if len(footer) <= inner - 4 else footer[:inner - 6] + ".."
+    lines.append("│  " + f_disp + " " * (inner - 2 - len(f_disp)) + "│")
+    lines.append("╰" + "─" * inner + "╯")
 
-def keybindings_menu():
+    # Atomar ohne Scrollen zeichnen: \033[J tilgt alle Geisterlinien unter der Box!
+    out = ["\033[H"]
+    for i, l in enumerate(lines[:term_rows]):
+        if i > 0: out.append("\n")
+        out.append(f"\r\033[2K{l}")
+    out.append("\033[J")
+    sys.stdout.write("".join(out))
+    sys.stdout.flush()
+    return start, len(view_rows)
+
+def keybindings_menu(fd: int):
     idx = 0
     while True:
-        render_box(
+        start, count = render_box(
             "TASTENBELEGUNGEN BEARBEITEN",
             "Übersicht der aktiven Tastenkürzel",
             KEYBINDING_ITEMS,
             idx,
             "[↑/↓/j/k] Navigieren  [Enter/→] Auswählen  [ESC/q] Zurück"
         )
-        k = read_key()
+        k = read_key(fd)
         if not k: continue
-        if k in ("UP", "k"): idx = max(0, idx - 1)
-        elif k in ("DOWN", "j"): idx = min(len(KEYBINDING_ITEMS) - 1, idx + 1)
+        if k in ("UP", "k", "WHEEL_UP"): idx = max(0, idx - 1)
+        elif k in ("DOWN", "j", "WHEEL_DOWN"): idx = min(len(KEYBINDING_ITEMS) - 1, idx + 1)
         elif k in ("ESC", "q"): break
-        elif k in ("ENTER", "RIGHT"):
+        elif k.startswith("CLICK:"):
+            try:
+                _, cx_s, cy_s = k.split(":")
+                cy = int(cy_s)
+                row_i = cy - 1 - 4
+                if 0 <= row_i < count:
+                    target = start + row_i
+                    if target == idx: k = "ENTER"
+                    else: idx = target
+            except Exception: pass
+        if k in ("ENTER", "SPACE", "RIGHT"):
             act = KEYBINDING_ITEMS[idx][0]
             if act in ("back", "reset"):
                 if act == "reset": save_config(dict(DEFAULT_CONFIG))
                 break
 
-MAIN_MENU_ITEMS = [
-    ("divider", "Trennungslinien-Stil", "alle"),
-    ("columns", "3-Spalten-Layout", "Ein"),
-    ("controls", "Steuerungshilfe unten", "Aus"),
-    ("mouse", "Mausunterstützung", "Ein"),
-    ("console", "Terminal-Konsole", "Aus"),
-    ("keybindings", "Tastenbelegungen ansehen...", "Öffnen"),
-    ("reset", "Auf Standardwerte zurücksetzen", "Standard"),
-    ("quit", "Konfigurator beenden", "Beenden"),
-]
-
-def main_menu():
+def main_menu(fd: int):
     cfg = load_config()
     idx = 0
     while True:
@@ -156,20 +197,29 @@ def main_menu():
             elif key == "quit": val = "[Beenden]"
             else: val = ""
             rows.append((key, lbl, val))
-
-        render_box(
+        start, count = render_box(
             "EASYDATEIEN KONFIGURATION",
             "Einstellungen verwalten und anpassen",
             rows,
             idx,
             "[↑/↓/j/k] Navigieren  [Enter/Leertaste] Umschalten  [ESC/q] Beenden"
         )
-        k = read_key()
+        k = read_key(fd)
         if not k: continue
-        if k in ("UP", "k"): idx = max(0, idx - 1)
-        elif k in ("DOWN", "j"): idx = min(len(rows) - 1, idx + 1)
+        if k in ("UP", "k", "WHEEL_UP"): idx = max(0, idx - 1)
+        elif k in ("DOWN", "j", "WHEEL_DOWN"): idx = min(len(rows) - 1, idx + 1)
         elif k in ("ESC", "q"): break
-        elif k in ("ENTER", " ", "RIGHT"):
+        elif k.startswith("CLICK:"):
+            try:
+                _, cx_s, cy_s = k.split(":")
+                cy = int(cy_s)
+                row_i = cy - 1 - 4
+                if 0 <= row_i < count:
+                    target = start + row_i
+                    if target == idx: k = "ENTER"
+                    else: idx = target
+            except Exception: pass
+        if k in ("ENTER", "SPACE", "RIGHT"):
             act = rows[idx][0]
             if act == "divider":
                 opts = ["alle", "vertikal", "horizontal", "außen", "keine"]
@@ -185,7 +235,7 @@ def main_menu():
             elif act == "console":
                 cfg["show_console"] = not cfg.get("show_console", False); save_config(cfg)
             elif act == "keybindings":
-                keybindings_menu()
+                keybindings_menu(fd)
                 cfg = load_config()
             elif act == "reset":
                 cfg = dict(DEFAULT_CONFIG); save_config(cfg)
@@ -196,13 +246,13 @@ def run_konfigurator(standalone: bool = True):
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     tty.setcbreak(fd, termios.TCSADRAIN)
-    sys.stdout.write("\033[?1049h\033[?25l\033[2J\033[H")
+    sys.stdout.write("\033[?1049h\033[?25l\033[?1000h\033[?1006h\033[2J\033[H")
     sys.stdout.flush()
     try:
-        cfg = main_menu()
+        cfg = main_menu(fd)
         return cfg
     finally:
-        sys.stdout.write("\033[?25h\033[?1049l")
+        sys.stdout.write("\033[?1006l\033[?1000l\033[?25h\033[?1049l")
         sys.stdout.flush()
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
