@@ -1436,8 +1436,22 @@ class EasyDateienApp:
                 elif self.active_dialog == "trash_confirm":
                     targets_c = len(self.selected_paths) if self.selected_paths else 1
                     t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
-                    prompt_lbl = f"{C_BOLD_RED}[PAPIERKORB]{C_RESET} {t_name} wirklich in den Papierkorb verschieben? "
-                    st_line = pad_to_width(f" {prompt_lbl} {C_GRAY}[j] Ja  [n] Nein{C_RESET}", term_cols)
+                    badge = f"{C_BOLD_RED}[PAPIERKORB]{C_RESET}"
+                    suffix = f" {C_YELLOW}[j/n]{C_RESET}"
+                    suffix_w = str_width(" [j/n]")
+                    badge_w = 1 + str_width("[PAPIERKORB]") + 1
+                    action_w = str_width(" löschen?")
+                    avail_name = term_cols - (badge_w + action_w + suffix_w)
+                    if avail_name >= 4:
+                        t_trunc = truncate_to_width(t_name, avail_name)
+                        content = f" {badge} {t_trunc} löschen?{suffix}"
+                    elif term_cols >= (badge_w + action_w + suffix_w):
+                        content = f" {badge} löschen?{suffix}"
+                    elif term_cols >= (badge_w + suffix_w):
+                        content = f" {badge}{suffix}"
+                    else:
+                        content = f" {suffix.strip()}"
+                    st_line = pad_to_width(content, term_cols)
                 elif self.active_dialog == "goto_menu":
                     prompt_lbl = f"{C_BOLD_BLUE}[GEHE ZU]{C_RESET} "
                     opts = f"{C_BOLD}[d]{C_RESET} Downloads  {C_BOLD}[f]{C_RESET} Dokumente  {C_BOLD}[h]{C_RESET} Benutzerordner  {C_BOLD}[t]{C_RESET} Papierkorb  {C_BOLD}[i]{C_RESET} Pfadeingabe  {C_BOLD}[p]{C_RESET} Zwischenablage  {C_GRAY}[ESC] Abbrechen{C_RESET}"
@@ -1591,7 +1605,7 @@ class EasyDateienApp:
                 if not self.clipboard_paths:
                     self.clipboard_mode = None
                 self.refresh_items()
-                self.set_status(f"{len(moved_records)} Elemente in Papierkorb verschoben (Z = Rückgängig)", "success")
+                self.set_status(f"{len(moved_records)} Element(e) in Papierkorb verschoben (u = Rückgängig)", "success")
             else:
                 self.set_status("Löschen abgebrochen")
             self.active_dialog = None
@@ -1663,7 +1677,7 @@ class EasyDateienApp:
                     self.undo_stack.append(UndoAction("rename", desc, {"old_path": target_it.path, "new_path": new_path}))
                     self.refresh_items()
                     self.select_filename(val)
-                    self.set_status(f"Umbenannt in: {val} (Z = Rückgängig)", "success")
+                    self.set_status(f"Umbenannt in: {val} (u = Rückgängig)", "success")
                 except Exception as e:
                     self.set_status(f"Fehler beim Umbenennen: {e}", "error")
                 return True
@@ -1681,10 +1695,10 @@ class EasyDateienApp:
                 try:
                     if is_dir_target:
                         os.makedirs(target_p, exist_ok=True)
-                        self.set_status(f"Ordner erstellt: {clean_name} (Z = Rückgängig)", "success")
+                        self.set_status(f"Ordner erstellt: {clean_name} (u = Rückgängig)", "success")
                     else:
                         open(target_p, "a").close()
-                        self.set_status(f"Datei erstellt: {clean_name} (Z = Rückgängig)", "success")
+                        self.set_status(f"Datei erstellt: {clean_name} (u = Rückgängig)", "success")
                     self.undo_stack.append(UndoAction("create", f"Erstellen von {clean_name}", {"path": target_p}))
                     self.refresh_items()
                     self.select_filename(clean_name)
