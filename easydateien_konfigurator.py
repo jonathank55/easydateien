@@ -1,30 +1,80 @@
 #!/usr/bin/env python3
-import os, sys, json, termios, tty, select, shutil
+"""
+EasyDateien Konfigurator — Interaktive Konfigurations-Engine für EasyDateien.
+Single-Source-of-Truth & optimi-Norm konform.
+"""
+
+import os
+import sys
+import json
+import termios
+import tty
+import select
+import shutil
+import argparse
+import unicodedata
+import re
 
 CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
+# Farbcodes nach optimi-Farbnorm
+C_RESET = "\033[0m"
+C_BOLD = "\033[1m"
+C_DIM = "\033[2m"
+C_ITALIC = "\033[3m"
+C_BLUE = "\033[0;34m"
+C_BOLD_BLUE = "\033[1;34m"
+C_CYAN = "\033[0;36m"
+C_BOLD_CYAN = "\033[1;36m"
+C_GREEN = "\033[0;32m"
+C_BOLD_GREEN = "\033[1;32m"
+C_YELLOW = "\033[1;33m"
+C_RED = "\033[0;31m"
+C_BOLD_RED = "\033[1;31m"
+C_MAGENTA = "\033[0;35m"
+C_GRAY = "\033[90m"
+C_INVERT = "\033[7m"
+
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
 DEFAULT_CONFIG = {
-    "divider_style": "alle", "columns_enabled": True, "show_controls": False,
-    "esc_to_quit": False, "mouse_support": True, "show_console": False,
-    "console_position": "unten", "text_editor": "nano %s", "opener": "open %s",
-    "sort_by": "mtime", "sort_reverse": True, "sort_dir_first": True,
+    "divider_style": "alle",
+    "columns_enabled": True,
+    "show_controls": False,
+    "esc_to_quit": False,
+    "mouse_support": True,
+    "show_console": False,
+    "console_position": "unten",
+    "text_editor": "nano %s",
+    "opener": "open %s",
+    "sort_by": "mtime",
+    "sort_reverse": True,
+    "sort_dir_first": True,
+    "show_hidden": False,
 }
 
 KEYBINDING_ITEMS = [
     ("up", "Cursor nach oben bewegen", "[UP, k]"),
     ("down", "Cursor nach unten bewegen", "[DOWN, j]"),
+    ("page_up", "Seite nach oben blättern", "[PAGE_UP]"),
+    ("page_down", "Seite nach unten blättern", "[PAGE_DOWN]"),
     ("left", "Übergeordnetes Verzeichnis (Zurück)", "[LEFT, h]"),
-    ("right", "Ordner öffnen (Datei: Doppel-→ für nano)", "[RIGHT, l]"),
+    ("right", "Ordner betreten / Datei editieren (Doppel-→)", "[RIGHT, l]"),
     ("open", "Systemweit öffnen (open, Finder)", "[ENTER]"),
+    ("edit", "In Texteditor öffnen (nano, vim)", "[e, o]"),
+    ("new", "Neue Datei / neuen Ordner anlegen", "[n]"),
+    ("search", "Suchen / Schnellfilter", "[/]"),
+    ("sort", "Sortierung umschalten (Datum/Name/Größe/Typ)", "[s]"),
     ("select", "Element auswählen / abwählen (*)", "[SPACE, v]"),
     ("select_all", "Alle Elemente auswählen / abwählen", "[V, a]"),
     ("rename", "Element umbenennen (r)", "[r]"),
     ("zip", "ZIP-Archiv erstellen (z)", "[z]"),
     ("cut", "Auswahl ausschneiden (×)", "[x]"),
     ("copy", "Auswahl kopieren / yank (y / c)", "[y, c]"),
+    ("copy_path", "Pfad / Name kopieren (c c / c f / c d)", "[cc, cf, cd]"),
     ("paste", "Zwischenspeicher einfügen (p)", "[p]"),
-    ("trash", "In den Papierkorb verschieben (d)", "[d]"),
+    ("trash", "In den Papierkorb verschieben (d / Entf)", "[d, DEL]"),
     ("toggle_hidden", "Versteckte Dateien umschalten (.)", "[.]"),
     ("menu", "Konfigurationsmenü öffnen (m)", "[m, C]"),
     ("goto_downloads", "Gehe zu Downloads (g d)", "[gd]"),
@@ -33,7 +83,7 @@ KEYBINDING_ITEMS = [
     ("goto_trash", "Gehe zum Papierkorb (g t)", "[gt]"),
     ("goto_input", "Pfad manuell eingeben (g i)", "[gi]"),
     ("goto_clipboard", "Gehe zu Pfad in Zwischenablage (g p)", "[gp]"),
-    ("toggle_console", "Konsole anzeigen / ausblenden (t)", "[t]"),
+    ("toggle_console", "Konsole anzeigen / Fokus wechseln (t / Tab)", "[t, TAB]"),
     ("quit", "EasyDateien beenden (q)", "[q]"),
     ("reset", "Tastenbelegungen zurücksetzen", "[Standard]"),
     ("back", "Zurück zum Hauptmenü", "[Zurück]"),
@@ -45,99 +95,198 @@ MAIN_MENU_ITEMS = [
     ("controls", "Steuerungshilfe unten", "Aus"),
     ("mouse", "Mausunterstützung", "Ein"),
     ("console", "Terminal-Konsole", "Aus"),
+    ("hidden", "Versteckte Dateien anzeigen", "Aus"),
     ("keybindings", "Tastenbelegungen ansehen...", "Öffnen"),
     ("reset", "Auf Standardwerte zurücksetzen", "Standard"),
     ("quit", "Konfigurator beenden", "Beenden"),
 ]
 
+
+def char_width(c: str) -> int:
+    if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
+        return 0
+    eaw = unicodedata.east_asian_width(c)
+    if eaw in ("W", "F"):
+        return 2
+    cp = ord(c)
+    if (0x1F300 <= cp <= 0x1FAFF) or (0x2600 <= cp <= 0x27BF) or (0xFE00 <= cp <= 0xFE0F):
+        return 2
+    return 1
+
+
+def str_width(text: str) -> int:
+    clean = ANSI_ESCAPE_RE.sub("", text)
+    return sum(char_width(c) for c in clean)
+
+
+def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
+    if max_w <= 0:
+        return ""
+    if str_width(text) <= max_w:
+        return text
+    e_w = str_width(ellipsis)
+    if max_w <= e_w:
+        res = ""
+        w = 0
+        for c in text:
+            cw = char_width(c)
+            if w + cw > max_w:
+                break
+            res += c
+            w += cw
+        return res
+    target_w = max_w - e_w
+    res = ""
+    w = 0
+    for c in text:
+        cw = char_width(c)
+        if w + cw > target_w:
+            break
+        res += c
+        w += cw
+    return res + ellipsis
+
+
+def pad_to_width(text: str, width: int, align: str = "left") -> str:
+    w = str_width(text)
+    if w > width:
+        clean = ANSI_ESCAPE_RE.sub("", text)
+        return truncate_to_width(clean, width)
+    pad = " " * (width - w)
+    return (pad + text) if align == "right" else (text + pad)
+
+
 def load_config() -> dict:
     cfg = dict(DEFAULT_CONFIG)
     if os.path.exists(CONFIG_FILE):
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f: cfg.update(json.load(f))
-        except Exception: pass
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                cfg.update(json.load(f))
+        except Exception:
+            pass
     return cfg
+
 
 def save_config(cfg: dict):
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
+
 def read_key(fd: int, timeout: float = 0.05) -> str:
     try:
         r, _, _ = select.select([fd], [], [], timeout)
-        if not r: return ""
+        if not r:
+            return ""
         raw = os.read(fd, 1)
-        if not raw: return ""
+        if not raw:
+            return ""
         if raw == b"\x1b":
             seq = b""
             while True:
                 r2, _, _ = select.select([fd], [], [], 0.05)
-                if not r2: break
+                if not r2:
+                    break
                 c = os.read(fd, 1)
-                if not c: break
+                if not c:
+                    break
                 seq += c
                 if seq.startswith(b"[<"):
-                    if seq.endswith(b"M") or seq.endswith(b"m") or len(seq) >= 30: break
-                elif len(seq) >= 2 and seq[-1:] in b"ABCDHFS~": break
-                elif len(seq) >= 6: break
-            if not seq: return "ESC"
+                    if seq.endswith(b"M") or seq.endswith(b"m") or len(seq) >= 30:
+                        break
+                elif len(seq) >= 2 and seq[-1:] in b"ABCDHFS~":
+                    break
+                elif len(seq) >= 6:
+                    break
+            if not seq:
+                return "ESC"
             if seq.startswith(b"[<") and (seq.endswith(b"M") or seq.endswith(b"m")):
                 try:
                     is_rel = seq.endswith(b"m")
                     b_s, x_s, y_s = seq[2:-1].decode("ascii").split(";")
                     b_c = int(b_s)
-                    if b_c == 64: return "WHEEL_UP"
-                    elif b_c == 65: return "WHEEL_DOWN"
-                    elif not is_rel and b_c == 0: return f"CLICK:{int(x_s)}:{int(y_s)}"
-                except Exception: pass
+                    if b_c == 64:
+                        return "WHEEL_UP"
+                    elif b_c == 65:
+                        return "WHEEL_DOWN"
+                    elif not is_rel and b_c == 0:
+                        return f"CLICK:{int(x_s)}:{int(y_s)}"
+                except Exception:
+                    pass
                 return "MOUSE"
-            mapping = {b"[A":"UP", b"[B":"DOWN", b"[C":"RIGHT", b"[D":"LEFT", b"[H":"HOME", b"[F":"END", b"[5~":"PAGE_UP", b"[6~":"PAGE_DOWN"}
+            mapping = {
+                b"[A": "UP", b"[B": "DOWN", b"[C": "RIGHT", b"[D": "LEFT",
+                b"OA": "UP", b"OB": "DOWN", b"OC": "RIGHT", b"OD": "LEFT",
+                b"[H": "HOME", b"[F": "END", b"OH": "HOME", b"OF": "END",
+                b"[5~": "PAGE_UP", b"[6~": "PAGE_DOWN"
+            }
             return mapping.get(seq, "")
-        if raw in (bytes([13]), bytes([10])): return "ENTER"
-        elif raw == b" ": return "SPACE"
-        elif raw == b"\t": return "TAB"
-        elif raw in (bytes([3]), bytes([4])): return "QUIT"
-        try: return raw.decode("utf-8")
-        except Exception: return ""
-    except Exception: return ""
+        if raw in (bytes([13]), bytes([10])):
+            return "ENTER"
+        elif raw == b" ":
+            return "SPACE"
+        elif raw == b"\t":
+            return "TAB"
+        elif raw in (bytes([3]), bytes([4])):
+            return "QUIT"
+        try:
+            return raw.decode("utf-8")
+        except Exception:
+            return ""
+    except Exception:
+        return ""
+
 
 def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str):
     term_cols, term_rows = shutil.get_terminal_size((80, 24))
-    box_w = max(24, term_cols)
-    inner = max(4, box_w - 2)
+    inner = max(4, term_cols - 2)
     fixed_h = 7
     avail_items = max(3, term_rows - fixed_h)
     if len(rows) > avail_items:
         start = max(0, min(cur_idx - avail_items // 2, len(rows) - avail_items))
-        view_rows = rows[start : start + avail_items]
+        view_rows = rows[start: start + avail_items]
     else:
         start = 0
         view_rows = rows
 
+    b_c = C_BLUE
     lines = []
-    lines.append("╭" + "─" * inner + "╮")
-    t_disp = title if len(title) <= inner - 4 else title[:inner - 6] + ".."
-    lines.append("│  " + t_disp.ljust(inner - 2) + "│")
-    s_disp = subtitle if len(subtitle) <= inner - 4 else subtitle[:inner - 6] + ".."
-    lines.append("│  " + s_disp.ljust(inner - 2) + "│")
-    lines.append("├" + "─" * inner + "┤")
+    lines.append(f"{b_c}╭{'─' * inner}╮{C_RESET}")
+    t_styled = f"{C_BOLD_BLUE}{truncate_to_width(title, inner - 4)}{C_RESET}"
+    lines.append(f"{b_c}│{C_RESET}  {pad_to_width(t_styled, inner - 2)}{b_c}│{C_RESET}")
+    s_styled = f"{C_GRAY}{truncate_to_width(subtitle, inner - 4)}{C_RESET}"
+    lines.append(f"{b_c}│{C_RESET}  {pad_to_width(s_styled, inner - 2)}{b_c}│{C_RESET}")
+    lines.append(f"{b_c}├{'─' * inner}┤{C_RESET}")
+
     for i, (key, label, tag) in enumerate(view_rows):
         actual_idx = start + i
         is_sel = (actual_idx == cur_idx)
-        pfx = "  ▸ " if is_sel else "    "
-        tag_str = f" {tag}" if tag else ""
-        avail_lbl = max(2, inner - len(pfx) - len(tag_str) - 2)
-        lbl_trunc = label if len(label) <= avail_lbl else label[:avail_lbl - 2] + ".."
-        pad = " " * max(0, inner - len(pfx) - len(lbl_trunc) - len(tag_str) - 2)
-        content = f"{pfx}{lbl_trunc}{pad}{tag_str}  "
-        content_fixed = content[:inner].ljust(inner)
-        if is_sel: lines.append(f"│\033[1m{content_fixed}\033[0m│")
-        else: lines.append(f"│{content_fixed}│")
-    lines.append("├" + "─" * inner + "┤")
-    f_disp = footer if len(footer) <= inner - 4 else footer[:inner - 6] + ".."
-    lines.append("│  " + f_disp.ljust(inner - 2) + "│")
-    lines.append("╰" + "─" * inner + "╯")
+        pfx = f"{C_BOLD_BLUE}▸{C_RESET} " if is_sel else "  "
+
+        if tag in ("[Ein]", "Ein"):
+            tag_colored = f"{C_BOLD_GREEN}{tag}{C_RESET}"
+        elif tag in ("[Aus]", "Aus"):
+            tag_colored = f"{C_GRAY}{tag}{C_RESET}"
+        elif tag:
+            tag_colored = f"{C_BOLD_CYAN}{tag}{C_RESET}"
+        else:
+            tag_colored = ""
+
+        avail_lbl = max(2, inner - 4 - str_width(tag) - 2)
+        lbl_trunc = truncate_to_width(label, avail_lbl)
+        if is_sel:
+            lbl_styled = f"{C_BOLD}{lbl_trunc}{C_RESET}"
+        else:
+            lbl_styled = lbl_trunc
+
+        pad_len = max(1, inner - 2 - str_width(pfx) - str_width(lbl_trunc) - str_width(tag))
+        content_row = f" {pfx}{lbl_styled}{' ' * pad_len}{tag_colored} "
+        lines.append(f"{b_c}│{C_RESET}{pad_to_width(content_row, inner)}{b_c}│{C_RESET}")
+
+    lines.append(f"{b_c}├{'─' * inner}┤{C_RESET}")
+    f_styled = f"{C_GRAY}{truncate_to_width(footer, inner - 4)}{C_RESET}"
+    lines.append(f"{b_c}│{C_RESET}  {pad_to_width(f_styled, inner - 2)}{b_c}│{C_RESET}")
+    lines.append(f"{b_c}╰{'─' * inner}╯{C_RESET}")
 
     out = []
     for r_i, l in enumerate(lines[:term_rows]):
@@ -147,34 +296,47 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     sys.stdout.flush()
     return start, len(view_rows)
 
+
 def keybindings_menu(fd: int):
     idx = 0
     while True:
         start, count = render_box(
             "TASTENBELEGUNGEN",
-            "Aktive Tastenkombinationen",
+            "Übersicht aller Tastenkombinationen und Befehle",
             KEYBINDING_ITEMS,
             idx,
-            "[↑↓] Nav  [ESC] Zurück"
+            "[↑↓] Navigieren  [ESC / q] Zurück zum Hauptmenü"
         )
         k = read_key(fd)
-        if not k: continue
-        if k in ("UP", "k", "WHEEL_UP"): idx = max(0, idx - 1)
-        elif k in ("DOWN", "j", "WHEEL_DOWN"): idx = min(len(KEYBINDING_ITEMS) - 1, idx + 1)
-        elif k in ("ESC", "q"): break
+        if not k:
+            continue
+        if k in ("UP", "k", "WHEEL_UP"):
+            idx = max(0, idx - 1)
+        elif k in ("DOWN", "j", "WHEEL_DOWN"):
+            idx = min(len(KEYBINDING_ITEMS) - 1, idx + 1)
+        elif k in ("PAGE_UP",):
+            idx = max(0, idx - 8)
+        elif k in ("PAGE_DOWN",):
+            idx = min(len(KEYBINDING_ITEMS) - 1, idx + 8)
+        elif k in ("ESC", "q"):
+            break
         elif k.startswith("CLICK:"):
             try:
                 _, cx_s, cy_s = k.split(":")
                 row_i = int(cy_s) - 5
-                if 0 <= row_i < count: idx = start + row_i
-            except Exception: pass
+                if 0 <= row_i < count:
+                    idx = start + row_i
+            except Exception:
+                pass
             continue
         if k in ("ENTER", "SPACE"):
             act = KEYBINDING_ITEMS[idx][0]
-            if act == "back": break
+            if act == "back":
+                break
             elif act == "reset":
                 save_config(dict(DEFAULT_CONFIG))
                 break
+
 
 def main_menu(fd: int):
     cfg = load_config()
@@ -182,36 +344,55 @@ def main_menu(fd: int):
     while True:
         rows = []
         for key, lbl, _ in MAIN_MENU_ITEMS:
-            if key == "divider": val = f"[{cfg.get('divider_style', 'alle')}]"
-            elif key == "columns": val = f"[{'Ein' if cfg.get('columns_enabled', True) else 'Aus'}]"
-            elif key == "controls": val = f"[{'Ein' if cfg.get('show_controls', False) else 'Aus'}]"
-            elif key == "mouse": val = f"[{'Ein' if cfg.get('mouse_support', True) else 'Aus'}]"
-            elif key == "console": val = f"[{'Ein' if cfg.get('show_console', False) else 'Aus'}]"
-            elif key == "keybindings": val = "[Öffnen]"
-            elif key == "reset": val = "[Standard]"
-            elif key == "quit": val = "[Beenden]"
-            else: val = ""
+            if key == "divider":
+                val = f"[{cfg.get('divider_style', 'alle')}]"
+            elif key == "columns":
+                val = f"[{'Ein' if cfg.get('columns_enabled', True) else 'Aus'}]"
+            elif key == "controls":
+                val = f"[{'Ein' if cfg.get('show_controls', False) else 'Aus'}]"
+            elif key == "mouse":
+                val = f"[{'Ein' if cfg.get('mouse_support', True) else 'Aus'}]"
+            elif key == "console":
+                val = f"[{'Ein' if cfg.get('show_console', False) else 'Aus'}]"
+            elif key == "hidden":
+                val = f"[{'Ein' if cfg.get('show_hidden', False) else 'Aus'}]"
+            elif key == "keybindings":
+                val = "[Öffnen]"
+            elif key == "reset":
+                val = "[Standard]"
+            elif key == "quit":
+                val = "[Beenden]"
+            else:
+                val = ""
             rows.append((key, lbl, val))
+
         start, count = render_box(
             "EASYDATEIEN KONFIGURATION",
             "Einstellungen verwalten und anpassen",
             rows,
             idx,
-            "[↑↓] Nav  [Enter/Space] Ändern  [ESC] Ende"
+            "[↑↓] Nav  [Enter / Space / →] Ändern  [ESC / q] Beenden"
         )
         k = read_key(fd)
-        if not k: continue
-        if k in ("UP", "k", "WHEEL_UP"): idx = max(0, idx - 1)
-        elif k in ("DOWN", "j", "WHEEL_DOWN"): idx = min(len(rows) - 1, idx + 1)
-        elif k in ("ESC", "q"): break
+        if not k:
+            continue
+        if k in ("UP", "k", "WHEEL_UP"):
+            idx = max(0, idx - 1)
+        elif k in ("DOWN", "j", "WHEEL_DOWN"):
+            idx = min(len(rows) - 1, idx + 1)
+        elif k in ("ESC", "q"):
+            break
         elif k.startswith("CLICK:"):
             try:
                 _, cx_s, cy_s = k.split(":")
                 row_i = int(cy_s) - 5
-                if 0 <= row_i < count: idx = start + row_i
-            except Exception: pass
+                if 0 <= row_i < count:
+                    idx = start + row_i
+            except Exception:
+                pass
             continue
-        if k in ("ENTER", "SPACE"):
+
+        if k in ("ENTER", "SPACE", "RIGHT"):
             act = rows[idx][0]
             if act == "divider":
                 opts = ["alle", "vertikal", "horizontal", "außen", "keine"]
@@ -219,53 +400,64 @@ def main_menu(fd: int):
                 cfg["divider_style"] = opts[(opts.index(cur) + 1) % len(opts)] if cur in opts else "alle"
                 save_config(cfg)
             elif act == "columns":
-                cfg["columns_enabled"] = not cfg.get("columns_enabled", True); save_config(cfg)
+                cfg["columns_enabled"] = not cfg.get("columns_enabled", True)
+                save_config(cfg)
             elif act == "controls":
-                cfg["show_controls"] = not cfg.get("show_controls", False); save_config(cfg)
+                cfg["show_controls"] = not cfg.get("show_controls", False)
+                save_config(cfg)
             elif act == "mouse":
-                cfg["mouse_support"] = not cfg.get("mouse_support", True); save_config(cfg)
+                cfg["mouse_support"] = not cfg.get("mouse_support", True)
+                save_config(cfg)
             elif act == "console":
-                cfg["show_console"] = not cfg.get("show_console", False); save_config(cfg)
+                cfg["show_console"] = not cfg.get("show_console", False)
+                save_config(cfg)
+            elif act == "hidden":
+                cfg["show_hidden"] = not cfg.get("show_hidden", False)
+                save_config(cfg)
             elif act == "keybindings":
                 keybindings_menu(fd)
                 cfg = load_config()
             elif act == "reset":
-                cfg = dict(DEFAULT_CONFIG); save_config(cfg)
-            elif act == "quit": break
-        elif k == "RIGHT":
-            act = rows[idx][0]
-            if act == "keybindings":
-                keybindings_menu(fd)
-                cfg = load_config()
-            elif act not in ("reset", "quit"):
-                if act == "divider":
-                    opts = ["alle", "vertikal", "horizontal", "außen", "keine"]
-                    cur = cfg.get("divider_style", "alle")
-                    cfg["divider_style"] = opts[(opts.index(cur) + 1) % len(opts)] if cur in opts else "alle"
-                    save_config(cfg)
-                elif act == "columns":
-                    cfg["columns_enabled"] = not cfg.get("columns_enabled", True); save_config(cfg)
-                elif act == "controls":
-                    cfg["show_controls"] = not cfg.get("show_controls", False); save_config(cfg)
-                elif act == "mouse":
-                    cfg["mouse_support"] = not cfg.get("mouse_support", True); save_config(cfg)
-                elif act == "console":
-                    cfg["show_console"] = not cfg.get("show_console", False); save_config(cfg)
+                cfg = dict(DEFAULT_CONFIG)
+                save_config(cfg)
+            elif act == "quit":
+                break
     return cfg
+
 
 def run_konfigurator(standalone: bool = True):
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     tty.setcbreak(fd, termios.TCSADRAIN)
-    sys.stdout.write("\033[?1049h\033[?25l\033[?1000h\033[?1006h\033[2J\033[H")
-    sys.stdout.flush()
+    if standalone:
+        sys.stdout.write("\033[?1049h\033[?25l\033[?1000h\033[?1006h\033[2J\033[H")
+        sys.stdout.flush()
     try:
         cfg = main_menu(fd)
         return cfg
     finally:
-        sys.stdout.write("\033[?1006l\033[?1000l\033[?25h\033[?1049l")
-        sys.stdout.flush()
+        if standalone:
+            sys.stdout.write("\033[?1006l\033[?1000l\033[?25h\033[?1049l")
+            sys.stdout.flush()
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
-if __name__ == "__main__":
+
+class SingleLineHelpFormatter(argparse.HelpFormatter):
+    def _split_lines(self, text, width):
+        return [text]
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="easydateien-config",
+        formatter_class=lambda prog: SingleLineHelpFormatter(prog, max_help_position=16, width=220),
+        description="Interaktives Konfigurationsmenü für EasyDateien.",
+        add_help=False
+    )
+    parser.add_argument("-h", action="help", help="Hilfe anzeigen")
+    parser.parse_args()
     run_konfigurator(standalone=True)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,175 +1,378 @@
 #!/usr/bin/env python3
-import os, sys, time, datetime, shutil, subprocess, termios, tty, select, signal, zipfile, re, argparse, stat
-from typing import List, Dict, Set, Optional
+"""
+EasyDateien — Minimalistischer, hocheffizienter Terminal-Dateimanager für macOS.
+Single-Source-of-Truth & optimi-Norm konform.
+"""
+
+import os
+import sys
+import time
+import datetime
+import shutil
+import subprocess
+import termios
+import tty
+import select
+import signal
+import zipfile
+import re
+import argparse
+import stat
+import json
+import unicodedata
+from typing import List, Dict, Set, Optional, Tuple
 
 HOME_DIR = os.path.expanduser("~")
 CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
-BOLD = "\033[1m"
-ITALIC = "\033[3m"
-RESET = "\033[0m"
+# Farbcodes nach optimi-Farbnorm
+C_RESET = "\033[0m"
+C_BOLD = "\033[1m"
+C_DIM = "\033[2m"
+C_ITALIC = "\033[3m"
+C_BLUE = "\033[0;34m"
+C_BOLD_BLUE = "\033[1;34m"
+C_CYAN = "\033[0;36m"
+C_BOLD_CYAN = "\033[1;36m"
+C_GREEN = "\033[0;32m"
+C_BOLD_GREEN = "\033[1;32m"
+C_YELLOW = "\033[1;33m"
+C_RED = "\033[0;31m"
+C_BOLD_RED = "\033[1;31m"
+C_MAGENTA = "\033[0;35m"
+C_GRAY = "\033[90m"
+C_INVERT = "\033[7m"
+
 CLEAR_LINE = "\033[2K"
 HIDE_CURSOR = "\033[?25l"
 SHOW_CURSOR = "\033[?25h"
 
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
-def visible_len(text: str) -> int:
-    return len(ANSI_ESCAPE_RE.sub("", text))
 
-def truncate_end(text: str, max_w: int) -> str:
-    if max_w <= 0: return ""
-    plain = ANSI_ESCAPE_RE.sub("", text)
-    if len(plain) <= max_w: return text
-    if max_w <= 3: return plain[:max_w]
-    return plain[:max_w - 3] + "..."
+def char_width(c: str) -> int:
+    """Ermittelt die visuelle Terminal-Spaltenbreite eines einzelnen Zeichens."""
+    if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
+        return 0
+    eaw = unicodedata.east_asian_width(c)
+    if eaw in ("W", "F"):
+        return 2
+    cp = ord(c)
+    if (0x1F300 <= cp <= 0x1FAFF) or (0x2600 <= cp <= 0x27BF) or (0xFE00 <= cp <= 0xFE0F):
+        return 2
+    return 1
 
-def pad_visible(text: str, width: int, align: str = "left") -> str:
-    vlen = visible_len(text)
-    if vlen > width:
-        plain = ANSI_ESCAPE_RE.sub("", text)
-        return truncate_end(plain, width)
-    pad = " " * (width - vlen)
+
+def str_width(text: str) -> int:
+    """Berechnet die tatsächliche sichtbare Spaltenbreite eines Textes ohne ANSI-Codes."""
+    clean = ANSI_ESCAPE_RE.sub("", text)
+    return sum(char_width(c) for c in clean)
+
+
+def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
+    """Kürzt Text deterministisch auf die maximale visuelle Terminalbreite."""
+    if max_w <= 0:
+        return ""
+    if str_width(text) <= max_w:
+        return text
+    e_w = str_width(ellipsis)
+    if max_w <= e_w:
+        res = ""
+        w = 0
+        for c in text:
+            cw = char_width(c)
+            if w + cw > max_w:
+                break
+            res += c
+            w += cw
+        return res
+    target_w = max_w - e_w
+    res = ""
+    w = 0
+    for c in text:
+        cw = char_width(c)
+        if w + cw > target_w:
+            break
+        res += c
+        w += cw
+    return res + ellipsis
+
+
+def pad_to_width(text: str, width: int, align: str = "left") -> str:
+    """Füllt formatierten Text exakt auf die gewünschte visuelle Terminalbreite auf."""
+    w = str_width(text)
+    if w > width:
+        clean = ANSI_ESCAPE_RE.sub("", text)
+        return truncate_to_width(clean, width)
+    pad = " " * (width - w)
     return (pad + text) if align == "right" else (text + pad)
 
+
 def format_size(size_bytes: int) -> str:
-    if size_bytes < 1024: return f"{size_bytes} B"
+    """Formatiert Byte-Größen nach standardisierten Einheiten."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
     val = float(size_bytes)
     for unit in ["KB", "MB", "GB", "TB", "PB"]:
         val /= 1024.0
-        if val < 1024.0 or unit == "PB": return f"{val:.1f} {unit}"
+        if val < 1024.0 or unit == "PB":
+            return f"{val:.1f} {unit}"
     return f"{val:.1f} PB"
 
+
 def format_mtime(mtime: float) -> str:
+    """Formatiert Änderungszeitpunkte lesbar."""
     try:
         dt = datetime.datetime.fromtimestamp(mtime)
         now = datetime.datetime.now()
         return dt.strftime("%d. %b %H:%M") if dt.year == now.year else dt.strftime("%d.%m.%Y")
-    except Exception: return "---"
+    except Exception:
+        return "---"
+
 
 def sync_to_macos_clipboard(paths: List[str]):
-    if not paths: return
+    """Synchronisiert Dateipfade in die macOS-Zwischenablage (Finder & pbcopy)."""
+    if not paths:
+        return
     abs_paths = [os.path.abspath(p) for p in paths if os.path.exists(p)]
-    if not abs_paths: return
+    if not abs_paths:
+        return
     try:
         items = ", ".join([f'(POSIX file "{p.replace(chr(34), chr(92)+chr(34))}" as alias)' for p in abs_paths])
         as_code = f'tell application "Finder" to set the clipboard to {{{items}}}'
         subprocess.run(["osascript", "-e", as_code], capture_output=True, timeout=1.0)
-    except Exception: pass
+    except Exception:
+        pass
     try:
         p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
         p.communicate(input="\n".join(abs_paths).encode("utf-8"))
-    except Exception: pass
+    except Exception:
+        pass
+
 
 def get_macos_clipboard_files() -> List[str]:
+    """Liest Dateipfade aus der macOS-Zwischenablage."""
     try:
         out = subprocess.check_output(["pbpaste"], text=True)
         lines = [l.strip() for l in out.splitlines() if l.strip() and os.path.exists(l.strip())]
-        if lines: return lines
-    except Exception: pass
+        if lines:
+            return lines
+    except Exception:
+        pass
     return []
 
+
 def copy_text_to_clipboard(text: str):
+    """Kopiert reinen Text in das macOS-Clipboard."""
     try:
         p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
         p.communicate(input=text.encode("utf-8"))
-    except Exception: pass
+    except Exception:
+        pass
+
 
 class FileEntry:
-    __slots__ = ("name", "path", "is_dir", "is_symlink", "size", "mtime", "ext", "mode_str")
+    __slots__ = ("name", "path", "is_dir", "is_symlink", "is_exec", "size", "mtime", "ext", "mode_str", "symlink_target")
+
     def __init__(self, path: str, name: str):
         self.path = path
         self.name = name
         self.is_dir = False
         self.is_symlink = os.path.islink(path)
+        self.is_exec = False
         self.size = 0
         self.mtime = 0.0
         self.mode_str = "----------"
+        self.symlink_target = ""
         _, self.ext = os.path.splitext(name)
         try:
             st = os.stat(path, follow_symlinks=False)
             self.mtime = st.st_mtime
-            try: self.mode_str = stat.filemode(st.st_mode)
-            except Exception: pass
+            try:
+                self.mode_str = stat.filemode(st.st_mode)
+            except Exception:
+                pass
             self.is_dir = os.path.isdir(path) if self.is_symlink else stat.S_ISDIR(st.st_mode)
+            self.is_exec = bool(st.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)) and not self.is_dir
             self.size = st.st_size
-        except Exception: pass
+            if self.is_symlink:
+                try:
+                    self.symlink_target = os.readlink(path)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
 
 def get_file_type_desc(item: FileEntry) -> str:
-    if item.is_dir: return "Ordner"
+    """Liefert eine präzise deutsche Typbezeichnung."""
+    if item.is_dir:
+        return "Verzeichnis"
+    if item.is_symlink:
+        return "Symbolischer Link"
     ext = item.ext.lower()
-    m = {".txt":"Textdokument", ".md":"Markdown", ".py":"Python", ".sh":"Shell-Skript", ".json":"JSON",
-         ".toml":"TOML", ".yaml":"YAML", ".yml":"YAML", ".pdf":"PDF", ".zip":"ZIP", ".png":"PNG-Bild",
-         ".jpg":"JPEG-Bild", ".jpeg":"JPEG-Bild"}
-    return m.get(ext, f"Datei ({ext})" if ext else "Binärdatei")
+    m = {
+        ".txt": "Textdokument", ".md": "Markdown-Datei", ".py": "Python-Skript",
+        ".sh": "Shell-Skript", ".zsh": "Zsh-Skript", ".bash": "Bash-Skript",
+        ".json": "JSON-Dokument", ".toml": "TOML-Konfiguration", ".yaml": "YAML-Datei",
+        ".yml": "YAML-Datei", ".pdf": "PDF-Dokument", ".zip": "ZIP-Archiv",
+        ".tar": "TAR-Archiv", ".gz": "GZIP-Archiv", ".dmg": "Apple Disk Image",
+        ".png": "PNG-Bild", ".jpg": "JPEG-Bild", ".jpeg": "JPEG-Bild",
+        ".svg": "SVG-Vektorgrafik", ".gif": "GIF-Animation", ".webp": "WebP-Bild",
+        ".html": "HTML-Dokument", ".css": "CSS-Stylesheet", ".js": "JavaScript",
+        ".ts": "TypeScript", ".typ": "Typst-Dokument", ".rtf": "Rich-Text-Format",
+        ".mp3": "MP3-Audiodatei", ".wav": "WAV-Audiodatei", ".mp4": "MP4-Videodatei",
+        ".mov": "QuickTime-Video", ".csv": "CSV-Tabelle",
+    }
+    if ext in m:
+        return m[ext]
+    if item.is_exec:
+        return "Ausführbare Datei"
+    return f"Datei ({ext})" if ext else "Binärdatei"
 
-def scan_directory(path: str, show_hidden: bool = False, sort_by: str = "mtime", sort_reverse: bool = True, sort_dir_first: bool = True) -> List[FileEntry]:
+
+def get_file_colored_name(item: FileEntry) -> str:
+    """Formatiert den Dateinamen mit dezenten typbezogenen Farbakzenten."""
+    name_disp = item.name + ("/" if item.is_dir else ("@" if item.is_symlink else ""))
+    if item.is_dir:
+        return f"{C_BOLD_BLUE}{name_disp}{C_RESET}"
+    if item.is_symlink:
+        return f"{C_CYAN}{name_disp}{C_RESET}"
+    if item.is_exec:
+        return f"{C_BOLD_GREEN}{name_disp}{C_RESET}"
+    ext = item.ext.lower()
+    if ext in (".zip", ".tar", ".gz", ".bz2", ".xz", ".dmg", ".pkg", ".7z", ".rar"):
+        return f"{C_YELLOW}{name_disp}{C_RESET}"
+    if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".mp4", ".mov", ".mp3", ".wav"):
+        return f"{C_MAGENTA}{name_disp}{C_RESET}"
+    if ext in (".py", ".sh", ".zsh", ".bash", ".js", ".ts", ".html", ".css", ".json", ".yaml", ".yml", ".toml", ".typ"):
+        return f"{C_CYAN}{name_disp}{C_RESET}"
+    return name_disp
+
+
+def scan_directory(
+    path: str,
+    show_hidden: bool = False,
+    sort_by: str = "mtime",
+    sort_reverse: bool = True,
+    sort_dir_first: bool = True,
+    filter_query: str = ""
+) -> List[FileEntry]:
+    """Liest ein Verzeichnis ein, filtert und sortiert deterministisch."""
     entries = []
     try:
         with os.scandir(path) as it:
             for entry in it:
-                if not show_hidden and entry.name.startswith("."): continue
+                if not show_hidden and entry.name.startswith("."):
+                    continue
+                if filter_query and filter_query.lower() not in entry.name.lower():
+                    continue
                 entries.append(FileEntry(entry.path, entry.name))
-    except Exception: return []
+    except Exception:
+        return []
+
     def sort_key(e: FileEntry):
-        if sort_by == "name": return e.name.lower()
-        elif sort_by == "size": return e.size
-        elif sort_by == "ext": return e.ext.lower()
+        if sort_by == "name":
+            return e.name.lower()
+        elif sort_by == "size":
+            return e.size
+        elif sort_by == "ext":
+            return e.ext.lower()
         return e.mtime
+
     entries.sort(key=sort_key, reverse=sort_reverse)
-    if sort_dir_first: entries.sort(key=lambda e: not e.is_dir)
+    if sort_dir_first:
+        entries.sort(key=lambda e: not e.is_dir)
     return entries
 
+
 def read_key(fd: int, timeout: float = 0.05) -> str:
+    """Liest Tastatur- und Maus-Events zuverlässig über SGR und ANSI-Sequenzen."""
     try:
         r, _, _ = select.select([fd], [], [], timeout)
-        if not r: return ""
+        if not r:
+            return ""
         raw = os.read(fd, 1)
-        if not raw: return ""
+        if not raw:
+            return ""
         if raw == b"\x1b":
             seq = b""
             while True:
                 r2, _, _ = select.select([fd], [], [], 0.05)
-                if not r2: break
+                if not r2:
+                    break
                 c = os.read(fd, 1)
-                if not c: break
+                if not c:
+                    break
                 seq += c
                 if seq.startswith(b"[<"):
-                    if seq.endswith(b"M") or seq.endswith(b"m") or len(seq) >= 30: break
-                elif len(seq) >= 2 and seq[-1:] in b"ABCDHFS~": break
-                elif len(seq) >= 6: break
-            if not seq: return "ESC"
+                    if seq.endswith(b"M") or seq.endswith(b"m") or len(seq) >= 30:
+                        break
+                elif len(seq) >= 2 and seq[-1:] in b"ABCDHFS~":
+                    break
+                elif len(seq) >= 6:
+                    break
+            if not seq:
+                return "ESC"
             if seq.startswith(b"[<") and (seq.endswith(b"M") or seq.endswith(b"m")):
                 try:
                     is_rel = seq.endswith(b"m")
                     b_s, x_s, y_s = seq[2:-1].decode("ascii").split(";")
                     b_c = int(b_s)
-                    if b_c == 64: return "MOUSE_WHEEL_UP"
-                    elif b_c == 65: return "MOUSE_WHEEL_DOWN"
-                    elif not is_rel and b_c == 0: return f"MOUSE_CLICK:{int(x_s)}:{int(y_s)}"
-                except Exception: pass
+                    if b_c == 64:
+                        return "MOUSE_WHEEL_UP"
+                    elif b_c == 65:
+                        return "MOUSE_WHEEL_DOWN"
+                    elif not is_rel and b_c == 0:
+                        return f"MOUSE_CLICK:{int(x_s)}:{int(y_s)}"
+                    elif not is_rel and b_c == 2:
+                        return f"MOUSE_RIGHT_CLICK:{int(x_s)}:{int(y_s)}"
+                except Exception:
+                    pass
                 return "MOUSE_EVENT"
-            mapping = {b"[A":"UP", b"[B":"DOWN", b"[C":"RIGHT", b"[D":"LEFT", b"[H":"HOME", b"[F":"END", b"[5~":"PAGE_UP", b"[6~":"PAGE_DOWN", b"[3~":"DELETE"}
+
+            # ANSI- und SS3-Sequenzen mappen
+            mapping = {
+                b"[A": "UP", b"[B": "DOWN", b"[C": "RIGHT", b"[D": "LEFT",
+                b"OA": "UP", b"OB": "DOWN", b"OC": "RIGHT", b"OD": "LEFT",
+                b"[H": "HOME", b"[F": "END", b"OH": "HOME", b"OF": "END",
+                b"[1~": "HOME", b"[4~": "END", b"[7~": "HOME", b"[8~": "END",
+                b"[5~": "PAGE_UP", b"[6~": "PAGE_DOWN", b"[3~": "DELETE",
+                b"[Z": "SHIFT_TAB"
+            }
             return mapping.get(seq, "")
-        if raw in (bytes([13]), bytes([10])): return "ENTER"
-        elif raw == b" ": return " "
-        elif raw == b"\t": return "TAB"
-        elif raw in (bytes([127]), bytes([8])): return "BACKSPACE"
-        elif raw in (bytes([3]), bytes([4])): return "QUIT"
+
+        if raw in (bytes([13]), bytes([10])):
+            return "ENTER"
+        elif raw == b" ":
+            return "SPACE"
+        elif raw == b"\t":
+            return "TAB"
+        elif raw in (bytes([127]), bytes([8])):
+            return "BACKSPACE"
+        elif raw in (bytes([3]), bytes([4])):
+            return "QUIT"
+
         if raw[0] >= 0xC0:
             needed = 2 if raw[0] < 0xE0 else (3 if raw[0] < 0xF0 else 4)
             ch_b = raw
             while len(ch_b) < needed:
                 r, _, _ = select.select([fd], [], [], 0.03)
-                if not r: break
+                if not r:
+                    break
                 ch_b += os.read(fd, 1)
-            try: return ch_b.decode("utf-8")
-            except Exception: return ""
-        try: return raw.decode("utf-8")
-        except Exception: return ""
+            try:
+                return ch_b.decode("utf-8")
+            except Exception:
+                return ""
+        try:
+            return raw.decode("utf-8")
+        except Exception:
+            return ""
     except Exception:
         return ""
+
 
 class EasyDateienApp:
     def __init__(self, initial_path: Optional[str] = None):
@@ -181,13 +384,24 @@ class EasyDateienApp:
         self.clipboard_paths: List[str] = []
         self.clipboard_mode: Optional[str] = None
         self.status_message: str = ""
+        self.status_level: str = "info"  # "info", "success", "warning", "error"
         self.status_expiry_moves: int = 0
-        self.pending_g_mode: bool = False
+        self.filter_query: str = ""
+
+        # Interaktiver Eingabemodus
+        self.active_dialog: Optional[str] = None  # None, "rename", "new", "search", "goto_path", "trash_confirm", "goto_menu"
+        self.dialog_input: str = ""
+        self.dialog_cursor: int = 0
+        self.dialog_target_item: Optional[FileEntry] = None
+
+        # Mausklick & Navigation
         self.last_click_time: float = 0.0
         self.last_click_idx: Optional[int] = None
         self.last_right_arrow_time: float = 0.0
         self.last_right_arrow_path: str = ""
         self.last_layout: Dict = {}
+
+        # Terminal-Konsole
         self.show_console: bool = self.config.get("show_console", False)
         self.console_position: str = self.config.get("console_position", "unten").lower()
         self.console_focused: bool = False
@@ -197,10 +411,15 @@ class EasyDateienApp:
         self.console_cmd_history: List[str] = []
         self.console_history_idx: int = 0
         self.console_scroll_offset: int = 0
+
+        # Caching
         self.cached_parent_dir: Optional[str] = None
         self.cached_parent_items: List[FileEntry] = []
         self.cached_child_path: Optional[str] = None
         self.cached_child_items: List[FileEntry] = []
+        self.cached_file_preview_path: Optional[str] = None
+        self.cached_file_preview_lines: List[str] = []
+
         self.refresh_items()
 
     def load_config(self) -> dict:
@@ -209,22 +428,32 @@ class EasyDateienApp:
             "esc_to_quit": False, "mouse_support": True, "show_console": False,
             "console_position": "unten", "text_editor": "nano %s", "opener": "open %s",
             "sort_by": "mtime", "sort_reverse": True, "sort_dir_first": True,
+            "show_hidden": False,
         }
         if os.path.exists(CONFIG_FILE):
             try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f: cfg.update(json.load(f))
-            except Exception: pass
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    cfg.update(json.load(f))
+            except Exception:
+                pass
         return cfg
+
+    def set_status(self, msg: str, level: str = "info"):
+        self.status_message = msg
+        self.status_level = level
+        self.status_expiry_moves = 0
 
     def refresh_items(self):
         self.cached_parent_dir = None
         self.cached_child_path = None
+        self.cached_file_preview_path = None
         self.items = scan_directory(
             self.current_dir,
             show_hidden=self.config.get("show_hidden", False),
             sort_by=self.config.get("sort_by", "mtime"),
             sort_reverse=self.config.get("sort_reverse", True),
             sort_dir_first=self.config.get("sort_dir_first", True),
+            filter_query=self.filter_query,
         )
         if self.selected_idx >= len(self.items):
             self.selected_idx = max(0, len(self.items) - 1)
@@ -238,7 +467,8 @@ class EasyDateienApp:
     def select_filename(self, name: str):
         for i, it in enumerate(self.items):
             if it.name == name:
-                self.selected_idx = i; break
+                self.selected_idx = i
+                break
 
     def go_parent_directory(self):
         parent = os.path.dirname(self.current_dir)
@@ -248,258 +478,140 @@ class EasyDateienApp:
             self.refresh_items()
             self.select_filename(prev_name)
 
-    def prompt_rename(self, fd: int):
-        if not self.items: return
-        item = self.items[self.selected_idx]
-        old_name = item.name
-        new_name = old_name
-        while True:
-            sys.stdout.write(f"\r{CLEAR_LINE}{BOLD}Umbenennen: {RESET}{new_name}█")
-            sys.stdout.flush()
-            k = read_key(fd, timeout=10.0)
-            if not k or k in ("ESC", "QUIT"):
-                self.status_message = "Umbenennen abgebrochen"; break
-            elif k == "ENTER":
-                new_name = new_name.strip()
-                if not new_name or new_name == old_name:
-                    self.status_message = "Umbenennen abgebrochen"; break
-                new_path = os.path.join(self.current_dir, new_name)
-                if os.path.exists(new_path):
-                    self.status_message = f"Fehler: „{new_name}“ existiert bereits!"; break
-                try:
-                    os.rename(item.path, new_path)
-                    self.refresh_items()
-                    self.select_filename(new_name)
-                    self.status_message = f"Umbenannt in: {new_name}"
-                except Exception as e:
-                    self.status_message = f"Fehler: {e}"
-                break
-            elif k == "BACKSPACE":
-                if new_name: new_name = new_name[:-1]
-            elif k in (" ", "SPACE"): new_name += " "
-            elif len(k) == 1 and k.isprintable(): new_name += k
-        self.status_expiry_moves = 0
-
-    def prompt_goto_path(self, fd: int):
-        p_in = ""
-        while True:
-            sys.stdout.write(f"\r{CLEAR_LINE}{BOLD}Gehe zu Pfad: {RESET}{p_in}█")
-            sys.stdout.flush()
-            k = read_key(fd, timeout=10.0)
-            if not k or k in ("ESC", "QUIT"):
-                self.status_message = "Abgebrochen"; break
-            elif k == "ENTER":
-                raw_t = p_in.strip()
-                if not raw_t: self.status_message = "Abgebrochen"; break
-                target = os.path.expanduser(raw_t)
-                if not os.path.isabs(target): target = os.path.join(self.current_dir, target)
-                target = os.path.abspath(target)
-                if os.path.isdir(target):
-                    self.change_directory(target)
-                    self.status_message = f"Gehe zu: {self.get_short_dir(target)}"
-                elif os.path.isfile(target):
-                    self.change_directory(os.path.dirname(target))
-                    self.select_filename(os.path.basename(target))
-                    self.status_message = f"Gehe zu: {self.get_short_dir(target)}"
-                else:
-                    self.status_message = f"Pfad nicht gefunden: {raw_t}"
-                break
-            elif k == "BACKSPACE":
-                if p_in: p_in = p_in[:-1]
-            elif k in (" ", "SPACE"): p_in += " "
-            elif len(k) == 1 and k.isprintable(): p_in += k
-        self.status_expiry_moves = 0
-
-    def handle_goto_choice(self, choice: str, fd: int):
-        self.pending_g_mode = False
-        c = choice.lower()
-        if c == "d":
-            self.change_directory(os.path.expanduser("~/Downloads"))
-            self.status_message = "Downloads"
-        elif c == "f":
-            self.change_directory(os.path.expanduser("~/Documents"))
-            self.status_message = "Dokumente"
-        elif c in ("h", "~"):
-            self.change_directory(HOME_DIR)
-            self.status_message = "~"
-        elif c == "t":
-            trash_p = os.path.expanduser("~/.Trash")
-            if os.path.isdir(trash_p):
-                self.change_directory(trash_p)
-                self.status_message = "Papierkorb"
-            else: self.status_message = "Papierkorb nicht verfügbar"
-        elif c == "i":
-            self.prompt_goto_path(fd)
-        elif c == "p":
-            c_files = get_macos_clipboard_files()
-            target = c_files[0] if c_files else ""
-            if not target:
-                try: target = subprocess.check_output(["pbpaste"], text=True).strip()
-                except Exception: pass
-            target = os.path.expanduser(target)
-            if os.path.isdir(target):
-                self.change_directory(target)
-                self.status_message = f"Gehe zu: {self.get_short_dir(target)}"
-            elif os.path.isfile(target):
-                self.change_directory(os.path.dirname(target))
-                self.select_filename(os.path.basename(target))
-                self.status_message = f"Gehe zu: {self.get_short_dir(target)}"
-            else: self.status_message = "Kein Pfad im Zwischenspeicher"
-        else:
-            self.status_message = ""
-        self.status_expiry_moves = 0
-
     def open_with_system(self, item: FileEntry):
         opener = self.config.get("opener", "open %s")
         cmd = opener.replace("%s", f'"{item.path}"')
         try:
             subprocess.Popen(cmd, shell=True, start_new_session=True)
-            self.status_message = f"Geöffnet: {item.name}"
-            self.status_expiry_moves = 0
+            self.set_status(f"Geöffnet: {item.name}", "success")
         except Exception as e:
-            self.status_message = f"Fehler: {e}"
-            self.status_expiry_moves = 0
+            self.set_status(f"Fehler: {e}", "error")
 
-    def open_in_nano(self, item: FileEntry, fd: Optional[int], old_settings):
+    def open_in_editor(self, item: FileEntry, fd: Optional[int], old_settings):
         if fd is not None and old_settings is not None:
             mouse_on = self.config.get("mouse_support", True)
-            if mouse_on: sys.stdout.write("\033[?1006l\033[?1000l"); sys.stdout.flush()
+            if mouse_on:
+                sys.stdout.write("\033[?1006l\033[?1000l")
+                sys.stdout.flush()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            sys.stdout.write(SHOW_CURSOR + "\033[?1049l"); sys.stdout.flush()
+            sys.stdout.write(SHOW_CURSOR + "\033[?1049l")
+            sys.stdout.flush()
             editor_cmd = self.config.get("text_editor", "nano %s").replace("%s", f'"{item.path}"')
-            try: subprocess.run(editor_cmd, shell=True)
+            try:
+                subprocess.run(editor_cmd, shell=True)
             finally:
                 tty.setcbreak(fd, termios.TCSADRAIN)
                 sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
-                if mouse_on: sys.stdout.write("\033[?1000h\033[?1006h")
-                sys.stdout.write("\033[2J\033[H"); sys.stdout.flush()
+                if mouse_on:
+                    sys.stdout.write("\033[?1000h\033[?1006h")
+                sys.stdout.write("\033[2J\033[H")
+                sys.stdout.flush()
                 self.refresh_items()
 
     def toggle_select(self):
-        if not self.items: return
+        if not self.items:
+            return
         item = self.items[self.selected_idx]
         if item.path in self.selected_paths:
             self.selected_paths.remove(item.path)
-            self.status_message = f"Auswahl: {len(self.selected_paths)}" if self.selected_paths else "Auswahl aufgehoben"
+            self.set_status(f"Auswahl: {len(self.selected_paths)}" if self.selected_paths else "Auswahl aufgehoben")
         else:
             self.selected_paths.add(item.path)
             if item.path in self.clipboard_paths:
                 self.clipboard_paths.remove(item.path)
-            self.status_message = f"Auswahl: {len(self.selected_paths)}"
-        self.status_expiry_moves = 0
+            self.set_status(f"Auswahl: {len(self.selected_paths)}")
         if self.selected_idx < len(self.items) - 1:
             self.selected_idx += 1
 
     def toggle_select_all(self):
         all_paths = {it.path for it in self.items}
-        if not all_paths: return
+        if not all_paths:
+            return
         if self.selected_paths.issuperset(all_paths):
             self.selected_paths.clear()
-            self.status_message = "Auswahl aufgehoben"
+            self.set_status("Auswahl aufgehoben")
         else:
             self.selected_paths.update(all_paths)
-            self.status_message = f"Alle {len(self.selected_paths)} markiert"
-        self.status_expiry_moves = 0
+            self.set_status(f"Alle {len(self.selected_paths)} markiert")
 
     def cut_selection(self):
-        if not self.items: return
+        if not self.items:
+            return
         cur_p = self.items[self.selected_idx].path
         if self.clipboard_mode == "cut" and not self.selected_paths and cur_p in self.clipboard_paths:
             self.clipboard_mode = None
             self.clipboard_paths = []
-            self.status_message = "Ausschneiden aufgehoben"
-            self.status_expiry_moves = 0
+            self.set_status("Ausschneiden aufgehoben")
             return
         targets = list(self.selected_paths) if self.selected_paths else [cur_p]
         self.clipboard_mode = "cut"
         self.clipboard_paths = targets
         self.selected_paths.clear()
         sync_to_macos_clipboard(targets)
-        self.status_message = f"{len(targets)} ausgeschnitten (p = einfügen)"
-        self.status_expiry_moves = 0
+        self.set_status(f"{len(targets)} ausgeschnitten (p = einfügen)", "warning")
 
     def copy_selection(self):
-        if not self.items: return
+        if not self.items:
+            return
         cur_p = self.items[self.selected_idx].path
         if self.clipboard_mode == "copy" and not self.selected_paths and cur_p in self.clipboard_paths:
             self.clipboard_mode = None
             self.clipboard_paths = []
-            self.status_message = "Kopieren aufgehoben"
-            self.status_expiry_moves = 0
+            self.set_status("Kopieren aufgehoben")
             return
         targets = list(self.selected_paths) if self.selected_paths else [cur_p]
         self.clipboard_mode = "copy"
         self.clipboard_paths = targets
         self.selected_paths.clear()
         sync_to_macos_clipboard(targets)
-        self.status_message = f"{len(targets)} kopiert (Cmd+V im Finder, p hier)"
-        self.status_expiry_moves = 0
+        self.set_status(f"{len(targets)} kopiert (Cmd+V im Finder, p hier)", "success")
 
     def paste_clipboard(self):
         sources = list(self.clipboard_paths) if self.clipboard_paths else get_macos_clipboard_files()
         if not sources:
-            self.status_message = "Zwischenablage leer"
-            self.status_expiry_moves = 0
+            self.set_status("Zwischenablage leer", "warning")
             return
         success = 0
         last_name = ""
         for src in sources:
-            if not os.path.exists(src): continue
+            if not os.path.exists(src):
+                continue
             name = os.path.basename(src)
             dest = os.path.join(self.current_dir, name)
             if os.path.abspath(src) == os.path.abspath(dest):
-                if self.clipboard_mode == "cut": continue
+                if self.clipboard_mode == "cut":
+                    continue
                 base, ext = os.path.splitext(name)
                 c = 1
                 while os.path.exists(dest):
                     dest = os.path.join(self.current_dir, f"{base} ({c}){ext}")
                     c += 1
             try:
-                if self.clipboard_mode == "cut": shutil.move(src, dest)
+                if self.clipboard_mode == "cut":
+                    shutil.move(src, dest)
                 else:
-                    if os.path.isdir(src): shutil.copytree(src, dest)
-                    else: shutil.copy2(src, dest)
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dest)
+                    else:
+                        shutil.copy2(src, dest)
                 success += 1
                 last_name = os.path.basename(dest)
-            except Exception: pass
+            except Exception:
+                pass
         self.clipboard_mode = None
         self.clipboard_paths = []
         self.refresh_items()
-        if last_name: self.select_filename(last_name)
-        self.status_message = f"{success} eingefügt"
-        self.status_expiry_moves = 0
-
-    def prompt_trash(self, fd: int):
-        targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
-        if not targets: return
-        sys.stdout.write(f"\r{CLEAR_LINE}{BOLD}{len(targets)} Elemente in Papierkorb verschieben? (y/N): {RESET}")
-        sys.stdout.flush()
-        ans = read_key(fd, timeout=10.0)
-        if ans.lower() in ("y", "j"):
-            count = 0
-            for t in targets:
-                try:
-                    res = subprocess.run(["trash", t], capture_output=True)
-                    if res.returncode == 0: count += 1
-                    else:
-                        as_del = f'tell application "Finder" to delete (POSIX file "{os.path.abspath(t)}" as alias)'
-                        subprocess.run(["osascript", "-e", as_del], capture_output=True)
-                        count += 1
-                except Exception: pass
-            self.selected_paths.clear()
-            self.clipboard_paths = [p for p in self.clipboard_paths if p not in targets]
-            if not self.clipboard_paths: self.clipboard_mode = None
-            self.refresh_items()
-            self.status_message = f"{count} gelöscht"
-        else:
-            self.status_message = "Löschen abgebrochen"
-        self.status_expiry_moves = 0
+        if last_name:
+            self.select_filename(last_name)
+        self.set_status(f"{success} eingefügt", "success")
 
     def create_zip_archive(self):
         targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
-        if not targets: return
+        if not targets:
+            return
         base_name = os.path.basename(targets[0]) if len(targets) == 1 else f"Archiv_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        if base_name.lower().endswith(".zip"): base_name = base_name[:-4]
+        if base_name.lower().endswith(".zip"):
+            base_name = base_name[:-4]
         dest = os.path.join(self.current_dir, f"{base_name}.zip")
         c = 1
         while os.path.exists(dest):
@@ -513,39 +625,82 @@ class EasyDateienApp:
                             for f in files:
                                 fp = os.path.join(root, f)
                                 zf.write(fp, os.path.relpath(fp, self.current_dir))
-                    else: zf.write(t, os.path.basename(t))
+                    else:
+                        zf.write(t, os.path.basename(t))
             self.selected_paths.clear()
             self.refresh_items()
             self.select_filename(os.path.basename(dest))
-            self.status_message = f"ZIP erstellt: {os.path.basename(dest)}"
-            self.status_expiry_moves = 0
+            self.set_status(f"ZIP erstellt: {os.path.basename(dest)}", "success")
         except Exception as e:
-            self.status_message = f"Fehler: {e}"
-            self.status_expiry_moves = 0
+            self.set_status(f"Fehler: {e}", "error")
+
+    def toggle_sort(self):
+        modes = ["mtime", "name", "size", "ext"]
+        cur = self.config.get("sort_by", "mtime")
+        nxt = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "mtime"
+        self.config["sort_by"] = nxt
+        desc = {"mtime": "Datum", "name": "Name", "size": "Größe", "ext": "Dateityp"}
+        self.refresh_items()
+        self.set_status(f"Sortierung: {desc.get(nxt, nxt)}", "info")
 
     def get_short_dir(self, path: str) -> str:
-        if path == HOME_DIR: return "~"
-        if path.startswith(HOME_DIR + "/"): return "~" + path[len(HOME_DIR):]
+        if path == HOME_DIR:
+            return "~"
+        if path.startswith(HOME_DIR + "/"):
+            return "~" + path[len(HOME_DIR):]
         return path
 
+    def load_file_preview_lines(self, path: str, max_lines: int) -> List[str]:
+        """Lädt die ersten Zeilen einer Textdatei oder Metadaten für die Vorschau."""
+        if self.cached_file_preview_path == path and self.cached_file_preview_lines:
+            return self.cached_file_preview_lines[:max_lines]
+
+        lines = []
+        try:
+            if zipfile.is_zipfile(path):
+                with zipfile.ZipFile(path, "r") as zf:
+                    infos = zf.infolist()
+                    lines.append(f"{C_BOLD}Archiv-Inhalt ({len(infos)} Dateien):{C_RESET}")
+                    for info in infos[:max_lines - 1]:
+                        lines.append(f"  {info.filename} ({format_size(info.file_size)})")
+            else:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    for _ in range(max_lines):
+                        line = f.readline()
+                        if not line:
+                            break
+                        clean_line = line.rstrip("\r\n").replace("\t", "    ")
+                        clean_line = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_line)
+                        lines.append(clean_line)
+        except Exception:
+            lines = [f"{C_GRAY}[Binäre Datei oder nicht lesbar]{C_RESET}"]
+
+        self.cached_file_preview_path = path
+        self.cached_file_preview_lines = lines
+        return lines[:max_lines]
+
     def get_console_display_lines(self, width: int, height: int) -> List[str]:
-        if height <= 0 or width <= 0: return []
+        if height <= 0 or width <= 0:
+            return []
         prompt = f"{self.get_short_dir(self.current_dir)} $ "
-        if visible_len(prompt) > width - 4: prompt = "$ "
-        avail = max(1, width - visible_len(prompt))
+        if str_width(prompt) > width - 4:
+            prompt = "$ "
+        avail = max(1, width - str_width(prompt))
         inp = self.console_input
         inp_show = inp[-avail:] if len(inp) > avail else inp
-        cursor_char = " " if not self.console_focused else "\033[7m \033[0m"
-        prompt_line = pad_visible(f"{prompt}{inp_show}{cursor_char}", width)
+        cursor_char = " " if not self.console_focused else f"{C_INVERT} {C_RESET}"
+        prompt_line = pad_to_width(f"{prompt}{inp_show}{cursor_char}", width)
         out = []
         needed = height - 1
         if needed > 0:
             max_off = max(0, len(self.console_output_lines) - needed)
             self.console_scroll_offset = max(0, min(max_off, self.console_scroll_offset))
             start = max(0, len(self.console_output_lines) - needed - self.console_scroll_offset)
-            chunk = self.console_output_lines[start : start + needed]
-            for l in chunk: out.append(pad_visible(truncate_end(l, width), width))
-            while len(out) < needed: out.insert(0, " " * width)
+            chunk = self.console_output_lines[start: start + needed]
+            for l in chunk:
+                out.append(pad_to_width(truncate_to_width(l, width), width))
+            while len(out) < needed:
+                out.insert(0, " " * width)
         out.append(prompt_line)
         return out
 
@@ -553,7 +708,8 @@ class EasyDateienApp:
         cmd = cmd.strip()
         self.console_input = ""
         self.console_cursor_idx = 0
-        if not cmd: return
+        if not cmd:
+            return
         self.console_cmd_history.append(cmd)
         self.console_history_idx = len(self.console_cmd_history)
         self.console_output_lines.append(f"$ {cmd}")
@@ -568,8 +724,10 @@ class EasyDateienApp:
             target = cmd[3:].strip() if len(cmd) > 3 else HOME_DIR
             target = os.path.expanduser(target)
             target = os.path.join(self.current_dir, target)
-            if os.path.isdir(target): self.change_directory(target)
-            else: self.console_output_lines.append(f"cd: Verzeichnis nicht gefunden: {target}")
+            if os.path.isdir(target):
+                self.change_directory(target)
+            else:
+                self.console_output_lines.append(f"cd: Verzeichnis nicht gefunden: {target}")
             return
         tokens = cmd.split()
         first_prog = os.path.basename(tokens[0]) if tokens else ""
@@ -582,16 +740,23 @@ class EasyDateienApp:
         is_interactive = (first_prog in interactive_tools) or (cmd.startswith("git ") and any(sub in cmd for sub in ["log", "diff", "commit", "add -p", "rebase"]))
         if is_interactive and fd is not None and old_settings is not None:
             mouse_on = self.config.get("mouse_support", True)
-            if mouse_on: sys.stdout.write("\033[?1006l\033[?1000l"); sys.stdout.flush()
+            if mouse_on:
+                sys.stdout.write("\033[?1006l\033[?1000l")
+                sys.stdout.flush()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            sys.stdout.write(SHOW_CURSOR + "\033[?1049l"); sys.stdout.flush()
-            try: subprocess.run(cmd, shell=True, cwd=self.current_dir)
-            except Exception: pass
+            sys.stdout.write(SHOW_CURSOR + "\033[?1049l")
+            sys.stdout.flush()
+            try:
+                subprocess.run(cmd, shell=True, cwd=self.current_dir)
+            except Exception:
+                pass
             finally:
                 tty.setcbreak(fd, termios.TCSADRAIN)
                 sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
-                if mouse_on: sys.stdout.write("\033[?1000h\033[?1006h")
-                sys.stdout.write("\033[2J\033[H"); sys.stdout.flush()
+                if mouse_on:
+                    sys.stdout.write("\033[?1000h\033[?1006h")
+                sys.stdout.write("\033[2J\033[H")
+                sys.stdout.flush()
                 self.refresh_items()
             return
         try:
@@ -617,76 +782,97 @@ class EasyDateienApp:
     def toggle_console(self):
         self.show_console = not self.show_console
         self.console_focused = self.show_console
-        self.status_message = "Konsole geöffnet" if self.show_console else "Konsole geschlossen"
-        self.status_expiry_moves = 0
+        self.set_status("Konsole geöffnet" if self.show_console else "Konsole geschlossen")
 
     def get_effective_columns(self, term_cols: int) -> int:
-        if not self.config.get("columns_enabled", True): return 1
-        if term_cols >= 68: return 3
-        if term_cols >= 38: return 2
+        if not self.config.get("columns_enabled", True):
+            return 1
+        if term_cols >= 70:
+            return 3
+        if term_cols >= 40:
+            return 2
         return 1
 
     def build_screen(self, term_cols: int, term_rows: int) -> List[str]:
+        """Baut den vollständigen Terminal-Bildschirm pixelgenau und flickerfrei auf."""
         disp_path = self.get_short_dir(self.current_dir)
         total_items = len(self.items)
         cur_idx_str = f"{self.selected_idx + 1}/{total_items}" if total_items > 0 else "0/0"
-        msg_str = f" [{self.status_message}]" if self.status_message else ""
-        right_header = f"{msg_str}  {cur_idx_str}".strip() if msg_str else cur_idx_str
-        if term_cols > visible_len(right_header) + 3:
-            avail_p = term_cols - visible_len(right_header) - 1
-            path_trunc = truncate_end(disp_path, avail_p)
-            path_line = pad_visible(path_trunc, term_cols - visible_len(right_header)) + right_header
+        
+        # Status-Text & Level formatieren
+        if self.status_message:
+            lvl_color = C_BOLD_GREEN if self.status_level == "success" else (C_BOLD_RED if self.status_level == "error" else (C_YELLOW if self.status_level == "warning" else C_CYAN))
+            msg_str = f" [{lvl_color}{self.status_message}{C_RESET}]"
         else:
-            path_line = pad_visible(truncate_end(disp_path, term_cols), term_cols)
+            msg_str = ""
 
-        if term_rows <= 1: return [path_line]
+        right_header = f"{msg_str}  {C_BOLD_CYAN}{cur_idx_str}{C_RESET}".strip() if msg_str else f"{C_BOLD_CYAN}{cur_idx_str}{C_RESET}"
+        right_header_plain = ANSI_ESCAPE_RE.sub("", right_header)
+
+        # Header-Zeile zusammenstellen
+        avail_for_path = max(1, term_cols - str_width(right_header_plain) - 2)
+        path_styled = f"{C_BOLD_BLUE}{truncate_to_width(disp_path, avail_for_path)}{C_RESET}"
+        pad_space = " " * max(1, term_cols - str_width(path_styled) - str_width(right_header_plain))
+        header_line = f"{path_styled}{pad_space}{right_header}"
+        header_line = pad_to_width(header_line, term_cols)
+
+        if term_rows <= 1:
+            return [header_line]
+
         cur_item = self.items[self.selected_idx] if (self.items and 0 <= self.selected_idx < total_items) else None
-        cur_name = (cur_item.name + ("/" if cur_item.is_dir else "")) if cur_item else ""
-        if term_rows == 2:
-            return [path_line, pad_visible(truncate_end(cur_name, term_cols), term_cols)]
 
         show_controls = self.config.get("show_controls", False)
-        has_status_bar = show_controls and (term_rows >= 6)
+        # Bei aktivem Dialog oder Suche immer Footer-Leiste erzwingen
+        has_dialog = bool(self.active_dialog)
+        has_status_bar = (show_controls or has_dialog) and (term_rows >= 5)
+
         div_style = self.config.get("divider_style", "alle").lower()
-        if div_style not in ("alle", "vertikal", "außen", "horizontal", "keine"): div_style = "alle"
+        if div_style not in ("alle", "vertikal", "außen", "horizontal", "keine"):
+            div_style = "alle"
 
         has_top_border = (div_style in ("alle", "vertikal", "außen", "horizontal")) and (term_rows >= 4)
         has_bottom_border = (div_style in ("alle", "vertikal", "außen", "horizontal")) and (term_rows >= 4)
 
-        consumed = 1
-        if has_top_border: consumed += 1
-        if has_bottom_border: consumed += 1
-        if has_status_bar: consumed += 1
+        consumed = 1  # Header-Zeile
+        if has_top_border:
+            consumed += 1
+        if has_bottom_border:
+            consumed += 1
+        if has_status_bar:
+            consumed += 1
 
         avail_total = max(1, term_rows - consumed)
-        header_lines = 1 + (1 if has_top_border else 0)
+        header_lines_count = 1 + (1 if has_top_border else 0)
 
         active_console = self.show_console
         console_pos = self.config.get("console_position", "unten").lower()
-        if console_pos not in ("unten", "rechts", "links"): console_pos = "unten"
-        if active_console and console_pos in ("rechts", "links") and term_cols < 60: console_pos = "unten"
+        if console_pos not in ("unten", "rechts", "links"):
+            console_pos = "unten"
+        if active_console and console_pos in ("rechts", "links") and term_cols < 60:
+            console_pos = "unten"
 
         if active_console and console_pos == "unten" and avail_total >= 4:
             console_h = max(2, min(8, avail_total // 3))
-            fm_rows = avail_total - console_h - 1
+            fm_rows = avail_total - console_h - 1  # -1 für Trennzeile
         else:
             console_h = 0
             fm_rows = avail_total
 
         eff_cols = self.get_effective_columns(term_cols)
 
+        # Breitenberechnung der Spalten
         if div_style in ("alle", "vertikal"):
             if eff_cols == 3:
                 avail = max(10, term_cols - 4)
-                w_left = max(6, int(avail * 0.20))
-                w_right = max(10, int(avail * 0.30))
+                w_left = max(6, int(avail * 0.22))
+                w_right = max(10, int(avail * 0.33))
                 w_mid = avail - w_left - w_right
                 top_line = f"╭{'─' * w_left}┬{'─' * w_mid}┬{'─' * w_right}╮"
                 bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}╯"
                 mid_sep  = f"├{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}┤"
             elif eff_cols == 2:
                 avail = max(8, term_cols - 3)
-                w_left = max(6, int(avail * 0.25))
+                w_left = max(6, int(avail * 0.30))
                 w_right = 0
                 w_mid = avail - w_left
                 top_line = f"╭{'─' * w_left}┬{'─' * w_mid}╮"
@@ -694,7 +880,8 @@ class EasyDateienApp:
                 mid_sep  = f"├{'─' * w_left}┴{'─' * w_mid}┤"
             else:
                 w_mid = max(4, term_cols - 2)
-                w_left = 0; w_right = 0
+                w_left = 0
+                w_right = 0
                 top_line = f"╭{'─' * w_mid}╮"
                 bot_line = f"╰{'─' * w_mid}╯"
                 mid_sep  = f"├{'─' * w_mid}┤"
@@ -702,51 +889,57 @@ class EasyDateienApp:
             inner_w = max(4, term_cols - 2)
             top_line = f"╭{'─' * inner_w}╮"
             bot_line = f"╰{'─' * inner_w}╯"
+            mid_sep  = f"├{'─' * inner_w}┤"
             if eff_cols == 3:
                 avail = max(10, inner_w - 4)
-                w_left = max(6, int(avail * 0.20))
-                w_right = max(10, int(avail * 0.30))
+                w_left = max(6, int(avail * 0.22))
+                w_right = max(10, int(avail * 0.33))
                 w_mid = avail - w_left - w_right
-                mid_sep = f"├{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}┤"
             elif eff_cols == 2:
                 avail = max(8, inner_w - 2)
-                w_left = max(6, int(avail * 0.25))
+                w_left = max(6, int(avail * 0.30))
                 w_right = 0
                 w_mid = avail - w_left
-                mid_sep = f"├{'─' * w_left}┴{'─' * w_mid}┤"
             else:
-                w_mid = inner_w; w_left = 0; w_right = 0
-                mid_sep = f"├{'─' * inner_w}┤"
+                w_mid = inner_w
+                w_left = 0
+                w_right = 0
         elif div_style == "horizontal":
             top_line = "─" * term_cols
             bot_line = "─" * term_cols
             mid_sep  = "─" * term_cols
             if eff_cols == 3:
                 avail = max(10, term_cols - 4)
-                w_left = max(6, int(avail * 0.20))
-                w_right = max(10, int(avail * 0.30))
+                w_left = max(6, int(avail * 0.22))
+                w_right = max(10, int(avail * 0.33))
                 w_mid = avail - w_left - w_right
             elif eff_cols == 2:
                 avail = max(8, term_cols - 2)
-                w_left = max(6, int(avail * 0.25))
+                w_left = max(6, int(avail * 0.30))
                 w_right = 0
                 w_mid = avail - w_left
             else:
-                w_mid = term_cols; w_left = 0; w_right = 0
+                w_mid = term_cols
+                w_left = 0
+                w_right = 0
         else:
-            top_line = ""; bot_line = ""; mid_sep = ""
+            top_line = ""
+            bot_line = ""
+            mid_sep  = ""
             if eff_cols == 3:
                 avail = max(10, term_cols - 4)
-                w_left = max(6, int(avail * 0.20))
-                w_right = max(10, int(avail * 0.30))
+                w_left = max(6, int(avail * 0.22))
+                w_right = max(10, int(avail * 0.33))
                 w_mid = avail - w_left - w_right
             elif eff_cols == 2:
                 avail = max(8, term_cols - 2)
-                w_left = max(6, int(avail * 0.25))
+                w_left = max(6, int(avail * 0.30))
                 w_right = 0
                 w_mid = avail - w_left
             else:
-                w_mid = term_cols; w_left = 0; w_right = 0
+                w_mid = term_cols
+                w_left = 0
+                w_right = 0
 
         parent_items = []
         cur_p_idx = 0
@@ -761,7 +954,8 @@ class EasyDateienApp:
                     self.cached_parent_items = parent_items
                 for i, pit in enumerate(parent_items):
                     if os.path.abspath(pit.path) == os.path.abspath(self.current_dir):
-                        cur_p_idx = i; break
+                        cur_p_idx = i
+                        break
 
         p_start = 0 if len(parent_items) <= fm_rows else max(0, min(cur_p_idx - fm_rows // 2, len(parent_items) - fm_rows))
         m_start = 0 if total_items <= fm_rows else max(0, min(self.selected_idx - fm_rows // 2, total_items - fm_rows))
@@ -776,12 +970,17 @@ class EasyDateienApp:
                 self.cached_child_path = cur_item.path
                 self.cached_child_items = child_items
 
+        preview_lines = []
+        if eff_cols == 3 and cur_item and not is_cur_dir and not (active_console and console_pos == "rechts"):
+            needed_p = max(1, fm_rows - 6)
+            preview_lines = self.load_file_preview_lines(cur_item.path, needed_p)
+
         self.last_layout = {
-            "header_lines": header_lines, "avail_rows": fm_rows, "eff_cols": eff_cols,
+            "header_lines": header_lines_count, "avail_rows": fm_rows, "eff_cols": eff_cols,
             "div_style": div_style, "w_left": w_left, "w_mid": w_mid, "w_right": w_right,
             "m_start": m_start, "p_start": p_start, "active_console": active_console,
             "console_pos": console_pos if active_console else None,
-            "split_row": (header_lines + fm_rows) if (active_console and console_pos == "unten" and console_h > 0) else -1,
+            "split_row": (header_lines_count + fm_rows) if (active_console and console_pos == "unten" and console_h > 0) else -1,
             "child_items": child_items, "cur_item": cur_item, "is_cur_dir": is_cur_dir,
         }
 
@@ -790,6 +989,7 @@ class EasyDateienApp:
 
         file_lines = []
         for r in range(fm_rows):
+            # 1. Linke Spalte (Übergeordnetes Verzeichnis oder Konsole links)
             if active_console and console_pos == "links":
                 cell_left = c_left_lines[r] if r < len(c_left_lines) else " " * w_left
             elif eff_cols >= 2:
@@ -799,12 +999,18 @@ class EasyDateienApp:
                     is_act = (os.path.abspath(p_it.path) == os.path.abspath(self.current_dir))
                     p_name = p_it.name + ("/" if p_it.is_dir else "")
                     prefix = "▸ " if is_act else "  "
-                    p_trunc = truncate_end(p_name, max(2, w_left - 3))
-                    txt_l = f" {BOLD}{prefix}{p_trunc}{RESET}" if is_act else f" {prefix}{p_trunc}"
-                    cell_left = pad_visible(txt_l, w_left)
-                else: cell_left = " " * w_left
-            else: cell_left = ""
+                    p_trunc = truncate_to_width(p_name, max(2, w_left - 3))
+                    if is_act:
+                        txt_l = f" {C_BOLD_BLUE}{prefix}{p_trunc}{C_RESET}"
+                    else:
+                        txt_l = f" {C_GRAY}{prefix}{p_trunc}{C_RESET}"
+                    cell_left = pad_to_width(txt_l, w_left)
+                else:
+                    cell_left = " " * w_left
+            else:
+                cell_left = ""
 
+            # 2. Mittlere Spalte (Aktuelles Verzeichnis)
             m_idx = m_start + r
             if m_idx < len(self.items):
                 it = self.items[m_idx]
@@ -812,112 +1018,230 @@ class EasyDateienApp:
                 is_sel = it.path in self.selected_paths
                 in_cut = (self.clipboard_mode == "cut" and it.path in self.clipboard_paths)
                 in_copy = (self.clipboard_mode == "copy" and it.path in self.clipboard_paths)
-                c_char = "▸" if is_cur else " "
-                b_char = "+" if in_copy else ("×" if in_cut else ("*" if is_sel else " "))
+
+                c_char = f"{C_BOLD_BLUE}▸{C_RESET}" if is_cur else " "
+                if in_cut:
+                    b_char = f"{C_BOLD_RED}×{C_RESET}"
+                elif in_copy:
+                    b_char = f"{C_BOLD_GREEN}+{C_RESET}"
+                elif is_sel:
+                    b_char = f"{C_YELLOW}*{C_RESET}"
+                else:
+                    b_char = " "
+
                 prefix_str = f" {c_char}{b_char} "
                 prefix_len = 4
-                name_disp = it.name + ("/" if it.is_dir else "")
                 s_str = format_size(it.size) if not it.is_dir else ""
+                name_colored = get_file_colored_name(it)
+
                 if w_mid >= 26:
                     avail_n = max(3, w_mid - prefix_len - 10)
-                    n_trunc = truncate_end(name_disp, avail_n)
-                    s_part = f"  {s_str:>8}" if s_str else " " * 10
-                    l_part = f"{prefix_str}{n_trunc}"
-                    if is_cur: l_part = f"{BOLD}{l_part}{RESET}"
-                    cell_mid = pad_visible(l_part, w_mid - 10) + s_part
+                    n_trunc = truncate_to_width(it.name + ("/" if it.is_dir else ""), avail_n)
+                    # Farbe auf n_trunc anwenden
+                    it_fake = FileEntry(it.path, n_trunc)
+                    it_fake.is_dir = it.is_dir
+                    it_fake.is_symlink = it.is_symlink
+                    it_fake.is_exec = it.is_exec
+                    it_fake.ext = it.ext
+                    n_styled = get_file_colored_name(it_fake)
+                    s_part = f"  {C_GRAY}{s_str:>8}{C_RESET}" if s_str else " " * 10
+                    l_part = f"{prefix_str}{n_styled}"
+                    if is_cur:
+                        l_part = f"{C_BOLD}{l_part}"
+                    cell_mid = pad_to_width(l_part, w_mid - 10) + s_part
                 else:
                     avail_n = max(2, w_mid - prefix_len)
-                    n_trunc = truncate_end(name_disp, avail_n)
-                    l_part = f"{prefix_str}{n_trunc}"
-                    if is_cur: l_part = f"{BOLD}{l_part}{RESET}"
-                    cell_mid = pad_visible(l_part, w_mid)
+                    n_trunc = truncate_to_width(it.name + ("/" if it.is_dir else ""), avail_n)
+                    it_fake = FileEntry(it.path, n_trunc)
+                    it_fake.is_dir = it.is_dir
+                    it_fake.is_symlink = it.is_symlink
+                    it_fake.is_exec = it.is_exec
+                    it_fake.ext = it.ext
+                    n_styled = get_file_colored_name(it_fake)
+                    l_part = f"{prefix_str}{n_styled}"
+                    if is_cur:
+                        l_part = f"{C_BOLD}{l_part}"
+                    cell_mid = pad_to_width(l_part, w_mid)
             elif len(self.items) == 0 and r == 0:
-                cell_mid = pad_visible(f"  {ITALIC}(leer){RESET}", w_mid)
-            else: cell_mid = " " * w_mid
+                cell_mid = pad_to_width(f"  {C_ITALIC}(leer){C_RESET}", w_mid)
+            else:
+                cell_mid = " " * w_mid
 
+            # 3. Rechte Spalte (Vorschau / Unterordner oder Konsole rechts)
             if active_console and console_pos == "rechts":
                 cell_right = c_right_lines[r] if r < len(c_right_lines) else " " * w_right
             elif eff_cols == 3:
                 if cur_item and is_cur_dir:
                     if r < len(child_items):
                         c_it = child_items[r]
-                        c_name = c_it.name + ("/" if c_it.is_dir else "")
+                        c_name = get_file_colored_name(c_it)
                         c_size = format_size(c_it.size) if not c_it.is_dir else ""
                         if w_right >= 22 and c_size:
                             avail_c = max(3, w_right - 2 - 10)
-                            c_trunc = truncate_end(c_name, avail_c)
-                            cell_right = pad_visible(f"  {c_trunc}", w_right - 10) + f"  {c_size:>8}"
+                            c_trunc = truncate_to_width(c_it.name + ("/" if c_it.is_dir else ""), avail_c)
+                            c_it_fake = FileEntry(c_it.path, c_trunc)
+                            c_it_fake.is_dir = c_it.is_dir
+                            c_it_fake.is_symlink = c_it.is_symlink
+                            c_it_fake.is_exec = c_it.is_exec
+                            c_it_fake.ext = c_it.ext
+                            c_styled = get_file_colored_name(c_it_fake)
+                            cell_right = pad_to_width(f"  {c_styled}", w_right - 10) + f"  {C_GRAY}{c_size:>8}{C_RESET}"
                         else:
                             avail_c = max(3, w_right - 3)
-                            c_trunc = truncate_end(c_name, avail_c)
-                            cell_right = pad_visible(f"  {c_trunc}", w_right)
+                            c_trunc = truncate_to_width(c_it.name + ("/" if c_it.is_dir else ""), avail_c)
+                            c_it_fake = FileEntry(c_it.path, c_trunc)
+                            c_it_fake.is_dir = c_it.is_dir
+                            c_it_fake.is_symlink = c_it.is_symlink
+                            c_it_fake.is_exec = c_it.is_exec
+                            c_it_fake.ext = c_it.ext
+                            c_styled = get_file_colored_name(c_it_fake)
+                            cell_right = pad_to_width(f"  {c_styled}", w_right)
                     elif len(child_items) == 0 and r == 0:
-                        cell_right = pad_visible(f"  {ITALIC}(leer){RESET}", w_right)
-                    else: cell_right = " " * w_right
+                        cell_right = pad_to_width(f"  {C_ITALIC}(leer){C_RESET}", w_right)
+                    else:
+                        cell_right = " " * w_right
                 elif cur_item and not is_cur_dir:
+                    # Details & Dateivorschau
                     card = [
-                        f" {BOLD}Details{RESET}",
-                        f" Typ:    {truncate_end(get_file_type_desc(cur_item), max(3, w_right - 10))}",
-                        f" Größe:  {format_size(cur_item.size)}",
-                        f" Datum:  {format_mtime(cur_item.mtime)}",
-                        f" Rechte: {cur_item.mode_str}",
+                        f" {C_BOLD_BLUE}Details{C_RESET}",
+                        f" {C_BOLD}Typ:{C_RESET}    {truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 9))}",
+                        f" {C_BOLD}Größe:{C_RESET}  {format_size(cur_item.size)}",
+                        f" {C_BOLD}Datum:{C_RESET}  {format_mtime(cur_item.mtime)}",
+                        f" {C_BOLD}Rechte:{C_RESET} {C_GRAY}{cur_item.mode_str}{C_RESET}",
                     ]
                     if cur_item.is_symlink:
-                        try: card.append(f" Link:   {truncate_end(os.readlink(cur_item.path), max(3, w_right - 10))}")
-                        except Exception: pass
-                    cell_right = pad_visible(card[r], w_right) if r < len(card) else " " * w_right
-                else: cell_right = " " * w_right
-            else: cell_right = ""
+                        card.append(f" {C_BOLD}Ziel:{C_RESET}   {C_CYAN}{truncate_to_width(cur_item.symlink_target, max(3, w_right - 9))}{C_RESET}")
 
-            if div_style in ("alle", "vertikal"):
-                if eff_cols == 3: row_line = f"│{cell_left}│{cell_mid}│{cell_right}│"
-                elif eff_cols == 2:
-                    row_line = f"│{cell_mid}│{cell_right}│" if (active_console and console_pos == "rechts") else f"│{cell_left}│{cell_mid}│"
-                else: row_line = f"│{cell_mid}│"
-            elif div_style == "außen":
-                if eff_cols == 3: row_line = f"│{cell_left}  {cell_mid}  {cell_right}│"
-                elif eff_cols == 2: row_line = f"│{cell_left}  {cell_mid}│"
-                else: row_line = f"│{cell_mid}│"
+                    if r < len(card):
+                        cell_right = pad_to_width(card[r], w_right)
+                    elif r == len(card) and fm_rows >= 10:
+                        cell_right = pad_to_width(f" {C_BLUE}{'─' * max(2, w_right - 2)}{C_RESET}", w_right)
+                    elif r == len(card) + 1 and fm_rows >= 10:
+                        cell_right = pad_to_width(f" {C_BOLD_CYAN}Vorschau{C_RESET}", w_right)
+                    else:
+                        p_line_idx = r - (len(card) + 2) if fm_rows >= 10 else -1
+                        if 0 <= p_line_idx < len(preview_lines):
+                            p_txt = preview_lines[p_line_idx]
+                            cell_right = pad_to_width(f" {C_GRAY}{truncate_to_width(p_txt, max(2, w_right - 2))}{C_RESET}", w_right)
+                        else:
+                            cell_right = " " * w_right
+                else:
+                    cell_right = " " * w_right
             else:
-                if eff_cols == 3: row_line = f"{cell_left}  {cell_mid}  {cell_right}"
-                elif eff_cols == 2: row_line = f"{cell_left}  {cell_mid}"
-                else: row_line = f"{cell_mid}"
+                cell_right = ""
 
-            file_lines.append(pad_visible(row_line, term_cols))
+            # Rahmen um Zeile anlegen
+            b_c = C_BLUE
+            if div_style in ("alle", "vertikal"):
+                if eff_cols == 3:
+                    row_line = f"{b_c}│{C_RESET}{cell_left}{b_c}│{C_RESET}{cell_mid}{b_c}│{C_RESET}{cell_right}{b_c}│{C_RESET}"
+                elif eff_cols == 2:
+                    row_line = f"{b_c}│{C_RESET}{cell_left}{b_c}│{C_RESET}{cell_mid}{b_c}│{C_RESET}"
+                else:
+                    row_line = f"{b_c}│{C_RESET}{cell_mid}{b_c}│{C_RESET}"
+            elif div_style == "außen":
+                if eff_cols == 3:
+                    row_line = f"{b_c}│{C_RESET}{cell_left}  {cell_mid}  {cell_right}{b_c}│{C_RESET}"
+                elif eff_cols == 2:
+                    row_line = f"{b_c}│{C_RESET}{cell_left}  {cell_mid}{b_c}│{C_RESET}"
+                else:
+                    row_line = f"{b_c}│{C_RESET}{cell_mid}{b_c}│{C_RESET}"
+            else:
+                if eff_cols == 3:
+                    row_line = f"{cell_left}  {cell_mid}  {cell_right}"
+                elif eff_cols == 2:
+                    row_line = f"{cell_left}  {cell_mid}"
+                else:
+                    row_line = f"{cell_mid}"
 
-        all_lines = [path_line]
-        if has_top_border and top_line: all_lines.append(pad_visible(top_line, term_cols))
+            file_lines.append(pad_to_width(row_line, term_cols))
+
+        all_lines = [header_line]
+        if has_top_border and top_line:
+            all_lines.append(pad_to_width(f"{C_BLUE}{top_line}{C_RESET}", term_cols))
         all_lines.extend(file_lines)
 
+        # Konsole unten einbetten
         if active_console and console_pos == "unten" and console_h > 0:
-            all_lines.append(pad_visible(mid_sep, term_cols))
+            all_lines.append(pad_to_width(f"{C_BLUE}{mid_sep}{C_RESET}", term_cols))
             inner_cw = max(4, term_cols - 2 if div_style in ("alle", "vertikal", "außen") else term_cols)
             c_lines = self.get_console_display_lines(inner_cw, console_h)
             for cl in c_lines:
-                all_lines.append(f"│{cl}│" if div_style in ("alle", "vertikal", "außen") else pad_visible(cl, term_cols))
+                if div_style in ("alle", "vertikal", "außen"):
+                    all_lines.append(f"{C_BLUE}│{C_RESET}{cl}{C_BLUE}│{C_RESET}")
+                else:
+                    all_lines.append(pad_to_width(cl, term_cols))
             if has_bottom_border:
                 c_bot = f"╰{'─' * (term_cols - 2)}╯" if div_style in ("alle", "vertikal", "außen") else ("─" * term_cols if div_style == "horizontal" else "")
-                if c_bot: all_lines.append(pad_visible(c_bot, term_cols))
+                if c_bot:
+                    all_lines.append(pad_to_width(f"{C_BLUE}{c_bot}{C_RESET}", term_cols))
         elif has_bottom_border and bot_line:
-            all_lines.append(pad_visible(bot_line, term_cols))
+            all_lines.append(pad_to_width(f"{C_BLUE}{bot_line}{C_RESET}", term_cols))
 
+        # Status- & Dialog-Leiste unten rendern
         if has_status_bar:
-            if self.show_console and self.console_focused: mode_lbl = "TERM"
-            elif self.selected_paths: mode_lbl = f"SEL {len(self.selected_paths)}"
-            elif self.clipboard_mode == "cut": mode_lbl = f"CUT {len(self.clipboard_paths)}" if len(self.clipboard_paths) > 1 else "CUT"
-            elif self.clipboard_mode == "copy": mode_lbl = f"CPY {len(self.clipboard_paths)}" if len(self.clipboard_paths) > 1 else "CPY"
-            else: mode_lbl = "NOR"
-            left_b = f" {BOLD}{mode_lbl}{RESET}  "
-            if self.status_message: st_line = pad_visible(f"{left_b}{self.status_message}", term_cols)
+            if self.active_dialog:
+                # Interaktiver Dialog
+                if self.active_dialog == "rename":
+                    prompt_lbl = f"{C_BOLD_YELLOW}[UMBENENNEN]{C_RESET} Name: "
+                    inp_txt = self.dialog_input
+                    c_pos = self.dialog_cursor
+                    disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
+                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Enter] OK  [ESC] Abbruch{C_RESET}", term_cols)
+                elif self.active_dialog == "new":
+                    prompt_lbl = f"{C_BOLD_GREEN}[NEU ERSTELLEN]{C_RESET} Name (Ordner mit / am Ende): "
+                    inp_txt = self.dialog_input
+                    c_pos = self.dialog_cursor
+                    disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
+                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Enter] Erstellen  [ESC] Abbruch{C_RESET}", term_cols)
+                elif self.active_dialog == "search":
+                    prompt_lbl = f"{C_BOLD_CYAN}[FILTER / SUCHE]{C_RESET} Suchbegriff: "
+                    inp_txt = self.dialog_input
+                    c_pos = self.dialog_cursor
+                    disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
+                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Enter] Filter aktiv  [ESC] Zurücksetzen{C_RESET}", term_cols)
+                elif self.active_dialog == "goto_path":
+                    prompt_lbl = f"{C_BOLD_BLUE}[GEHE ZU PFAD]{C_RESET} Pfad: "
+                    inp_txt = self.dialog_input
+                    c_pos = self.dialog_cursor
+                    disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
+                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Enter] Wechseln  [ESC] Abbruch{C_RESET}", term_cols)
+                elif self.active_dialog == "trash_confirm":
+                    targets_c = len(self.selected_paths) if self.selected_paths else 1
+                    t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
+                    prompt_lbl = f"{C_BOLD_RED}[PAPIERKORB]{C_RESET} {t_name} wirklich löschen? "
+                    st_line = pad_to_width(f" {prompt_lbl}{C_BOLD}[j/n]{C_RESET}  {C_GRAY}[j/y/Enter] Ja  [n/ESC] Nein{C_RESET}", term_cols)
+                elif self.active_dialog == "goto_menu":
+                    prompt_lbl = f"{C_BOLD_BLUE}[GEHE ZU]{C_RESET} "
+                    opts = f"{C_BOLD}[d]{C_RESET} Downloads  {C_BOLD}[f]{C_RESET} Dokumente  {C_BOLD}[h]{C_RESET} Home  {C_BOLD}[t]{C_RESET} Papierkorb  {C_BOLD}[i]{C_RESET} Pfad  {C_BOLD}[p]{C_RESET} Clipboard  {C_GRAY}[ESC] Abbruch{C_RESET}"
+                    st_line = pad_to_width(f" {prompt_lbl}{opts}", term_cols)
+                else:
+                    st_line = " " * term_cols
             else:
-                ctrl = "[↑↓] Nav  [Enter] open  [r] Rename  [z] Zip  [y/c] Copy  [x] Cut  [p] Paste  [g] Gehe zu  [t] Konsole  [q] Ende"
-                st_line = pad_visible(f"{left_b}{truncate_end(ctrl, max(1, term_cols - visible_len(left_b)))}", term_cols)
+                # Normale Statusleiste
+                if self.show_console and self.console_focused:
+                    mode_lbl = f"{C_BOLD_GREEN}TERM{C_RESET}"
+                elif self.selected_paths:
+                    mode_lbl = f"{C_YELLOW}SEL {len(self.selected_paths)}{C_RESET}"
+                elif self.clipboard_mode == "cut":
+                    mode_lbl = f"{C_BOLD_RED}CUT {len(self.clipboard_paths)}{C_RESET}"
+                elif self.clipboard_mode == "copy":
+                    mode_lbl = f"{C_BOLD_GREEN}CPY {len(self.clipboard_paths)}{C_RESET}"
+                else:
+                    mode_lbl = f"{C_BOLD_BLUE}NOR{C_RESET}"
+
+                left_b = f" {mode_lbl}  "
+                ctrl = f"{C_GRAY}[↑↓] Nav  [Enter] Open  [e] Edit  [n] Neu  [r] Rename  [/] Suche  [d] Del  [y/c] Copy  [x] Cut  [p] Paste  [g] Go  [m] Menu  [q] Quit{C_RESET}"
+                avail_ctrl = max(1, term_cols - str_width(left_b))
+                st_line = pad_to_width(f"{left_b}{truncate_to_width(ctrl, avail_ctrl)}", term_cols)
+
             all_lines.append(st_line)
 
         return all_lines[:term_rows]
 
     def handle_mouse_click(self, x: int, y: int) -> bool:
-        if not self.last_layout: return False
+        if not self.last_layout:
+            return False
         layout = self.last_layout
         hdr_count = layout.get("header_lines", 2)
         avail_rows = layout.get("avail_rows", 0)
@@ -929,24 +1253,31 @@ class EasyDateienApp:
         console_pos = layout.get("console_pos", "unten")
         split_row = layout.get("split_row", -1)
 
-        if y == 1: return True
+        if y == 1:
+            return True
         if active_console and console_pos == "unten" and split_row > 0:
-            if y > split_row: self.console_focused = True; return True
-            else: self.console_focused = False
+            if y > split_row:
+                self.console_focused = True
+                return True
+            else:
+                self.console_focused = False
 
         file_row = (y - 1) - hdr_count
         if 0 <= file_row < avail_rows:
             col_x = x - 1
             if active_console and console_pos == "rechts" and col_x >= (w_left + w_mid + 2):
-                self.console_focused = True; return True
+                self.console_focused = True
+                return True
             elif active_console and console_pos == "links" and col_x <= w_left:
-                self.console_focused = True; return True
+                self.console_focused = True
+                return True
             self.console_focused = False
             in_left = (eff_cols >= 2 and col_x <= w_left)
             in_mid = (eff_cols == 1 and col_x <= w_mid) or (eff_cols >= 2 and (w_left + 1) <= col_x <= (w_left + 1 + w_mid))
             in_right = (eff_cols == 3 and col_x >= (w_left + w_mid + 2))
             if in_left and not (active_console and console_pos == "links"):
-                self.go_parent_directory(); return True
+                self.go_parent_directory()
+                return True
             elif in_mid:
                 target_idx = m_start + file_row
                 if 0 <= target_idx < len(self.items):
@@ -954,10 +1285,12 @@ class EasyDateienApp:
                     is_double = (now - self.last_click_time < 0.45) and (self.last_click_idx == target_idx)
                     self.selected_idx = target_idx
                     if is_double:
-                        self.last_click_time = 0.0; self.last_click_idx = None
+                        self.last_click_time = 0.0
+                        self.last_click_idx = None
                         self.open_with_system(self.items[target_idx])
                     else:
-                        self.last_click_time = now; self.last_click_idx = target_idx
+                        self.last_click_time = now
+                        self.last_click_idx = target_idx
                     return True
             elif in_right and not (active_console and console_pos == "rechts"):
                 cur_item = layout.get("cur_item")
@@ -965,13 +1298,16 @@ class EasyDateienApp:
                     child_items = layout.get("child_items", [])
                     if 0 <= file_row < len(child_items):
                         self.change_directory(cur_item.path)
-                        self.selected_idx = file_row; return True
+                        self.selected_idx = file_row
+                        return True
                 elif cur_item and not layout.get("is_cur_dir"):
-                    self.open_with_system(cur_item); return True
+                    self.open_with_system(cur_item)
+                    return True
         return False
 
     def handle_mouse_right_click(self, x: int, y: int) -> bool:
-        if not self.last_layout: return False
+        if not self.last_layout:
+            return False
         layout = self.last_layout
         hdr_count = layout.get("header_lines", 2)
         avail_rows = layout.get("avail_rows", 0)
@@ -981,8 +1317,218 @@ class EasyDateienApp:
             target_idx = m_start + file_row
             if 0 <= target_idx < len(self.items):
                 self.selected_idx = target_idx
-                self.toggle_select(); return True
+                self.toggle_select()
+                return True
         return False
+
+    def handle_dialog_key(self, key: str, fd: int) -> bool:
+        """Behandelt Tastatureingaben in aktiven Dialogen deterministisch."""
+        if not self.active_dialog:
+            return False
+
+        if key == "ESC":
+            self.active_dialog = None
+            self.dialog_input = ""
+            self.dialog_cursor = 0
+            self.dialog_target_item = None
+            self.set_status("Aktion abgebrochen")
+            return True
+
+        if self.active_dialog == "trash_confirm":
+            if key in ("y", "Y", "j", "J", "ENTER"):
+                targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
+                count = 0
+                for t in targets:
+                    try:
+                        res = subprocess.run(["trash", t], capture_output=True)
+                        if res.returncode == 0:
+                            count += 1
+                        else:
+                            as_del = f'tell application "Finder" to delete (POSIX file "{os.path.abspath(t)}" as alias)'
+                            subprocess.run(["osascript", "-e", as_del], capture_output=True)
+                            count += 1
+                    except Exception:
+                        pass
+                self.selected_paths.clear()
+                self.clipboard_paths = [p for p in self.clipboard_paths if p not in targets]
+                if not self.clipboard_paths:
+                    self.clipboard_mode = None
+                self.refresh_items()
+                self.set_status(f"{count} Elemente in Papierkorb verschoben", "success")
+            else:
+                self.set_status("Löschen abgebrochen")
+            self.active_dialog = None
+            return True
+
+        if self.active_dialog == "goto_menu":
+            c = key.lower()
+            self.active_dialog = None
+            if c == "d":
+                self.change_directory(os.path.expanduser("~/Downloads"))
+                self.set_status("Downloads", "info")
+            elif c == "f":
+                self.change_directory(os.path.expanduser("~/Documents"))
+                self.set_status("Dokumente", "info")
+            elif c in ("h", "~"):
+                self.change_directory(HOME_DIR)
+                self.set_status("Home (~)", "info")
+            elif c == "t":
+                trash_p = os.path.expanduser("~/.Trash")
+                if os.path.isdir(trash_p):
+                    self.change_directory(trash_p)
+                    self.set_status("Papierkorb", "info")
+                else:
+                    self.set_status("Papierkorb nicht verfügbar", "error")
+            elif c == "i":
+                self.active_dialog = "goto_path"
+                self.dialog_input = ""
+                self.dialog_cursor = 0
+            elif c == "p":
+                c_files = get_macos_clipboard_files()
+                target = c_files[0] if c_files else ""
+                if not target:
+                    try:
+                        target = subprocess.check_output(["pbpaste"], text=True).strip()
+                    except Exception:
+                        pass
+                target = os.path.expanduser(target)
+                if os.path.isdir(target):
+                    self.change_directory(target)
+                    self.set_status(f"Gehe zu: {self.get_short_dir(target)}", "info")
+                elif os.path.isfile(target):
+                    self.change_directory(os.path.dirname(target))
+                    self.select_filename(os.path.basename(target))
+                    self.set_status(f"Gehe zu: {self.get_short_dir(target)}", "info")
+                else:
+                    self.set_status("Kein gültiger Pfad im Zwischenspeicher", "warning")
+            return True
+
+        if key == "ENTER":
+            val = self.dialog_input.strip()
+            mode = self.active_dialog
+            target_it = self.dialog_target_item
+            self.active_dialog = None
+            self.dialog_input = ""
+            self.dialog_cursor = 0
+            self.dialog_target_item = None
+
+            if mode == "rename" and target_it:
+                if not val or val == target_it.name:
+                    self.set_status("Umbenennen abgebrochen")
+                    return True
+                new_path = os.path.join(self.current_dir, val)
+                if os.path.exists(new_path):
+                    self.set_status(f"Fehler: „{val}“ existiert bereits", "error")
+                    return True
+                try:
+                    os.rename(target_it.path, new_path)
+                    self.refresh_items()
+                    self.select_filename(val)
+                    self.set_status(f"Umbenannt in: {val}", "success")
+                except Exception as e:
+                    self.set_status(f"Fehler beim Umbenennen: {e}", "error")
+                return True
+
+            elif mode == "new":
+                if not val:
+                    self.set_status("Erstellung abgebrochen")
+                    return True
+                is_dir_target = val.endswith("/")
+                clean_name = val.rstrip("/")
+                target_p = os.path.join(self.current_dir, clean_name)
+                if os.path.exists(target_p):
+                    self.set_status(f"Fehler: „{clean_name}“ existiert bereits", "error")
+                    return True
+                try:
+                    if is_dir_target:
+                        os.makedirs(target_p, exist_ok=True)
+                        self.set_status(f"Ordner erstellt: {clean_name}", "success")
+                    else:
+                        open(target_p, "a").close()
+                        self.set_status(f"Datei erstellt: {clean_name}", "success")
+                    self.refresh_items()
+                    self.select_filename(clean_name)
+                except Exception as e:
+                    self.set_status(f"Fehler: {e}", "error")
+                return True
+
+            elif mode == "goto_path":
+                if not val:
+                    self.set_status("Pfad-Navigation abgebrochen")
+                    return True
+                target = os.path.expanduser(val)
+                if not os.path.isabs(target):
+                    target = os.path.join(self.current_dir, target)
+                target = os.path.abspath(target)
+                if os.path.isdir(target):
+                    self.change_directory(target)
+                    self.set_status(f"Gehe zu: {self.get_short_dir(target)}", "info")
+                elif os.path.isfile(target):
+                    self.change_directory(os.path.dirname(target))
+                    self.select_filename(os.path.basename(target))
+                    self.set_status(f"Gehe zu: {self.get_short_dir(target)}", "info")
+                else:
+                    self.set_status(f"Pfad nicht gefunden: {val}", "error")
+                return True
+
+            elif mode == "search":
+                self.filter_query = val
+                self.refresh_items()
+                self.set_status(f"Filter aktiv: „{val}“ ({len(self.items)} Treffer)" if val else "Filter aufgehoben", "info")
+                return True
+
+            return True
+
+        if key == "BACKSPACE":
+            if self.dialog_cursor > 0:
+                self.dialog_input = self.dialog_input[:self.dialog_cursor - 1] + self.dialog_input[self.dialog_cursor:]
+                self.dialog_cursor -= 1
+                if self.active_dialog == "search":
+                    self.filter_query = self.dialog_input
+                    self.refresh_items()
+            return True
+
+        if key == "DELETE":
+            if self.dialog_cursor < len(self.dialog_input):
+                self.dialog_input = self.dialog_input[:self.dialog_cursor] + self.dialog_input[self.dialog_cursor + 1:]
+                if self.active_dialog == "search":
+                    self.filter_query = self.dialog_input
+                    self.refresh_items()
+            return True
+
+        if key == "LEFT":
+            self.dialog_cursor = max(0, self.dialog_cursor - 1)
+            return True
+
+        if key == "RIGHT":
+            self.dialog_cursor = min(len(self.dialog_input), self.dialog_cursor + 1)
+            return True
+
+        if key in ("HOME", "\x01"):
+            self.dialog_cursor = 0
+            return True
+
+        if key in ("END", "\x05"):
+            self.dialog_cursor = len(self.dialog_input)
+            return True
+
+        if key in ("SPACE", " "):
+            self.dialog_input = self.dialog_input[:self.dialog_cursor] + " " + self.dialog_input[self.dialog_cursor:]
+            self.dialog_cursor += 1
+            if self.active_dialog == "search":
+                self.filter_query = self.dialog_input
+                self.refresh_items()
+            return True
+
+        if len(key) == 1 and key.isprintable():
+            self.dialog_input = self.dialog_input[:self.dialog_cursor] + key + self.dialog_input[self.dialog_cursor:]
+            self.dialog_cursor += 1
+            if self.active_dialog == "search":
+                self.filter_query = self.dialog_input
+                self.refresh_items()
+            return True
+
+        return True
 
     def run(self):
         if not sys.stdin.isatty():
@@ -990,14 +1536,18 @@ class EasyDateienApp:
             return
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
-        try: signal.signal(signal.SIGWINCH, lambda s, f: None)
-        except Exception: pass
+        try:
+            signal.signal(signal.SIGWINCH, lambda s, f: None)
+        except Exception:
+            pass
         tty.setcbreak(fd, termios.TCSADRAIN)
         sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
         mouse_enabled = self.config.get("mouse_support", True)
         if mouse_enabled:
             sys.stdout.write("\033[?1000h\033[?1006h")
-        sys.stdout.write("\033[2J\033[H"); sys.stdout.flush()
+        sys.stdout.write("\033[2J\033[H")
+        sys.stdout.flush()
+
         last_size = None
         needs_redraw = True
         try:
@@ -1005,7 +1555,9 @@ class EasyDateienApp:
                 curr_size = shutil.get_terminal_size((80, 24))
                 term_cols, term_rows = curr_size.columns, curr_size.lines
                 if curr_size != last_size:
-                    last_size = curr_size; needs_redraw = True
+                    last_size = curr_size
+                    needs_redraw = True
+
                 if needs_redraw:
                     lines = self.build_screen(term_cols, term_rows)
                     out_buf = []
@@ -1015,89 +1567,120 @@ class EasyDateienApp:
                     sys.stdout.write("".join(out_buf))
                     sys.stdout.flush()
                     needs_redraw = False
+
                 key = read_key(fd, timeout=0.05)
-                if not key: continue
+                if not key:
+                    continue
+
+                if self.active_dialog:
+                    if self.handle_dialog_key(key, fd):
+                        needs_redraw = True
+                    continue
+
                 if key in ("UP", "DOWN", "k", "j", "PAGE_UP", "PAGE_DOWN"):
                     if not (self.show_console and self.console_focused):
                         self.status_expiry_moves += 1
-                        if self.status_expiry_moves >= 3: self.status_message = ""
+                        if self.status_expiry_moves >= 4:
+                            self.status_message = ""
+
                 if key == "MOUSE_WHEEL_UP":
                     if self.show_console and self.console_focused:
                         self.console_scroll_offset += 2
                     elif self.items:
                         self.selected_idx = max(0, self.selected_idx - 1)
-                    needs_redraw = True; continue
+                    needs_redraw = True
+                    continue
                 elif key == "MOUSE_WHEEL_DOWN":
                     if self.show_console and self.console_focused:
                         self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
                     elif self.items:
                         self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1)
-                    needs_redraw = True; continue
+                    needs_redraw = True
+                    continue
                 elif key.startswith("MOUSE_CLICK:"):
                     p = key.split(":")
                     if len(p) == 3:
                         cx, cy = int(p[1]), int(p[2])
-                        if self.handle_mouse_click(cx, cy): needs_redraw = True
+                        if self.handle_mouse_click(cx, cy):
+                            needs_redraw = True
                     continue
                 elif key.startswith("MOUSE_RIGHT_CLICK:"):
                     p = key.split(":")
                     if len(p) == 3:
                         cx, cy = int(p[1]), int(p[2])
-                        if self.handle_mouse_right_click(cx, cy): needs_redraw = True
+                        if self.handle_mouse_right_click(cx, cy):
+                            needs_redraw = True
                     continue
-                if self.pending_g_mode:
-                    if key == "ESC":
-                        self.pending_g_mode = False
-                        self.status_message = "Abgebrochen"
-                    else:
-                        self.handle_goto_choice(key, fd)
-                    needs_redraw = True; continue
+
                 if key == "ESC":
                     if self.show_console:
-                        self.show_console = False; self.console_focused = False
-                        self.status_message = "Konsole geschlossen"
-                        self.status_expiry_moves = 0; needs_redraw = True; continue
+                        self.show_console = False
+                        self.console_focused = False
+                        self.set_status("Konsole geschlossen")
+                        needs_redraw = True
+                        continue
+                    if self.filter_query:
+                        self.filter_query = ""
+                        self.refresh_items()
+                        self.set_status("Filter aufgehoben")
+                        needs_redraw = True
+                        continue
                     if self.selected_paths:
                         self.selected_paths.clear()
-                        self.status_message = "Auswahl aufgehoben"
-                        self.status_expiry_moves = 0; needs_redraw = True; continue
+                        self.set_status("Auswahl aufgehoben")
+                        needs_redraw = True
+                        continue
                     elif self.clipboard_mode or self.clipboard_paths:
-                        self.clipboard_mode = None; self.clipboard_paths = []
-                        self.status_message = "Zwischenspeicher geleert"
-                        self.status_expiry_moves = 0; needs_redraw = True; continue
-                    elif self.config.get("esc_to_quit", False): break
+                        self.clipboard_mode = None
+                        self.clipboard_paths = []
+                        self.set_status("Zwischenspeicher geleert")
+                        needs_redraw = True
+                        continue
+                    elif self.config.get("esc_to_quit", False):
+                        break
                     continue
+
+                # Konsole-Eingabemodus
                 if self.show_console and self.console_focused:
                     if key == "ENTER":
                         self.run_console_command(self.console_input, fd, old_settings)
                         needs_redraw = True
                     elif key == "TAB":
                         self.console_focused = False
-                        self.status_message = "Fokus: Dateimanager"
-                        self.status_expiry_moves = 0; needs_redraw = True
+                        self.set_status("Fokus: Dateimanager")
+                        needs_redraw = True
                     elif key in (" ", "SPACE"):
                         self.console_input = self.console_input[:self.console_cursor_idx] + " " + self.console_input[self.console_cursor_idx:]
-                        self.console_cursor_idx += 1; needs_redraw = True
+                        self.console_cursor_idx += 1
+                        needs_redraw = True
                     elif key == "BACKSPACE":
                         if self.console_cursor_idx > 0:
                             self.console_input = self.console_input[:self.console_cursor_idx - 1] + self.console_input[self.console_cursor_idx:]
-                            self.console_cursor_idx -= 1; needs_redraw = True
+                            self.console_cursor_idx -= 1
+                            needs_redraw = True
                     elif key == "DELETE":
                         if self.console_cursor_idx < len(self.console_input):
                             self.console_input = self.console_input[:self.console_cursor_idx] + self.console_input[self.console_cursor_idx + 1:]
                             needs_redraw = True
                     elif key == "LEFT":
-                        self.console_cursor_idx = max(0, self.console_cursor_idx - 1); needs_redraw = True
+                        self.console_cursor_idx = max(0, self.console_cursor_idx - 1)
+                        needs_redraw = True
                     elif key == "RIGHT":
-                        self.console_cursor_idx = min(len(self.console_input), self.console_cursor_idx + 1); needs_redraw = True
-                    elif key in ("HOME", "\x01"): self.console_cursor_idx = 0; needs_redraw = True
-                    elif key in ("END", "\x05"): self.console_cursor_idx = len(self.console_input); needs_redraw = True
+                        self.console_cursor_idx = min(len(self.console_input), self.console_cursor_idx + 1)
+                        needs_redraw = True
+                    elif key in ("HOME", "\x01"):
+                        self.console_cursor_idx = 0
+                        needs_redraw = True
+                    elif key in ("END", "\x05"):
+                        self.console_cursor_idx = len(self.console_input)
+                        needs_redraw = True
                     elif key == "UP":
                         if self.console_cmd_history:
                             if self.console_history_idx > 0:
                                 self.console_history_idx -= 1
                             self.console_input = self.console_cmd_history[self.console_history_idx]
-                            self.console_cursor_idx = len(self.console_input); needs_redraw = True
+                            self.console_cursor_idx = len(self.console_input)
+                            needs_redraw = True
                     elif key == "DOWN":
                         if self.console_cmd_history:
                             if self.console_history_idx < len(self.console_cmd_history) - 1:
@@ -1106,53 +1689,129 @@ class EasyDateienApp:
                             else:
                                 self.console_history_idx = len(self.console_cmd_history)
                                 self.console_input = ""
-                            self.console_cursor_idx = len(self.console_input); needs_redraw = True
-                    elif key == "QUIT": self.console_input = ""; self.console_cursor_idx = 0; needs_redraw = True
+                            self.console_cursor_idx = len(self.console_input)
+                            needs_redraw = True
+                    elif key == "QUIT":
+                        self.console_input = ""
+                        self.console_cursor_idx = 0
+                        needs_redraw = True
                     elif len(key) == 1 and key.isprintable():
                         self.console_input = self.console_input[:self.console_cursor_idx] + key + self.console_input[self.console_cursor_idx:]
-                        self.console_cursor_idx += 1; needs_redraw = True
+                        self.console_cursor_idx += 1
+                        needs_redraw = True
                     continue
+
                 if key == "TAB":
-                    if self.show_console: self.console_focused = True; needs_redraw = True
-                    else: self.toggle_console(); needs_redraw = True
+                    if self.show_console:
+                        self.console_focused = True
+                        needs_redraw = True
+                    else:
+                        self.toggle_console()
+                        needs_redraw = True
                     continue
+
                 if key == "t":
-                    self.toggle_console(); needs_redraw = True; continue
+                    self.toggle_console()
+                    needs_redraw = True
+                    continue
+
                 if key == "g":
-                    self.pending_g_mode = True
-                    self.status_message = "Gehe zu: [d] Downloads  [f] Dok  [h/~] Home  [t] Papierkorb  [i] Pfad  [p] Clip"
-                    needs_redraw = True; continue
+                    self.active_dialog = "goto_menu"
+                    needs_redraw = True
+                    continue
+
+                if key == "/":
+                    self.active_dialog = "search"
+                    self.dialog_input = self.filter_query
+                    self.dialog_cursor = len(self.dialog_input)
+                    needs_redraw = True
+                    continue
+
+                if key == "n":
+                    self.active_dialog = "new"
+                    self.dialog_input = ""
+                    self.dialog_cursor = 0
+                    needs_redraw = True
+                    continue
+
+                if key == "s":
+                    self.toggle_sort()
+                    needs_redraw = True
+                    continue
+
                 if key == "~":
-                    self.change_directory(HOME_DIR); self.status_message = "~"; needs_redraw = True; continue
+                    self.change_directory(HOME_DIR)
+                    self.set_status("Home (~)")
+                    needs_redraw = True
+                    continue
+
                 if key in ("UP", "k"):
-                    if self.items: self.selected_idx = max(0, self.selected_idx - 1); needs_redraw = True
+                    if self.items:
+                        self.selected_idx = max(0, self.selected_idx - 1)
+                        needs_redraw = True
                     continue
                 elif key in ("DOWN", "j"):
-                    if self.items: self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1); needs_redraw = True
+                    if self.items:
+                        self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1)
+                        needs_redraw = True
+                    continue
+                elif key in ("PAGE_UP",):
+                    if self.items:
+                        self.selected_idx = max(0, self.selected_idx - 10)
+                        needs_redraw = True
+                    continue
+                elif key in ("PAGE_DOWN",):
+                    if self.items:
+                        self.selected_idx = min(len(self.items) - 1, self.selected_idx + 10)
+                        needs_redraw = True
                     continue
                 elif key in ("LEFT", "h"):
-                    self.go_parent_directory(); needs_redraw = True; continue
+                    self.go_parent_directory()
+                    needs_redraw = True
+                    continue
                 elif key in ("RIGHT", "l"):
                     if self.items:
                         item = self.items[self.selected_idx]
                         if item.is_dir:
-                            self.change_directory(item.path); needs_redraw = True
+                            self.change_directory(item.path)
+                            needs_redraw = True
                         else:
                             now = datetime.datetime.now().timestamp()
                             if (now - self.last_right_arrow_time < 0.45) and (self.last_right_arrow_path == item.path):
-                                self.last_right_arrow_time = 0.0; self.last_right_arrow_path = ""
-                                self.open_in_nano(item, fd, old_settings); needs_redraw = True
+                                self.last_right_arrow_time = 0.0
+                                self.last_right_arrow_path = ""
+                                self.open_in_editor(item, fd, old_settings)
+                                needs_redraw = True
                             else:
-                                self.last_right_arrow_time = now; self.last_right_arrow_path = item.path
-                                self.status_message = f"Doppel-→ für nano ({item.name})"
-                                self.status_expiry_moves = 0; needs_redraw = True
+                                self.last_right_arrow_time = now
+                                self.last_right_arrow_path = item.path
+                                self.set_status(f"Doppel-→ oder e für Editor ({item.name})", "info")
+                                needs_redraw = True
+                    continue
+                elif key in ("e", "o"):
+                    if self.items:
+                        item = self.items[self.selected_idx]
+                        if not item.is_dir:
+                            self.open_in_editor(item, fd, old_settings)
+                            needs_redraw = True
                     continue
                 elif key == "ENTER":
-                    if self.items: self.open_with_system(self.items[self.selected_idx]); needs_redraw = True
+                    if self.items:
+                        item = self.items[self.selected_idx]
+                        if item.is_dir:
+                            self.change_directory(item.path)
+                        else:
+                            self.open_with_system(item)
+                        needs_redraw = True
                     continue
                 elif key == "r":
-                    self.prompt_rename(fd)
-                    needs_redraw = True
+                    if self.items:
+                        item = self.items[self.selected_idx]
+                        self.active_dialog = "rename"
+                        self.dialog_input = item.name
+                        self.dialog_cursor = len(item.name)
+                        self.dialog_target_item = item
+                        needs_redraw = True
                     continue
                 elif key in ("z", "Z"):
                     self.create_zip_archive()
@@ -1166,34 +1825,62 @@ class EasyDateienApp:
                             if self.items:
                                 p = self.items[self.selected_idx].path
                                 copy_text_to_clipboard(p)
-                                self.status_message = f"Pfad kopiert: {p}"
-                                self.status_expiry_moves = 0; needs_redraw = True; continue
+                                self.set_status(f"Pfad kopiert: {p}", "success")
+                                needs_redraw = True
+                                continue
                         elif next_k in ("f", "F"):
                             if self.items:
                                 fn = self.items[self.selected_idx].name
                                 copy_text_to_clipboard(fn)
-                                self.status_message = f"Dateiname kopiert: {fn}"
-                                self.status_expiry_moves = 0; needs_redraw = True; continue
+                                self.set_status(f"Dateiname kopiert: {fn}", "success")
+                                needs_redraw = True
+                                continue
                         elif next_k in ("d", "D"):
                             copy_text_to_clipboard(self.current_dir)
-                            self.status_message = f"Ordnerpfad kopiert: {self.current_dir}"
-                            self.status_expiry_moves = 0; needs_redraw = True; continue
-                    self.copy_selection(); needs_redraw = True; continue
-                elif key == "y": self.copy_selection(); needs_redraw = True; continue
-                elif key == "x": self.cut_selection(); needs_redraw = True; continue
-                elif key == "p": self.paste_clipboard(); needs_redraw = True; continue
+                            self.set_status(f"Ordnerpfad kopiert: {self.current_dir}", "success")
+                            needs_redraw = True
+                            continue
+                    self.copy_selection()
+                    needs_redraw = True
+                    continue
+                elif key == "y":
+                    self.copy_selection()
+                    needs_redraw = True
+                    continue
+                elif key == "x":
+                    self.cut_selection()
+                    needs_redraw = True
+                    continue
+                elif key == "p":
+                    self.paste_clipboard()
+                    needs_redraw = True
+                    continue
                 elif key in ("Y", "X"):
-                    self.clipboard_mode = None; self.clipboard_paths = []
-                    self.status_message = "Zwischenspeicher geleert"
-                    self.status_expiry_moves = 0; needs_redraw = True; continue
-                elif key in (" ", "SPACE", "v"): self.toggle_select(); needs_redraw = True; continue
-                elif key in ("V", "a"): self.toggle_select_all(); needs_redraw = True; continue
-                elif key in ("d", "D"): self.prompt_trash(fd); needs_redraw = True; continue
+                    self.clipboard_mode = None
+                    self.clipboard_paths = []
+                    self.set_status("Zwischenspeicher geleert")
+                    needs_redraw = True
+                    continue
+                elif key in (" ", "SPACE", "v"):
+                    self.toggle_select()
+                    needs_redraw = True
+                    continue
+                elif key in ("V", "a"):
+                    self.toggle_select_all()
+                    needs_redraw = True
+                    continue
+                elif key in ("d", "D", "DELETE"):
+                    if self.items or self.selected_paths:
+                        self.active_dialog = "trash_confirm"
+                        needs_redraw = True
+                    continue
                 elif key == ".":
                     new_h = not self.config.get("show_hidden", False)
-                    self.config["show_hidden"] = new_h; self.refresh_items()
-                    self.status_message = f"Versteckte Dateien: {'Ein' if new_h else 'Aus'}"
-                    self.status_expiry_moves = 0; needs_redraw = True; continue
+                    self.config["show_hidden"] = new_h
+                    self.refresh_items()
+                    self.set_status(f"Versteckte Dateien: {'Ein' if new_h else 'Aus'}")
+                    needs_redraw = True
+                    continue
                 elif key in ("m", "C"):
                     try:
                         from easydateien_konfigurator import run_konfigurator
@@ -1201,35 +1888,64 @@ class EasyDateienApp:
                         self.config.update(new_cfg)
                         self.show_console = self.config.get("show_console", False)
                         self.console_position = self.config.get("console_position", "unten")
-                    except Exception as e: self.status_message = f"Fehler Konfigurator: {e}"
+                    except Exception as e:
+                        self.set_status(f"Fehler Konfigurator: {e}", "error")
                     tty.setcbreak(fd, termios.TCSADRAIN)
                     sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
-                    if mouse_enabled: sys.stdout.write("\033[?1000h\033[?1006h")
-                    sys.stdout.write("\033[2J\033[H"); sys.stdout.flush()
+                    if mouse_enabled:
+                        sys.stdout.write("\033[?1000h\033[?1006h")
+                    sys.stdout.write("\033[2J\033[H")
+                    sys.stdout.flush()
                     self.refresh_items()
-                    self.status_message = "Einstellungen übernommen"
-                    self.status_expiry_moves = 0; needs_redraw = True; continue
-                elif key in ("HOME",): self.selected_idx = 0; needs_redraw = True; continue
-                elif key in ("END", "G"):
-                    if self.items: self.selected_idx = len(self.items) - 1; needs_redraw = True
+                    self.set_status("Einstellungen übernommen", "success")
+                    needs_redraw = True
                     continue
-                elif key == "QUIT" or key == "q": break
+                elif key in ("HOME",):
+                    self.selected_idx = 0
+                    needs_redraw = True
+                    continue
+                elif key in ("END", "G"):
+                    if self.items:
+                        self.selected_idx = len(self.items) - 1
+                        needs_redraw = True
+                    continue
+                elif key in ("QUIT", "q"):
+                    break
         finally:
-            if mouse_enabled: sys.stdout.write("\033[?1006l\033[?1000l")
-            sys.stdout.write(SHOW_CURSOR + "\033[?1049l"); sys.stdout.flush()
+            if mouse_enabled:
+                sys.stdout.write("\033[?1006l\033[?1000l")
+            sys.stdout.write(SHOW_CURSOR + "\033[?1049l")
+            sys.stdout.flush()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
+
+class SingleLineHelpFormatter(argparse.HelpFormatter):
+    """Formatiert CLI-Hilfen streng einzeilig nach txt2pdf-Norm."""
+    def _split_lines(self, text, width):
+        return [text]
+
+
 def main():
-    parser = argparse.ArgumentParser(description="EasyDateien — Minimalistischer Terminal-Dateimanager")
-    parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
+    parser = argparse.ArgumentParser(
+        prog="easydateien",
+        formatter_class=lambda prog: SingleLineHelpFormatter(prog, max_help_position=16, width=220),
+        description="Minimalistischer, hocheffizienter Terminal-Dateimanager für macOS.",
+        add_help=False
+    )
+    parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.2.0")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.3.0", help="Programmversion anzeigen")
+    parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
+
     if args.config:
         from easydateien_konfigurator import run_konfigurator
         run_konfigurator(standalone=True)
         return
+
     app = EasyDateienApp(initial_path=args.pfad)
     app.run()
 
-if __name__ == "__main__": main()
+
+if __name__ == "__main__":
+    main()
