@@ -541,8 +541,6 @@ class EasyDateienApp:
 
         self.last_click_time: float = 0.0
         self.last_click_idx: Optional[int] = None
-        self.last_right_arrow_time: float = 0.0
-        self.last_right_arrow_path: str = ""
         self.last_layout: Dict = {}
 
         self.show_console: bool = self.config.get("show_console", False)
@@ -630,7 +628,7 @@ class EasyDateienApp:
         except Exception as e:
             self.set_status(f"Fehler: {e}", "error")
 
-    def open_in_editor(self, item: FileEntry, fd: Optional[int], old_settings):
+    def open_in_editor(self, item: FileEntry, fd: Optional[int], old_settings, editor: str = "nano"):
         if fd is not None and old_settings is not None:
             mouse_on = self.config.get("mouse_support", True)
             if mouse_on:
@@ -639,7 +637,12 @@ class EasyDateienApp:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
             sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
-            editor_cmd = self.config.get("text_editor", "nano %s").replace("%s", f'"{item.path}"')
+            if editor == "vim":
+                editor_cmd = f'vim "{item.path}"'
+            elif editor == "nano":
+                editor_cmd = f'nano "{item.path}"'
+            else:
+                editor_cmd = self.config.get("text_editor", "nano %s").replace("%s", f'"{item.path}"')
             try:
                 subprocess.run(editor_cmd, shell=True)
             finally:
@@ -1454,7 +1457,7 @@ class EasyDateienApp:
                     mode_lbl = f"{C_BOLD_BLUE}NOR{C_RESET}"
 
                 left_b = f" {mode_lbl}  "
-                ctrl = f"{C_GRAY}[↑↓] Nav  [Enter] Open  [e] Edit  [n] Neu  [r] Rename  [Z/u] Undo  [d] Del  [y/c] Copy  [x] Cut  [p] Paste  [g] Go  [q] Quit{C_RESET}"
+                ctrl = f"{C_GRAY}[↑↓] Nav  [Enter] Open  [e] Nano  [o] Vim  [n] Neu  [r] Rename  [Z/u] Undo  [d] Del  [y/c] Copy  [x] Cut  [p] Paste  [g] Go  [q] Quit{C_RESET}"
                 avail_ctrl = max(1, term_cols - str_width(left_b))
                 st_line = pad_to_width(f"{left_b}{truncate_to_width(ctrl, avail_ctrl)}", term_cols)
 
@@ -2015,24 +2018,19 @@ class EasyDateienApp:
                         if item.is_dir:
                             self.change_directory(item.path)
                             needs_redraw = True
-                        else:
-                            now = datetime.datetime.now().timestamp()
-                            if (now - self.last_right_arrow_time < 0.45) and (self.last_right_arrow_path == item.path):
-                                self.last_right_arrow_time = 0.0
-                                self.last_right_arrow_path = ""
-                                self.open_in_editor(item, fd, old_settings)
-                                needs_redraw = True
-                            else:
-                                self.last_right_arrow_time = now
-                                self.last_right_arrow_path = item.path
-                                self.set_status(f"Doppel-→ oder e für Editor ({item.name})", "info")
-                                needs_redraw = True
                     continue
-                elif key in ("e", "o"):
+                elif key == "e":
                     if self.items:
                         item = self.items[self.selected_idx]
                         if not item.is_dir:
-                            self.open_in_editor(item, fd, old_settings)
+                            self.open_in_editor(item, fd, old_settings, editor="nano")
+                            needs_redraw = True
+                    continue
+                elif key == "o":
+                    if self.items:
+                        item = self.items[self.selected_idx]
+                        if not item.is_dir:
+                            self.open_in_editor(item, fd, old_settings, editor="vim")
                             needs_redraw = True
                     continue
                 elif key == "ENTER":

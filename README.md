@@ -42,8 +42,9 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
   - `↑` / `k`: Nach oben navigieren  
   - `↓` / `j`: Nach unten navigieren  
   - `Enter`: Datei oder Ordner mit macOS-Standardbefehl (`open`) öffnen (bei Ordnern öffnet sich der Finder)  
-  - `→` / `l` (einfach): In Ordner hineingehen (Navigation innerhalb von EasyDateien)  
-  - `→` / `l` (doppelt gedrückt auf Datei): Datei direkt im Terminal-Editor `nano` bearbeiten  
+  - `→` / `l`: In Ordner hineingehen (Navigation innerhalb von EasyDateien)  
+  - `e`: Datei direkt im Terminal-Editor `nano` bearbeiten  
+  - `o`: Datei direkt im Terminal-Editor `vim` bearbeiten  
   - `←` / `h`: Zum übergeordneten Ordner zurückkehren  
   - `g d`: Direkt zu `~/Downloads` springen  
   - `g f`: Direkt zu `~/Documents` springen  
@@ -51,8 +52,8 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
   - `g i`: Interaktive Pfadeingabe mit Eingabezeile  
   - `g p`: Zu im Zwischenspeicher liegendem Pfad navigieren  
 
-- **Editor `nano` per Doppeldruck auf `→`:**  
-  Wird die rechte Pfeiltaste auf einer Datei doppelt gedrückt, öffnet sich diese sofort im Terminal-Editor `nano` (oder dem in der Konfiguration hinterlegten Editor). Nach Beenden mit `Ctrl+X` kehrt man nahtlos ohne Flackern zurück.
+- **Editor-Integration (`nano` mit `e`, `vim` mit `o`):**  
+  Dateien können blitzschnell im gewünschten Editor geöffnet werden: Drücken der Taste `e` öffnet die markierte Datei sofort in `nano`, Taste `o` öffnet sie in `vim`. Nach Beenden des Editors kehrt man nahtlos ohne Flackern zurück.
 
 - **Vorschau bewusst deaktiviert:**  
   Für maximale Darstellungsgeschwindigkeit und minimale Ablenkung ist die Dateivorschau dauerhaft deaktiviert; bei markierten Dateien werden in der rechten Spalte übersichtliche Metadaten (Größe, Datum, Zugriffsrechte) angezeigt.
@@ -74,9 +75,9 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
   - `d`: Datei(en) mit Sicherheitsabfrage `(y/N)` in den **macOS-Papierkorb** verschieben (`trash`)  
   - `g g` / `G`: Blitzschnell an den Anfang (`g g`) oder ans Ende (`G`) der Liste springen  
   - `.` / `z`: Versteckte Dateien ein- oder ausblenden  
-  - `o`: Datei explizit mit der macOS-Standardanwendung öffnen  
-  - `e`: Datei in TextEdit öffnen  
-  - `r`: Datei im Finder anzeigen (`reveal`)  
+  - `e`: Datei direkt in nano öffnen / bearbeiten  
+  - `o`: Datei direkt in vim öffnen / bearbeiten  
+  - `r`: Datei / Ordner umbenennen  
 
 - **Integrierte Konsole & Terminal (Taste `t`):**  
   EasyDateien besitzt ein vollständig integriertes Terminal-Panel:
@@ -214,7 +215,7 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
 | :--- | :--- |
 | `↑` / `k` | Cursor nach oben bewegen |
 | `↓` / `j` | Cursor nach unten bewegen |
-| `→` / `l` | In Verzeichnis wechseln (bei Datei: Doppel-`→` öffnet `nano`) |
+| `→` / `l` | In Verzeichnis wechseln |
 | `←` / `h` | In übergeordneten Ordner wechseln |
 | `Enter` | Element systemweit öffnen via `open` (Ordner öffnen im Finder) |
 | `Space` / `v` | Aktuelle Datei markieren / Markierung aufheben (`*`) |
@@ -239,9 +240,9 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
 | `t` | Integrierte Konsole / Terminal anzeigen / ausblenden |
 | `Tab` | Fokus zwischen Dateimanager und Konsole wechseln |
 | `m` | Konfigurationsmenü öffnen |
-| `o` | Datei mit macOS-Standard-App öffnen |
-| `e` | Datei mit TextEdit öffnen |
-| `r` | Datei im Finder anzeigen |
+| `e` | Datei in nano bearbeiten |
+| `o` | Datei in vim bearbeiten |
+| `r` | Datei / Ordner umbenennen |
 | `q` / `ESC` | Programm beenden (bzw. Auswahl aufheben) |
 
 ---
