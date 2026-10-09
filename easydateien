@@ -247,6 +247,38 @@ class EasyDateienApp:
             self.refresh_items()
             self.select_filename(prev_name)
 
+    def prompt_rename(self, fd: int):
+        if not self.items: return
+        item = self.items[self.selected_idx]
+        old_name = item.name
+        new_name = old_name
+        while True:
+            sys.stdout.write(f"\r{CLEAR_LINE}{BOLD}Umbenennen: {RESET}{new_name}█")
+            sys.stdout.flush()
+            k = read_key(fd, timeout=10.0)
+            if not k or k in ("ESC", "QUIT"):
+                self.status_message = "Umbenennen abgebrochen"; break
+            elif k == "ENTER":
+                new_name = new_name.strip()
+                if not new_name or new_name == old_name:
+                    self.status_message = "Umbenennen abgebrochen"; break
+                new_path = os.path.join(self.current_dir, new_name)
+                if os.path.exists(new_path):
+                    self.status_message = f"Fehler: „{new_name}“ existiert bereits!"; break
+                try:
+                    os.rename(item.path, new_path)
+                    self.refresh_items()
+                    self.select_filename(new_name)
+                    self.status_message = f"Umbenannt in: {new_name}"
+                except Exception as e:
+                    self.status_message = f"Fehler: {e}"
+                break
+            elif k == "BACKSPACE":
+                if new_name: new_name = new_name[:-1]
+            elif k in (" ", "SPACE"): new_name += " "
+            elif len(k) == 1 and k.isprintable(): new_name += k
+        self.status_expiry_moves = 0
+
     def prompt_goto_path(self, fd: int):
         p_in = ""
         while True:
@@ -466,6 +498,7 @@ class EasyDateienApp:
         targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
         if not targets: return
         base_name = os.path.basename(targets[0]) if len(targets) == 1 else f"Archiv_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        if base_name.lower().endswith(".zip"): base_name = base_name[:-4]
         dest = os.path.join(self.current_dir, f"{base_name}.zip")
         c = 1
         while os.path.exists(dest):
@@ -482,6 +515,7 @@ class EasyDateienApp:
                     else: zf.write(t, os.path.basename(t))
             self.selected_paths.clear()
             self.refresh_items()
+            self.select_filename(os.path.basename(dest))
             self.status_message = f"ZIP erstellt: {os.path.basename(dest)}"
             self.status_expiry_moves = 0
         except Exception as e:
@@ -875,7 +909,7 @@ class EasyDateienApp:
             left_b = f" {BOLD}{mode_lbl}{RESET}  "
             if self.status_message: st_line = pad_visible(f"{left_b}{self.status_message}", term_cols)
             else:
-                ctrl = "[↑↓] Nav  [Enter] open  [→] In (Doppel-→ nano)  [←] Zurück  [y/c] Copy  [x] Cut  [p] Paste  [g] Gehe zu  [t] Konsole  [q] Ende"
+                ctrl = "[↑↓] Nav  [Enter] open  [r] Rename  [z] Zip  [y/c] Copy  [x] Cut  [p] Paste  [g] Gehe zu  [t] Konsole  [q] Ende"
                 st_line = pad_visible(f"{left_b}{truncate_end(ctrl, max(1, term_cols - visible_len(left_b)))}", term_cols)
             all_lines.append(st_line)
 
@@ -974,8 +1008,7 @@ class EasyDateienApp:
                 if needs_redraw:
                     lines = self.build_screen(term_cols, term_rows)
                     for r_idx, l in enumerate(lines[:term_rows]):
-                        l_safe = truncate_end(l, term_cols - 1) if r_idx == term_rows - 1 else l
-                        sys.stdout.write(f"\033[{r_idx+1};1H\033[2K{l_safe}")
+                        sys.stdout.write(f"\033[{r_idx+1};1H\033[2K{l}")
                     sys.stdout.write("\033[J")
                     sys.stdout.flush()
                     needs_redraw = False
@@ -1114,12 +1147,19 @@ class EasyDateienApp:
                 elif key == "ENTER":
                     if self.items: self.open_with_system(self.items[self.selected_idx]); needs_redraw = True
                     continue
+                elif key == "r":
+                    self.prompt_rename(fd)
+                    needs_redraw = True
+                    continue
+                elif key in ("z", "Z"):
+                    self.create_zip_archive()
+                    needs_redraw = True
+                    continue
                 elif key == "c":
                     r, _, _ = select.select([fd], [], [], 0.04)
                     if r:
                         next_k = read_key(fd, timeout=0.01)
-                        if next_k in ("z", "Z"): self.create_zip_archive(); needs_redraw = True; continue
-                        elif next_k in ("c", "C"):
+                        if next_k in ("c", "C"):
                             if self.items:
                                 p = self.items[self.selected_idx].path
                                 copy_text_to_clipboard(p)
@@ -1146,7 +1186,7 @@ class EasyDateienApp:
                 elif key in (" ", "SPACE", "v"): self.toggle_select(); needs_redraw = True; continue
                 elif key in ("V", "a"): self.toggle_select_all(); needs_redraw = True; continue
                 elif key in ("d", "D"): self.prompt_trash(fd); needs_redraw = True; continue
-                elif key in (".", "z"):
+                elif key == ".":
                     new_h = not self.config.get("show_hidden", False)
                     self.config["show_hidden"] = new_h; self.refresh_items()
                     self.status_message = f"Versteckte Dateien: {'Ein' if new_h else 'Aus'}"
@@ -1182,6 +1222,7 @@ def main():
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
     parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.2.0")
     args = parser.parse_args()
+
     if args.config:
         from easydateien_konfigurator import run_konfigurator
         run_konfigurator(standalone=True)

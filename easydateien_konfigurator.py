@@ -19,11 +19,13 @@ KEYBINDING_ITEMS = [
     ("open", "Systemweit öffnen (open, Finder)", "[ENTER]"),
     ("select", "Element auswählen / abwählen (*)", "[SPACE, v]"),
     ("select_all", "Alle Elemente auswählen / abwählen", "[V, a]"),
+    ("rename", "Element umbenennen (r)", "[r]"),
+    ("zip", "ZIP-Archiv erstellen (z)", "[z]"),
     ("cut", "Auswahl ausschneiden (×)", "[x]"),
     ("copy", "Auswahl kopieren / yank (y / c)", "[y, c]"),
     ("paste", "Zwischenspeicher einfügen (p)", "[p]"),
     ("trash", "In den Papierkorb verschieben (d)", "[d]"),
-    ("toggle_hidden", "Versteckte Dateien umschalten (./z)", "[., z]"),
+    ("toggle_hidden", "Versteckte Dateien umschalten (.)", "[.]"),
     ("menu", "Konfigurationsmenü öffnen (m)", "[m, C]"),
     ("goto_downloads", "Gehe zu Downloads (g d)", "[gd]"),
     ("goto_documents", "Gehe zu Dokumente (g f)", "[gf]"),
@@ -31,7 +33,6 @@ KEYBINDING_ITEMS = [
     ("goto_trash", "Gehe zum Papierkorb (g t)", "[gt]"),
     ("goto_input", "Pfad manuell eingeben (g i)", "[gi]"),
     ("goto_clipboard", "Gehe zu Pfad in Zwischenablage (g p)", "[gp]"),
-    ("create_zip", "ZIP-Archiv erstellen (c z)", "[cz]"),
     ("toggle_console", "Konsole anzeigen / ausblenden (t)", "[t]"),
     ("quit", "EasyDateien beenden (q)", "[q]"),
     ("reset", "Tastenbelegungen zurücksetzen", "[Standard]"),
@@ -103,8 +104,7 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
 
 def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str):
     term_cols, term_rows = shutil.get_terminal_size((80, 24))
-    # Mindestens 2 Zeichen schmaler als Terminal -> verhindert JEDES Umbrechen/Scrollen!
-    box_w = max(24, min(term_cols - 2, 68))
+    box_w = max(24, min(term_cols - 2, 72))
     inner = max(4, box_w - 2)
     fixed_h = 7
     avail_items = max(3, term_rows - fixed_h)
@@ -115,6 +115,8 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         start = 0
         view_rows = rows
 
+    # Feste Spaltenbreite für perfekt vertikal bündige Werte [Tag]
+    lbl_col = max(16, min(40, inner - 16))
     lines = []
     lines.append("╭" + "─" * inner + "╮")
     t_disp = title if len(title) <= inner - 4 else title[:inner - 6] + ".."
@@ -126,20 +128,18 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         actual_idx = start + i
         is_sel = (actual_idx == cur_idx)
         pfx = "  ▸ " if is_sel else "    "
+        lbl_trunc = label if len(label) <= lbl_col else label[:lbl_col - 2] + ".."
         tag_str = f" {tag}" if tag else ""
-        avail_lbl = max(2, inner - len(pfx) - len(tag_str))
-        lbl_trunc = label if len(label) <= avail_lbl else label[:avail_lbl - 2] + ".."
-        pad = " " * max(0, avail_lbl - len(lbl_trunc))
-        content = f"{pfx}{lbl_trunc}{pad}{tag_str}"
-        content_padded = content.ljust(inner)[:inner]
-        if is_sel: lines.append(f"│\033[1m{content_padded}\033[0m│")
-        else: lines.append(f"│{content_padded}│")
+        base_str = f"{pfx}{lbl_trunc:<{lbl_col}}{tag_str}"
+        content = base_str.ljust(inner)[:inner]
+        if is_sel: lines.append(f"│\033[1m{content}\033[0m│")
+        else: lines.append(f"│{content}│")
     lines.append("├" + "─" * inner + "┤")
     f_disp = footer if len(footer) <= inner - 4 else footer[:inner - 6] + ".."
     lines.append("│  " + f_disp.ljust(inner - 2) + "│")
     lines.append("╰" + "─" * inner + "╯")
 
-    # Absolute Cursorpositionierung verhindert JEDES Scrollen nach oben
+    # Absolute Positionierung verhindert Zeilenumbrüche und Geisterlinien
     sys.stdout.write("\033[H")
     for r_i, l in enumerate(lines[:term_rows]):
         sys.stdout.write(f"\033[{r_i+1};1H\033[2K{l}")
@@ -166,8 +166,7 @@ def keybindings_menu(fd: int):
             try:
                 _, cx_s, cy_s = k.split(":")
                 row_i = int(cy_s) - 5
-                if 0 <= row_i < count:
-                    idx = start + row_i
+                if 0 <= row_i < count: idx = start + row_i
             except Exception: pass
             continue
         if k in ("ENTER", "SPACE"):
@@ -209,11 +208,10 @@ def main_menu(fd: int):
             try:
                 _, cx_s, cy_s = k.split(":")
                 row_i = int(cy_s) - 5
-                if 0 <= row_i < count:
-                    idx = start + row_i
+                if 0 <= row_i < count: idx = start + row_i
             except Exception: pass
             continue
-        if k in ("ENTER", "SPACE"):
+        if k in ("ENTER", "SPACE", "RIGHT"):
             act = rows[idx][0]
             if act == "divider":
                 opts = ["alle", "vertikal", "horizontal", "außen", "keine"]
@@ -234,25 +232,6 @@ def main_menu(fd: int):
             elif act == "reset":
                 cfg = dict(DEFAULT_CONFIG); save_config(cfg)
             elif act == "quit": break
-        elif k == "RIGHT":
-            act = rows[idx][0]
-            if act == "keybindings":
-                keybindings_menu(fd)
-                cfg = load_config()
-            elif act not in ("reset", "quit"):
-                if act == "divider":
-                    opts = ["alle", "vertikal", "horizontal", "außen", "keine"]
-                    cur = cfg.get("divider_style", "alle")
-                    cfg["divider_style"] = opts[(opts.index(cur) + 1) % len(opts)] if cur in opts else "alle"
-                    save_config(cfg)
-                elif act == "columns":
-                    cfg["columns_enabled"] = not cfg.get("columns_enabled", True); save_config(cfg)
-                elif act == "controls":
-                    cfg["show_controls"] = not cfg.get("show_controls", False); save_config(cfg)
-                elif act == "mouse":
-                    cfg["mouse_support"] = not cfg.get("mouse_support", True); save_config(cfg)
-                elif act == "console":
-                    cfg["show_console"] = not cfg.get("show_console", False); save_config(cfg)
     return cfg
 
 def run_konfigurator(standalone: bool = True):
