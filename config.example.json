@@ -7,6 +7,7 @@
   "columns_enabled": true,
   "divider_style": "horizontal",
   "esc_to_quit": false,
+  "mouse_support": true,
   "text_editor": "nano %s",
   "opener": "open %s",
   "edit_opener": "open -e %s",

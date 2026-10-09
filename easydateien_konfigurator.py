@@ -89,6 +89,7 @@ def get_default_config() -> dict:
         "columns_enabled": True,
         "divider_style": "horizontal",
         "esc_to_quit": False,
+        "mouse_support": True,
         "text_editor": "nano %s",
         "opener": "open %s",
         "edit_opener": "open -e %s",
@@ -149,17 +150,18 @@ def save_config(config: dict, filepath: str = CONFIG_FILE) -> bool:
         return False
 
 
-def get_divider(char: str = "─") -> str:
-    """Gibt eine horizontale Trennlinie dynamisch angepasst an die Terminalbreite zurück."""
-    try:
-        width = shutil.get_terminal_size((75, 20)).columns
-        return char * max(40, width)
-    except Exception:
-        return char * 75
+def get_divider(char: str = "─", width: int | None = None) -> str:
+    """Gibt eine horizontale Trennlinie dynamisch angepasst an die gegebene Breite zurück."""
+    if width is None:
+        try:
+            width = shutil.get_terminal_size((75, 20)).columns
+        except Exception:
+            width = 75
+    return char * max(1, width)
 
 
 def read_key(fd: int, timeout: float = 0.05) -> str:
-    """Liest einen einzelnen Tastendruck ungepuffert direkt aus dem Filedeskriptor."""
+    """Liest einen einzelnen Tastendruck oder ein Maus-Event ungepuffert direkt aus dem Filedeskriptor."""
     try:
         r, _, _ = select.select([fd], [], [], timeout)
         if not r:
@@ -181,11 +183,41 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
                 seq += c
             except Exception:
                 break
-            if len(seq) >= 5 or (len(seq) >= 2 and seq[-1:] in b"ABCDHFS~"):
+
+            # SGR-Maus-Sequenz: \x1b[<B;X;Y(M|m)
+            if seq.startswith(b"[<"):
+                if seq.endswith(b"M") or seq.endswith(b"m") or len(seq) >= 30:
+                    break
+            elif len(seq) >= 2 and seq[-1:] in b"ABCDHFS~":
+                break
+            elif len(seq) >= 6:
                 break
 
         if not seq:
             return "ESC"
+
+        # SGR-Maus-Event verarbeiten
+        if seq.startswith(b"[<") and (seq.endswith(b"M") or seq.endswith(b"m")):
+            try:
+                state = chr(seq[-1])
+                parts = seq[2:-1].decode("ascii").split(";")
+                if len(parts) == 3:
+                    btn = int(parts[0])
+                    x = int(parts[1])
+                    y = int(parts[2])
+                    if btn == 64:
+                        return "MOUSE_WHEEL_UP"
+                    elif btn == 65:
+                        return "MOUSE_WHEEL_DOWN"
+                    elif btn == 0 and state == "M":
+                        return f"MOUSE_CLICK:{x}:{y}"
+                    elif btn == 2 and state == "M":
+                        return f"MOUSE_RIGHT_CLICK:{x}:{y}"
+                    else:
+                        return f"MOUSE_EVENT:{btn}:{x}:{y}:{state}"
+            except Exception:
+                return "ESC"
+            return ""
 
         if seq in (b"[A", b"OA"):
             return "UP"
@@ -219,6 +251,19 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
         return "BACKSPACE"
     elif raw in (b"\x03", b"\x04"):
         return "QUIT"
+
+    if raw[0] >= 0xC0:
+        needed = 2 if raw[0] < 0xE0 else (3 if raw[0] < 0xF0 else 4)
+        ch_bytes = raw
+        while len(ch_bytes) < needed:
+            r, _, _ = select.select([fd], [], [], 0.03)
+            if not r:
+                break
+            ch_bytes += os.read(fd, 1)
+        try:
+            return ch_bytes.decode("utf-8")
+        except Exception:
+            return ""
 
     try:
         ch = raw.decode("utf-8")
@@ -345,7 +390,7 @@ def select_menu_interactive(
     default_idx: int = 0,
     subtitle: str | None = None,
 ) -> int | None:
-    """Interaktives Auswahldialogmenü mit flüssiger Pfeiltastennavigation im SCHNELLSTART-Design."""
+    """Interaktives Auswahldialogmenü mit flüssiger Pfeiltasten- und Mausnavigation im SCHNELLSTART-Design."""
     total = len(options)
     if total == 0:
         return None
@@ -370,13 +415,23 @@ def select_menu_interactive(
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
 
+    mouse_enabled = True
+    try:
+        cfg = load_config()
+        mouse_enabled = cfg.get("mouse_support", True)
+    except Exception:
+        pass
+
     tty.setcbreak(fd, termios.TCSADRAIN)
     sys.stdout.write(HIDE_CURSOR)
+    if mouse_enabled:
+        sys.stdout.write("\033[?1000h\033[?1006h")
     sys.stdout.write("\033[2J\033[H")
     sys.stdout.flush()
 
     last_size = None
     needs_redraw = True
+    opt_row_map = {}
 
     try:
         while True:
@@ -387,23 +442,29 @@ def select_menu_interactive(
 
             if needs_redraw:
                 term_cols, term_rows = curr_size
+                margin = "  " if term_cols >= 80 else (" " if term_cols >= 45 else "")
+                opt_row_map.clear()
                 lines = []
-                lines.append(f"\t{BOLD}{title}{RESET}")
-                lines.append(f"\t{get_divider('─')}")
+                lines.append(f"{margin}{BOLD}{title}{RESET}")
+                lines.append(f"{margin}{get_divider('─', max(1, term_cols - 2 * len(margin)))}")
                 if subtitle:
-                    lines.append(f"\t{ITALIC}{subtitle}{RESET}")
+                    lines.append(f"{margin}{ITALIC}{subtitle}{RESET}")
                     lines.append("")
 
                 fixed_lines_count = len(lines) + 2
                 avail_rows = max(3, term_rows - fixed_lines_count)
 
+                top_padding = max(0, (term_rows - (fixed_lines_count + min(total, avail_rows))) // 2)
+
                 if total <= avail_rows:
                     for idx, opt in enumerate(options):
                         is_sel = (idx == selected_idx)
+                        row_num = top_padding + len(lines) + 1
+                        opt_row_map[row_num] = idx
                         if is_sel:
-                            lines.append(f"\t  {BOLD}▸ {opt}{RESET}")
+                            lines.append(f"{margin}  {BOLD}▸ {opt}{RESET}")
                         else:
-                            lines.append(f"\t    {opt}")
+                            lines.append(f"{margin}    {opt}")
                 else:
                     window_size = max(2, avail_rows - 2)
                     half = window_size // 2
@@ -411,21 +472,24 @@ def select_menu_interactive(
                     end_idx = min(total, start_idx + window_size)
 
                     if start_idx > 0:
-                        lines.append(f"\t  ▲ ... ({start_idx} weitere oben)")
+                        lines.append(f"{margin}  ▲ ... ({start_idx} weitere oben)")
                     for idx in range(start_idx, end_idx):
                         opt = options[idx]
                         is_sel = (idx == selected_idx)
+                        row_num = top_padding + len(lines) + 1
+                        opt_row_map[row_num] = idx
                         if is_sel:
-                            lines.append(f"\t  {BOLD}▸ {opt}{RESET}")
+                            lines.append(f"{margin}  {BOLD}▸ {opt}{RESET}")
                         else:
-                            lines.append(f"\t    {opt}")
+                            lines.append(f"{margin}    {opt}")
                     if end_idx < total:
-                        lines.append(f"\t  ▼ ... ({total - end_idx} weitere unten)")
+                        lines.append(f"{margin}  ▼ ... ({total - end_idx} weitere unten)")
 
-                lines.append(f"\t{get_divider('─')}")
-                lines.append(f"\t{ITALIC}[↑/↓/j/k] Navigieren  [Enter/→] Auswählen  [ESC/q] Zurück{RESET}")
-
-                top_padding = max(0, (term_rows - len(lines)) // 2)
+                lines.append(f"{margin}{get_divider('─', max(1, term_cols - 2 * len(margin)))}")
+                hints = "[↑/↓/j/k] Navigieren  [Enter/→] Auswählen  [ESC/q] Zurück"
+                if len(hints) > term_cols - 2 * len(margin):
+                    hints = "[↑/↓] Nav  [Enter] OK  [ESC] Zurück"
+                lines.append(f"{margin}{ITALIC}{hints}{RESET}")
 
                 sys.stdout.write("\033[H")
                 for _ in range(top_padding):
@@ -440,7 +504,30 @@ def select_menu_interactive(
             if not key:
                 continue
 
-            if key in ("UP", "k"):
+            if key == "MOUSE_WHEEL_UP":
+                selected_idx = (selected_idx - 1) % total
+                needs_redraw = True
+            elif key == "MOUSE_WHEEL_DOWN":
+                selected_idx = (selected_idx + 1) % total
+                needs_redraw = True
+            elif key.startswith("MOUSE_CLICK:"):
+                parts = key.split(":")
+                if len(parts) == 3:
+                    try:
+                        click_y = int(parts[2])
+                        if click_y in opt_row_map:
+                            clicked_opt = opt_row_map[click_y]
+                            if clicked_opt == selected_idx:
+                                return clicked_opt
+                            else:
+                                selected_idx = clicked_opt
+                                needs_redraw = True
+                    except Exception:
+                        pass
+                continue
+            elif key.startswith("MOUSE_"):
+                continue
+            elif key in ("UP", "k"):
                 selected_idx = (selected_idx - 1) % total
                 needs_redraw = True
             elif key in ("DOWN", "j", "TAB"):
@@ -461,6 +548,9 @@ def select_menu_interactive(
                 if 1 <= val <= total:
                     return val - 1
     finally:
+        if mouse_enabled:
+            sys.stdout.write("\033[?1006l\033[?1000l")
+            sys.stdout.flush()
         sys.stdout.write(SHOW_CURSOR)
         sys.stdout.flush()
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -633,6 +723,8 @@ def run_konfigurator() -> dict:
         cols_status = "[Ein]" if cols_enabled else "[Aus]"
         esc_quit = cfg.get("esc_to_quit", False)
         esc_status = "[Ein]" if esc_quit else "[Aus]"
+        mouse_supp = cfg.get("mouse_support", True)
+        mouse_status = "[Ein]" if mouse_supp else "[Aus]"
         div_style = cfg.get("divider_style", "horizontal").lower()
         div_display = {"horizontal": "Horizontal", "vertikal": "Vertikal", "keine": "Keine"}.get(div_style, "Horizontal")
         editor_cmd = cfg.get("text_editor", "nano %s")
@@ -641,6 +733,7 @@ def run_konfigurator() -> dict:
         menu_items = [
             "Tastenbelegungen ansehen & anpassen",
             f"Spaltendarstellung:                 {BOLD}{cols_status}{RESET}",
+            f"Maussteuerung:                     {BOLD}{mouse_status}{RESET}",
             f"Trennungslinien:                   {BOLD}[{div_display}]{RESET}",
             f"Mit ESC beenden:                   {BOLD}{esc_status}{RESET}",
             f"Versteckte Dateien anzeigen:       {BOLD}{hidden_status}{RESET}",
@@ -659,7 +752,7 @@ def run_konfigurator() -> dict:
             subtitle="Konfiguration wird automatisch in ~/.config/easydateien/config.json gesichert",
         )
 
-        if choice is None or choice == 11:
+        if choice is None or choice == 12:
             break
         elif choice == 0:
             menu_keybindings(cfg)
@@ -668,41 +761,45 @@ def run_konfigurator() -> dict:
             cfg["columns_enabled"] = not cfg.get("columns_enabled", True)
             save_config(cfg)
         elif choice == 2:
+            # Maussteuerung ein/aus
+            cfg["mouse_support"] = not cfg.get("mouse_support", True)
+            save_config(cfg)
+        elif choice == 3:
             # Trennungslinien vertikal / horizontal / keine
             menu_dividers(cfg)
-        elif choice == 3:
+        elif choice == 4:
             # Mit ESC beenden ein/aus
             cfg["esc_to_quit"] = not cfg.get("esc_to_quit", False)
             save_config(cfg)
-        elif choice == 4:
+        elif choice == 5:
             # Versteckte Dateien ein/aus
             cfg["show_hidden"] = not cfg.get("show_hidden", False)
             save_config(cfg)
-        elif choice == 5:
+        elif choice == 6:
             # Text-Editor bearbeiten
             prompt = "Text-/Code-Editor-Befehl eingeben (%s = Dateipfad, z. B. nano %s): "
             new_ed = edit_line_interactive(prompt, initial=cfg.get("text_editor", "nano %s"))
             if new_ed and new_ed.strip():
                 cfg["text_editor"] = new_ed.strip()
                 save_config(cfg)
-        elif choice == 6:
+        elif choice == 7:
             # Standard-Öffner bearbeiten
             prompt = "Standard-Öffner-Befehl eingeben (%s = Dateipfad): "
             new_opener = edit_line_interactive(prompt, initial=cfg.get("opener", "open %s"))
             if new_opener and new_opener.strip():
                 cfg["opener"] = new_opener.strip()
                 save_config(cfg)
-        elif choice == 7:
-            menu_sort_criteria(cfg)
         elif choice == 8:
+            menu_sort_criteria(cfg)
+        elif choice == 9:
             # Sortierrichtung umkehren
             cfg["sort_reverse"] = not cfg.get("sort_reverse", True)
             save_config(cfg)
-        elif choice == 9:
+        elif choice == 10:
             # Ordner zuerst
             cfg["sort_dir_first"] = not cfg.get("sort_dir_first", True)
             save_config(cfg)
-        elif choice == 10:
+        elif choice == 11:
             # Reset auf Standardwerte
             cfg = get_default_config()
             save_config(cfg)

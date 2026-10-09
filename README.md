@@ -15,18 +15,27 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
 - **Monochrome Typografie (ohne ANSI-Farben):**  
   Verzichtet bewusst auf bunte ANSI-Farbcodes und setzt ausschließlich auf standardisierte typografische Auszeichnungen (Fettdruck und Kursivschrift) des jeweiligen Terminal-Farbschemas. Garantiert makellose Lesbarkeit auf sowohl hellen als auch dunklen Hintergründen.
 
-- **Benutzeroberfläche im SCHNELLSTART-Design:**  
-  Strukturierter, vertikal austarierter Aufbau mit dezenten Trennlinien, präzisem Cursor (`▸`), klaren Spalten für Dateigröße und Änderungsdatum sowie reaktiver Status- und Befehlszeile.
+- **Benutzeroberfläche im SCHNELLSTART-Design & volle Fensterfüllung:**  
+  Strukturierter, vertikal austarierter Aufbau mit dezenten Trennlinien, präzisem Cursor (`▸`) und reaktiver Status- und Befehlszeile. Der gesamte Terminal-Viewport wird wie bei Yazi bis zum unteren Rand ausgefüllt, sodass Trennlinien und Spalten auch bei wenigen Dateien durchgängig sauber anliegen.
 
 - **Volladaptive Größenanpassung (Window-Resize in Echtzeit):**  
-  Reagiert unverzüglich auf jede Veränderung der Terminalfenstergröße (`SIGWINCH`). Sämtliche Spaltenbreiten, Pfadkürzungen (`...`) und Fenstergrenzen werden in Echtzeit mathematisch exakt neu berechnet — kein Zeilenumbruch, kein Bildschirmflackern.
+  Reagiert unverzüglich auf jede Veränderung der Terminalfenstergröße (`SIGWINCH`). Sämtliche Spaltenbreiten, Randabstände und Fenstergrenzen werden in Echtzeit mathematisch exakt berechnet. Zu lange Datei- und Ordnernamen werden dynamisch berechnet und am Ende sauber mit `...` abgeschnitten — kein Zeilenumbruch, kein Bildschirmflackern, selbst auf kleinsten Fenstern (< 40 Zeichen Breite oder < 8 Zeilen Höhe).
 
 - **Dynamische Spaltenanzahl (Miller-Columns nach Yazi-Vorbild):**  
   Passt die Anzahl der angezeigten Spalten vollautomatisch und flüssig an die Breite des Terminalfensters an:  
-  - **Schmale Fenster (< 70 Zeichen):** 1 Spalte (Fokus auf aktuellen Ordner mit maximaler Zeichenbreite für Dateinamen, Größe und Datum)  
-  - **Mittlere Fenster (70–110 Zeichen):** 2 Spalten (Eltern-Ordner links zur Orientierung + Aktueller Ordner rechts)  
-  - **Breite Fenster (> 110 Zeichen):** 3 Spalten (Eltern-Ordner links + Aktueller Ordner mittig + Kindordner-Inhalt bzw. Datei-Details rechts)  
-  - Über das Konfigurationsmenü kann die Spaltenanzahl bei Bedarf auch dauerhaft auf 1, 2 oder 3 Spalten festgelegt werden.
+  - **Schmale Fenster (< 60 Zeichen):** 1 Spalte (Fokus auf aktuellen Ordner mit maximaler Zeichenbreite für Dateinamen)  
+  - **Mittlere Fenster (60–100 Zeichen):** 2 Spalten (Eltern-Ordner links zur Orientierung + Aktueller Ordner rechts)  
+  - **Breite Fenster (>= 100 Zeichen):** 3 Spalten (Eltern-Ordner links + Aktueller Ordner mittig + Kindordner-Inhalt bzw. Datei-Details rechts)  
+  - Über das Konfigurationsmenü kann die Spaltendarstellung bei Bedarf ein- oder ausgeschaltet werden.
+
+- **Vollständige Mausnavigation & Scrollen:**  
+  Durch das gesamte Programm kann mit der Maus navigiert werden:  
+  - **Mausrad nach oben / unten:** Flüssiges Scrollen durch die Dateiliste  
+  - **Linksklick:** Element auswählen; erneuter Klick auf das ausgewählte Element oder Doppelklick öffnet die Datei in `nano` / Standard-App bzw. betritt den Ordner  
+  - **Klick auf linke Spalte:** Sofortiges Zurückwechseln in den übergeordneten Ordner  
+  - **Klick auf rechte Spalte:** Kindordner betreten bzw. Datei-Details öffnen  
+  - **Rechtsklick:** Element markieren bzw. Markierung umschalten (`*`)  
+  - Im Konfigurationsmenü über `Maussteuerung: [Ein / Aus]` jederzeit anpassbar.
 
 - **Tastaturnavigation wie bei Yazi:**  
   Flüssige Steuerung über Standard-Pfeiltasten (`↑`, `↓`, `←`, `→`) oder klassische Vim-Keys (`h`, `j`, `k`, `l`).  
@@ -46,11 +55,14 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
 - **Vorschau bewusst deaktiviert:**  
   Für maximale Darstellungsgeschwindigkeit und minimale Ablenkung ist die Dateivorschau dauerhaft deaktiviert.
 
-- **Auswahldarstellung & Dateioperationen:**  
-  - `Space` / `v`: Datei oder Ordner markieren / abwählen (visuelle Markierung `[✓]`) und Cursor eine Zeile weiterrücken  
+- **Auswahldarstellung ohne störende Klammern & Dateioperationen:**  
+  - Auswahl: `*` (z. B. `▸ * datei.txt`)  
+  - Ausschneiden (Cut): `×` (z. B. `  × datei.txt`)  
+  - Kopieren: `+` (z. B. `  + datei.txt`)  
+  - `Space` / `v`: Datei oder Ordner markieren / abwählen (`*`) und Cursor eine Zeile weiterrücken  
   - `V` / `a`: Alle sichtbaren Dateien auf einmal markieren oder abwählen  
-  - `x`: Markierte Dateien (oder aktuelle Datei) zum **Ausschneiden** vormerken (`[X]`)  
-  - `c`: Markierte Dateien (oder aktuelle Datei) zum **Kopieren** vormerken (`[C]`)  
+  - `x`: Markierte Dateien (oder aktuelle Datei) zum **Ausschneiden** vormerken (`×`)  
+  - `c`: Markierte Dateien (oder aktuelle Datei) zum **Kopieren** vormerken (`+`)  
   - `p`: Vormerkung im aktuellen Verzeichnis **einsetzen / einfügen** (inkl. automatischer Erkennung und Umbenennung bei Namenskollisionen)  
   - `d`: Datei(en) mit Sicherheitsabfrage `(y/N)` in den **macOS-Papierkorb** verschieben (`trash`)  
   - `c z`: Ausgewählte Dateien als ZIP-Archiv komprimieren  
@@ -63,6 +75,7 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
   Wie bei SCHNELLSTART verfügt EasyDateien über einen vollwertigen interaktiven Konfigurator:
   - **Tastenbelegungen bearbeiten:** Jede Aktion kann interaktiv auf eine neue Taste umbelegt oder mit Alternativtasten belegt werden.
   - **Spaltendarstellung:** `[Ein]` / `[Aus]` (Ein = mehrspaltiges Miller-Layout, Aus = klassische 1-Spalten-Ansicht).
+  - **Maussteuerung:** `[Ein]` / `[Aus]` umschalten.
   - **Trennungslinien:** `[Horizontal]`, `[Vertikal]` oder `[Keine]` für ein puristisches Layout.
   - **Mit ESC beenden:** `[Ein]` / `[Aus]` (standardmäßig deaktiviert; ESC hebt stattdessen Auswahlen/Zwischenspeicher auf).
   - **Versteckte Dateien anzeigen:** `[Ein]` / `[Aus]` umschalten.
@@ -202,6 +215,20 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
 | `e` | Datei mit TextEdit öffnen |
 | `r` | Datei im Finder anzeigen |
 | `q` / `ESC` | Programm beenden (bzw. Auswahl aufheben) |
+
+---
+
+## Maus-Referenz
+
+| Maus-Aktion | Funktion |
+| :--- | :--- |
+| **Mausrad nach oben / unten** | Cursor in der aktuellen Spalte nach oben / unten bewegen |
+| **Linksklick auf Eintrag** | Element auswählen |
+| **Linksklick auf ausgewähltes Element / Doppelklick** | Datei öffnen (Text/Code in `nano`, Medien via `open`) bzw. Ordner betreten |
+| **Linksklick auf linke Spalte** | Zum übergeordneten Ordner zurückkehren |
+| **Linksklick auf rechte Spalte** | Kindordner betreten bzw. Datei-Details öffnen |
+| **Linksklick auf Pfadzeile (oben)** | Interaktive Pfadeingabe (`goto`) starten |
+| **Rechtsklick auf Eintrag** | Element-Auswahl umschalten (`*`) |
 
 ---
 
