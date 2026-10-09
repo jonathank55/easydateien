@@ -377,7 +377,8 @@ def get_file_type_desc(item: FileEntry) -> str:
 
 def get_file_colored_name(item: FileEntry) -> str:
     """Formatiert den Dateinamen mit dezenten typbezogenen Farbakzenten."""
-    name_disp = item.name + ("/" if item.is_dir else ("@" if item.is_symlink else ""))
+    suffix = "/" if (item.is_dir and not item.name.endswith("/")) else ("@" if (item.is_symlink and not item.name.endswith("@")) else "")
+    name_disp = f"{item.name}{suffix}"
     if item.is_dir:
         return f"{C_BOLD_BLUE}{name_disp}{C_RESET}"
     if item.is_symlink:
@@ -1271,7 +1272,7 @@ class EasyDateienApp:
 
                 if w_mid >= 26:
                     avail_n = max(3, w_mid - prefix_len - 10)
-                    n_trunc = truncate_to_width(it.name + ("/" if it.is_dir else ""), avail_n)
+                    n_trunc = truncate_to_width(it.name, avail_n - (1 if it.is_dir else 0))
                     it_fake = FileEntry(it.path, n_trunc)
                     it_fake.is_dir = it.is_dir
                     it_fake.is_symlink = it.is_symlink
@@ -1285,7 +1286,7 @@ class EasyDateienApp:
                     cell_mid = pad_to_width(l_part, w_mid - 10) + s_part
                 else:
                     avail_n = max(2, w_mid - prefix_len)
-                    n_trunc = truncate_to_width(it.name + ("/" if it.is_dir else ""), avail_n)
+                    n_trunc = truncate_to_width(it.name, avail_n - (1 if it.is_dir else 0))
                     it_fake = FileEntry(it.path, n_trunc)
                     it_fake.is_dir = it.is_dir
                     it_fake.is_symlink = it.is_symlink
@@ -1310,7 +1311,7 @@ class EasyDateienApp:
                         c_size = format_size(c_it.size) if not c_it.is_dir else ""
                         if w_right >= 22 and c_size:
                             avail_c = max(3, w_right - 2 - 10)
-                            c_trunc = truncate_to_width(c_it.name + ("/" if c_it.is_dir else ""), avail_c)
+                            c_trunc = truncate_to_width(c_it.name, avail_c - (1 if c_it.is_dir else 0))
                             c_it_fake = FileEntry(c_it.path, c_trunc)
                             c_it_fake.is_dir = c_it.is_dir
                             c_it_fake.is_symlink = c_it.is_symlink
@@ -1320,7 +1321,7 @@ class EasyDateienApp:
                             cell_right = pad_to_width(f"  {c_styled}", w_right - 10) + f"  {C_GRAY}{c_size:>8}{C_RESET}"
                         else:
                             avail_c = max(3, w_right - 3)
-                            c_trunc = truncate_to_width(c_it.name + ("/" if c_it.is_dir else ""), avail_c)
+                            c_trunc = truncate_to_width(c_it.name, avail_c - (1 if c_it.is_dir else 0))
                             c_it_fake = FileEntry(c_it.path, c_trunc)
                             c_it_fake.is_dir = c_it.is_dir
                             c_it_fake.is_symlink = c_it.is_symlink
