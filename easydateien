@@ -714,7 +714,7 @@ class EasyDateienApp:
         lines_above: List[str] = []
 
         if not self.console_output_lines:
-            lines_above.append(pad_visible(f"  {ITALIC}Terminal aktiv ({short_dir}){RESET}", width))
+            lines_above.append(pad_visible(f"  {ITALIC} ({short_dir}){RESET}", width))
             while len(lines_above) < num_output_rows:
                 lines_above.append(" " * width)
         else:
@@ -1345,8 +1345,8 @@ class EasyDateienApp:
         if div_style not in ("alle", "vertikal", "horizontal", "außen", "keine"):
             div_style = "vertikal"
 
-        has_top_border = (div_style in ("vertikal", "horizontal", "außen")) and (term_rows >= 4)
-        has_bottom_border = (div_style in ("vertikal", "horizontal", "außen")) and (term_rows >= 4)
+        has_top_border = (div_style in ("alle", "vertikal", "horizontal", "außen")) and (term_rows >= 4)
+        has_bottom_border = (div_style in ("alle", "vertikal", "horizontal", "außen")) and (term_rows >= 4)
 
         # Zeilenbudget berechnen
         consumed = 1  # path_line
@@ -1386,18 +1386,18 @@ class EasyDateienApp:
         if active_console and console_pos == "rechts":
             if term_cols >= 90:
                 eff_cols = 3
-                avail = max(10, term_cols - 4 if div_style == "vertikal" else (term_cols - 2 if div_style == "außen" else term_cols - 4))
+                avail = max(10, term_cols - 4 if div_style in ("vertikal", "alle") else (term_cols - 2 if div_style == "außen" else term_cols - 4))
                 w_left = max(6, int(avail * 0.16))
                 w_mid = max(20, int(avail * 0.38))
                 w_right = avail - w_left - w_mid
             else:
                 eff_cols = 2
-                avail = max(8, term_cols - 3 if div_style == "vertikal" else (term_cols - 2 if div_style == "außen" else term_cols - 2))
+                avail = max(8, term_cols - 3 if div_style in ("vertikal", "alle") else (term_cols - 2 if div_style == "außen" else term_cols - 2))
                 w_left = 0
                 w_mid = max(20, int(avail * 0.45))
                 w_right = avail - w_mid
 
-            if div_style == "vertikal":
+            if div_style in ("vertikal", "alle"):
                 top_line = f"╭{'─' * w_left}┬{'─' * w_mid}┬{'─' * w_right}╮" if eff_cols == 3 else f"╭{'─' * w_mid}┬{'─' * w_right}╮"
                 bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}╯" if eff_cols == 3 else f"╰{'─' * w_mid}┴{'─' * w_right}╯"
             elif div_style == "außen":
@@ -1411,18 +1411,18 @@ class EasyDateienApp:
         elif active_console and console_pos == "links":
             if term_cols >= 90:
                 eff_cols = 3
-                avail = max(10, term_cols - 4 if div_style == "vertikal" else (term_cols - 2 if div_style == "außen" else term_cols - 4))
+                avail = max(10, term_cols - 4 if div_style in ("vertikal", "alle") else (term_cols - 2 if div_style == "außen" else term_cols - 4))
                 w_left = max(20, int(avail * 0.42))
                 w_mid = max(20, int(avail * 0.36))
                 w_right = avail - w_left - w_mid
             else:
                 eff_cols = 2
-                avail = max(8, term_cols - 3 if div_style == "vertikal" else (term_cols - 2 if div_style == "außen" else term_cols - 2))
+                avail = max(8, term_cols - 3 if div_style in ("vertikal", "alle") else (term_cols - 2 if div_style == "außen" else term_cols - 2))
                 w_left = max(20, int(avail * 0.48))
                 w_mid = avail - w_left
                 w_right = 0
 
-            if div_style == "vertikal":
+            if div_style in ("vertikal", "alle"):
                 top_line = f"╭{'─' * w_left}┬{'─' * w_mid}┬{'─' * w_right}╮" if eff_cols == 3 else f"╭{'─' * w_left}┬{'─' * w_mid}╮"
                 bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}╯" if eff_cols == 3 else f"╰{'─' * w_left}┴{'─' * w_mid}╯"
             elif div_style == "außen":
@@ -1434,7 +1434,7 @@ class EasyDateienApp:
                 bot_line = "─" * term_cols
 
         else:
-            if div_style == "vertikal":
+            if div_style in ("vertikal", "alle"):
                 if eff_cols == 3:
                     avail = max(10, term_cols - 4)
                     w_left = max(6, int(avail * 0.16))
@@ -1765,7 +1765,7 @@ class EasyDateienApp:
                 cell_right = ""
 
             # Zeile zusammensetzen je nach Trennungslinien-Stil
-            if div_style == "vertikal":
+            if div_style in ("vertikal", "alle"):
                 if eff_cols == 1:
                     row_line = f"│{cell_mid}│"
                 elif eff_cols == 2:
@@ -1817,7 +1817,7 @@ class EasyDateienApp:
 
         # Bei unten liegender Konsole: Trenner und Konsolenzeilen einfügen
         if active_console and console_pos == "unten" and console_h > 0:
-            if div_style == "vertikal":
+            if div_style in ("vertikal", "alle"):
                 if eff_cols == 3:
                     mid_sep = f"├{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}┤"
                 elif eff_cols == 2:
@@ -1882,7 +1882,7 @@ class EasyDateienApp:
                     self.console_focused = False
             elif console_pos == "rechts":
                 col_x = x - 1
-                if div_style == "vertikal":
+                if div_style in ("vertikal", "alle"):
                     in_console = (col_x >= (w_left + w_mid + 3)) if eff_cols == 3 else (col_x >= (w_mid + 2))
                 elif div_style == "außen":
                     in_console = (col_x >= (w_left + w_mid + 5)) if eff_cols == 3 else (col_x >= (w_mid + 3))
@@ -1907,7 +1907,7 @@ class EasyDateienApp:
         if 0 <= file_row < avail_rows:
             col_x = x - 1  # 0-basiert
 
-            if div_style == "vertikal":
+            if div_style in ("vertikal", "alle"):
                 in_left = (eff_cols >= 2 and 1 <= col_x <= w_left)
                 in_mid = (eff_cols == 1 and 1 <= col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 1 + w_mid))
                 in_right = (eff_cols == 3 and col_x >= (w_left + w_mid + 3))
@@ -1978,7 +1978,7 @@ class EasyDateienApp:
         file_row = (y - 1) - hdr_count
         if 0 <= file_row < avail_rows:
             col_x = x - 1
-            if div_style == "vertikal":
+            if div_style in ("vertikal", "alle"):
                 in_mid = (eff_cols == 1 and 1 <= col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 1 + w_mid))
             elif div_style == "außen":
                 in_mid = (eff_cols == 1 and 1 <= col_x <= w_mid) or (eff_cols >= 2 and (w_left + 3) <= col_x <= (w_left + 2 + w_mid))

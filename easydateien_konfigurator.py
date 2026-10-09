@@ -134,7 +134,7 @@ def get_default_config() -> dict:
     }
 
 
-DIVIDER_OPTIONS = ["vertikal", "horizontal", "außen", "alle", "keine"]
+DIVIDER_OPTIONS = ["alle", "vertikal", "horizontal", "außen", "keine"]
 CONSOLE_POS_OPTIONS = ["unten", "rechts", "links"]
 
 
@@ -753,7 +753,7 @@ def run_konfigurator(standalone: bool = True) -> dict:
     needs_redraw = True
     opt_row_map = {}
 
-    DIVIDER_OPTIONS = ["vertikal", "horizontal", "außen", "alle", "keine"]
+    DIVIDER_OPTIONS = ["alle", "vertikal", "horizontal", "außen", "keine"]
     CONSOLE_POS_OPTIONS = ["unten", "rechts", "links"]
     SORT_OPTIONS = ["mtime", "name", "size", "ext"]
 
