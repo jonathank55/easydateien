@@ -58,39 +58,35 @@ DEFAULT_CONFIG = {
 }
 
 KEYBINDING_ITEMS = [
-    ("up", "Cursor nach oben bewegen", "[UP, k]"),
-    ("down", "Cursor nach unten bewegen", "[DOWN, j]"),
-    ("page_up", "Seite nach oben blättern", "[PAGE_UP]"),
-    ("page_down", "Seite nach unten blättern", "[PAGE_DOWN]"),
-    ("left", "Übergeordnetes Verzeichnis (Zurück)", "[LEFT, h]"),
-    ("right", "Ordner betreten", "[RIGHT, l]"),
-    ("open", "Systemweit öffnen (open, Finder)", "[ENTER]"),
+    ("up", "Cursor nach oben bewegen", "[↑]"),
+    ("down", "Cursor nach unten bewegen", "[↓]"),
+    ("left", "Übergeordnetes Verzeichnis öffnen", "[←]"),
+    ("right", "Ordner betreten", "[→]"),
+    ("page_up", "Seite nach oben blättern", "[Bild↑]"),
+    ("page_down", "Seite nach unten blättern", "[Bild↓]"),
+    ("open", "Systemweit mit Standardprogramm öffnen", "[Eingabe]"),
     ("nano", "In Nano bearbeiten", "[e]"),
     ("vim", "In Vim bearbeiten", "[o]"),
-    ("new", "Neue Datei / neuen Ordner anlegen", "[n]"),
-    ("search", "Suchen / Schnellfilter", "[/]"),
-    ("sort", "Sortierung umschalten (Datum/Name/Größe/Typ)", "[s]"),
-    ("select", "Element auswählen / abwählen (*)", "[SPACE, v]"),
-    ("select_all", "Alle Elemente auswählen / abwählen", "[V, a]"),
-    ("rename", "Element umbenennen (r)", "[r]"),
-    ("undo", "Letzte Aktion rückgängig machen (Z / u)", "[Z, u]"),
-    ("zip", "ZIP-Archiv erstellen (z)", "[z]"),
-    ("cut", "Auswahl ausschneiden (×)", "[x]"),
-    ("copy", "Auswahl kopieren / yank (y / c)", "[y, c]"),
-    ("copy_path", "Pfad / Name kopieren (c c / c f / c d)", "[cc, cf, cd]"),
-    ("paste", "Zwischenspeicher einfügen (p)", "[p]"),
-    ("trash", "In den Papierkorb verschieben (d / Entf)", "[d, DEL]"),
-    ("toggle_hidden", "Versteckte Dateien umschalten (.)", "[.]"),
-    ("menu", "Konfigurationsmenü öffnen (m)", "[m, C]"),
-    ("goto_downloads", "Gehe zu Downloads (g d)", "[gd]"),
-    ("goto_documents", "Gehe zu Dokumente (g f)", "[gf]"),
-    ("goto_home", "Gehe zu Home-Verzeichnis (g h / ~)", "[gh, ~]"),
-    ("goto_trash", "Gehe zum Papierkorb (g t)", "[gt]"),
-    ("goto_input", "Pfad manuell eingeben (g i)", "[gi]"),
-    ("goto_clipboard", "Gehe zu Pfad in Zwischenablage (g p)", "[gp]"),
-    ("toggle_console", "Konsole anzeigen / Fokus wechseln (t / Tab)", "[t, TAB]"),
-    ("quit", "EasyDateien beenden (q)", "[q]"),
-    ("reset", "Tastenbelegungen zurücksetzen", "[Standard]"),
+    ("new", "Neue Datei oder neuen Ordner anlegen", "[n]"),
+    ("search", "Such- und Schnellfilter aktivieren", "[/]"),
+    ("sort", "Sortierkriterium umschalten", "[s]"),
+    ("select", "Auswahl des Elements umschalten", "[Leertaste]"),
+    ("select_all", "Alle sichtbaren Elemente auswählen", "[a]"),
+    ("rename", "Element umbenennen", "[r]"),
+    ("undo", "Letzte Dateiaktion rückgängig machen", "[u]"),
+    ("zip", "ZIP-Archiv aus Auswahl erstellen", "[z]"),
+    ("cut", "Auswahl zum Ausschneiden vormerken", "[x]"),
+    ("copy", "Auswahl in macOS-Zwischenablage kopieren", "[y]"),
+    ("paste", "Zwischenablage im Ordner einfügen", "[p]"),
+    ("copy_path", "Dateipfad in Zwischenablage kopieren", "[c]"),
+    ("trash", "In den Papierkorb verschieben", "[d]"),
+    ("toggle_hidden", "Versteckte Dateien ein- oder ausblenden", "[.]"),
+    ("menu", "Konfigurationsmenü öffnen", "[m]"),
+    ("goto", "Gehe-zu-Menü öffnen", "[g]"),
+    ("home", "Direkt zum Benutzerordner wechseln", "[~]"),
+    ("toggle_console", "Integrierte Konsole umschalten", "[t]"),
+    ("quit", "EasyDateien beenden", "[q]"),
+    ("reset", "Auf Standardwerte zurücksetzen", "[Standard]"),
     ("back", "Zurück zum Hauptmenü", "[Zurück]"),
 ]
 
@@ -311,7 +307,7 @@ def keybindings_menu(fd: int):
             "Übersicht aller Tastenkombinationen und Befehle",
             KEYBINDING_ITEMS,
             idx,
-            "[↑↓] Navigieren  [ESC / q] Zurück zum Hauptmenü"
+            "[←↑↓→] Navigieren  [ESC] Zurück zum Hauptmenü"
         )
         k = read_key(fd)
         if not k:
@@ -373,7 +369,7 @@ def main_menu(fd: int):
                 val = ""
             rows.append((key, lbl, val))
 
-        footer_text = status_hint if status_hint else "[↑↓] Nav  [Enter / Space / →] Ändern  [ESC / q] Beenden"
+        footer_text = status_hint if status_hint else "[←↑↓→] Navigieren  [Eingabe] Ändern  [ESC] Beenden"
         start, count = render_box(
             "EASYDATEIEN KONFIGURATION",
             "Einstellungen verwalten und anpassen",

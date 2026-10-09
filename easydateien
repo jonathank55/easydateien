@@ -1414,50 +1414,50 @@ class EasyDateienApp:
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Enter] OK  [ESC] Abbruch{C_RESET}", term_cols)
+                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Eingabe] Bestätigen  [ESC] Abbrechen{C_RESET}", term_cols)
                 elif self.active_dialog == "new":
                     prompt_lbl = f"{C_BOLD_GREEN}[NEU ERSTELLEN]{C_RESET} Name (Ordner mit / am Ende): "
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Enter] Erstellen  [ESC] Abbruch{C_RESET}", term_cols)
+                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Eingabe] Erstellen  [ESC] Abbrechen{C_RESET}", term_cols)
                 elif self.active_dialog == "search":
                     prompt_lbl = f"{C_BOLD_CYAN}[FILTER / SUCHE]{C_RESET} Suchbegriff: "
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Enter] Filter aktiv  [ESC] Zurücksetzen{C_RESET}", term_cols)
+                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Eingabe] Filtern  [ESC] Abbrechen{C_RESET}", term_cols)
                 elif self.active_dialog == "goto_path":
                     prompt_lbl = f"{C_BOLD_BLUE}[GEHE ZU PFAD]{C_RESET} Pfad: "
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Enter] Wechseln  [ESC] Abbruch{C_RESET}", term_cols)
+                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Eingabe] Wechseln  [ESC] Abbrechen{C_RESET}", term_cols)
                 elif self.active_dialog == "trash_confirm":
                     targets_c = len(self.selected_paths) if self.selected_paths else 1
                     t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
-                    prompt_lbl = f"{C_BOLD_RED}[PAPIERKORB]{C_RESET} {t_name} wirklich löschen? "
-                    st_line = pad_to_width(f" {prompt_lbl}{C_BOLD}[j/n]{C_RESET}  {C_GRAY}[j/y/Enter] Ja  [n/ESC] Nein{C_RESET}", term_cols)
+                    prompt_lbl = f"{C_BOLD_RED}[PAPIERKORB]{C_RESET} {t_name} wirklich in den Papierkorb verschieben? "
+                    st_line = pad_to_width(f" {prompt_lbl} {C_GRAY}[j] Ja  [n] Nein{C_RESET}", term_cols)
                 elif self.active_dialog == "goto_menu":
                     prompt_lbl = f"{C_BOLD_BLUE}[GEHE ZU]{C_RESET} "
-                    opts = f"{C_BOLD}[d]{C_RESET} Downloads  {C_BOLD}[f]{C_RESET} Dokumente  {C_BOLD}[h]{C_RESET} Home  {C_BOLD}[t]{C_RESET} Papierkorb  {C_BOLD}[i]{C_RESET} Pfad  {C_BOLD}[p]{C_RESET} Clipboard  {C_GRAY}[ESC] Abbruch{C_RESET}"
+                    opts = f"{C_BOLD}[d]{C_RESET} Downloads  {C_BOLD}[f]{C_RESET} Dokumente  {C_BOLD}[h]{C_RESET} Benutzerordner  {C_BOLD}[t]{C_RESET} Papierkorb  {C_BOLD}[i]{C_RESET} Pfadeingabe  {C_BOLD}[p]{C_RESET} Zwischenablage  {C_GRAY}[ESC] Abbrechen{C_RESET}"
                     st_line = pad_to_width(f" {prompt_lbl}{opts}", term_cols)
                 else:
                     st_line = " " * term_cols
             else:
                 if self.show_console and self.console_focused:
-                    mode_lbl = f"{C_BOLD_GREEN}TERM{C_RESET}"
+                    mode_lbl = f"{C_BOLD_GREEN}[KONSOLE]{C_RESET}"
                 elif self.selected_paths:
-                    mode_lbl = f"{C_YELLOW}SEL {len(self.selected_paths)}{C_RESET}"
+                    mode_lbl = f"{C_YELLOW}[AUSWAHL {len(self.selected_paths)}]{C_RESET}"
                 elif self.clipboard_mode == "cut":
-                    mode_lbl = f"{C_BOLD_RED}CUT {len(self.clipboard_paths)}{C_RESET}"
+                    mode_lbl = f"{C_BOLD_RED}[AUSSCHNEIDEN {len(self.clipboard_paths)}]{C_RESET}"
                 elif self.clipboard_mode == "copy":
-                    mode_lbl = f"{C_BOLD_GREEN}CPY {len(self.clipboard_paths)}{C_RESET}"
+                    mode_lbl = f"{C_BOLD_GREEN}[KOPIEREN {len(self.clipboard_paths)}]{C_RESET}"
                 else:
-                    mode_lbl = f"{C_BOLD_BLUE}NOR{C_RESET}"
+                    mode_lbl = ""
 
-                left_b = f" {mode_lbl}  "
-                ctrl = f"{C_GRAY}[↑↓] Nav  [Enter] Open  [e] Nano  [o] Vim  [n] Neu  [r] Rename  [Z/u] Undo  [d] Del  [y/c] Copy  [x] Cut  [p] Paste  [g] Go  [q] Quit{C_RESET}"
+                left_b = f" {mode_lbl}  " if mode_lbl else " "
+                ctrl = f"{C_GRAY}[←↑↓→] Navigieren  [Eingabe] Öffnen  [e] Nano  [o] Vim  [n] Neu  [r] Umbenennen  [u] Rückgängig  [d] Papierkorb  [y] Kopieren  [x] Ausschneiden  [p] Einfügen  [g] Gehe zu  [m] Menü  [q] Beenden{C_RESET}"
                 avail_ctrl = max(1, term_cols - str_width(left_b))
                 st_line = pad_to_width(f"{left_b}{truncate_to_width(ctrl, avail_ctrl)}", term_cols)
 
