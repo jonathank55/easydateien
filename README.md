@@ -57,17 +57,22 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
 - **Vorschau bewusst deaktiviert:**  
   Für maximale Darstellungsgeschwindigkeit und minimale Ablenkung ist die Dateivorschau dauerhaft deaktiviert; bei markierten Dateien werden in der rechten Spalte übersichtliche Metadaten (Größe, Datum, Zugriffsrechte) angezeigt.
 
-- **Auswahldarstellung ohne störende Klammern & Dateioperationen:**  
+- **Auswahldarstellung & macOS-Systemzwischenablage:**  
   - Auswahl: `*` (z. B. `▸ * datei.txt`)  
   - Ausschneiden (Cut): `×` (z. B. `  × datei.txt`)  
   - Kopieren: `+` (z. B. `  + datei.txt`)  
   - `Space` / `v`: Datei oder Ordner markieren / abwählen (`*`) und Cursor eine Zeile weiterrücken  
   - `V` / `a`: Alle sichtbaren Dateien auf einmal markieren oder abwählen  
   - `x`: Markierte Dateien (oder aktuelle Datei) zum **Ausschneiden** vormerken (`×`)  
-  - `c`: Markierte Dateien (oder aktuelle Datei) zum **Kopieren** vormerken (`+`)  
-  - `p`: Vormerkung im aktuellen Verzeichnis **einsetzen / einfügen** (inkl. automatischer Erkennung und Umbenennung bei Namenskollisionen)  
+  - `y` / `c y`: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Die Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notes eingesetzt werden!  
+  - `p`: Vormerkung im aktuellen Verzeichnis **einsetzen / einfügen** (erkennt nahtlos auch zuvor im macOS Finder mit Cmd+C kopierte Dateien und verhindert Namenskollisionen automatisch)  
+  - `Y` / `X`: Zwischenspeicher leeren / Unyank (wie in Yazi)  
+  - `c z`: Ausgewählte Dateien direkt als ZIP-Archiv komprimieren (wie in Yazi via Zip-Plugin)  
+  - `c c`: Absoluten Pfad des Elements in die Zwischenablage kopieren  
+  - `c f`: Dateinamen in die Zwischenablage kopieren  
+  - `c d`: Ordnerpfad in die Zwischenablage kopieren  
   - `d`: Datei(en) mit Sicherheitsabfrage `(y/N)` in den **macOS-Papierkorb** verschieben (`trash`)  
-  - `c z`: Ausgewählte Dateien als ZIP-Archiv komprimieren  
+  - `g g` / `G`: Blitzschnell an den Anfang (`g g`) oder ans Ende (`G`) der Liste springen  
   - `.` / `z`: Versteckte Dateien ein- oder ausblenden  
   - `o`: Datei explizit mit der macOS-Standardanwendung öffnen  
   - `e`: Datei in TextEdit öffnen  
@@ -175,7 +180,7 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
     "select": ["SPACE", "v"],
     "select_all": ["V", "a"],
     "cut": ["x"],
-    "copy": ["c"],
+    "copy": ["y", "c"],
     "paste": ["p"],
     "trash": ["d"],
     "toggle_hidden": [".", "z"],
@@ -199,15 +204,22 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
 | :--- | :--- |
 | `↑` / `k` | Cursor nach oben bewegen |
 | `↓` / `j` | Cursor nach unten bewegen |
-| `→` / `l` / `Enter` | In Verzeichnis wechseln bzw. Datei in `nano` / Standard-App öffnen |
+| `→` / `l` | In Verzeichnis wechseln (bei Datei: Doppel-`→` öffnet `nano`) |
 | `←` / `h` | In übergeordneten Ordner wechseln |
-| `Space` / `v` | Aktuelle Datei markieren / Markierung aufheben |
+| `Enter` | Element systemweit öffnen via `open` (Ordner öffnen im Finder) |
+| `Space` / `v` | Aktuelle Datei markieren / Markierung aufheben (`*`) |
 | `V` / `a` | Alle Dateien markieren bzw. Auswahl aufheben |
-| `x` | Auswahl ausschneiden |
-| `c` | Auswahl kopieren |
-| `p` | Zwischenspeicher im aktuellen Ordner einfügen |
+| `y` / `c y` | Auswahl kopieren / yank (synchronisiert mit macOS-Clipboard für Finder/Mail/WhatsApp) |
+| `x` | Auswahl ausschneiden / cut (`×`) |
+| `p` | Zwischenspeicher im aktuellen Ordner einfügen (auch im Finder kopierte Dateien) |
+| `Y` / `X` | Zwischenspeicher leeren / Unyank |
+| `c z` | ZIP-Archiv aus markierten Dateien erstellen |
+| `c c` | Absoluten Dateipfad in die Zwischenablage kopieren |
+| `c f` | Dateinamen in die Zwischenablage kopieren |
+| `c d` | Ordnerpfad in die Zwischenablage kopieren |
 | `d` | In macOS-Papierkorb verschieben mit Bestätigung `(y/N)` |
-| `c z` | ZIP-Archiv aus Auswahl erstellen |
+| `g g` / `Home` | An den Anfang der Dateiliste springen |
+| `G` / `End` | An das Ende der Dateiliste springen |
 | `.` / `z` | Versteckte Dateien ein- oder ausblenden |
 | `g d` | Gehe zu `~/Downloads` |
 | `g f` | Gehe zu `~/Documents` |

@@ -22,7 +22,7 @@
     "select": ["SPACE", "v"],
     "select_all": ["V", "a"],
     "cut": ["x"],
-    "copy": ["c"],
+    "copy": ["y", "c"],
     "paste": ["p"],
     "trash": ["d"],
     "toggle_hidden": [".", "z"],

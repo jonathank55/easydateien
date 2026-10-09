@@ -64,7 +64,7 @@ except ImportError:
                 "select": ["SPACE", "v"],
                 "select_all": ["V", "a"],
                 "cut": ["x"],
-                "copy": ["c"],
+                "copy": ["y", "c"],
                 "paste": ["p"],
                 "trash": ["d"],
                 "toggle_hidden": [".", "z"],
@@ -235,6 +235,72 @@ def is_text_file(item: "FileEntry") -> bool:
     if item.name.lower() in KNOWN_TEXT_FILENAMES:
         return True
     return False
+
+
+def sync_to_macos_clipboard(paths: List[str]):
+    """Kopiert Dateipfade als echte macOS-Dateiobjekte (NSFilenamesPboardType / public.file-url) und Pfad-Text in die System-Zwischenablage."""
+    if not paths:
+        return
+    import json
+    abs_paths = [os.path.abspath(p) for p in paths]
+    paths_json = json.dumps(abs_paths)
+    text_content = "\n".join(abs_paths)
+    text_json = json.dumps(text_content)
+    js_code = f"""
+    ObjC.import("AppKit");
+    var pb = $.NSPasteboard.generalPasteboard;
+    pb.clearContents;
+    var paths = {paths_json};
+    var fileUrls = $.NSMutableArray.array;
+    for (var i = 0; i < paths.length; i++) {{
+        fileUrls.addObject($.NSURL.fileURLWithPath(paths[i]));
+    }}
+    fileUrls.addObject($.NSString.stringWithString({text_json}));
+    pb.writeObjects(fileUrls);
+    """
+    try:
+        subprocess.run(["osascript", "-l", "JavaScript", "-e", js_code], check=False, capture_output=True, timeout=2.0)
+    except Exception:
+        pass
+
+
+def copy_text_to_clipboard(text: str):
+    """Kopiert einen reinen Text in die macOS-Systemzwischenablage (pbcopy)."""
+    try:
+        p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+        p.communicate(text.encode("utf-8"), timeout=1.0)
+    except Exception:
+        pass
+
+
+def get_macos_clipboard_files() -> List[str]:
+    """Liest Dateipfade aus der macOS-Systemzwischenablage aus."""
+    js_code = """
+    ObjC.import("AppKit");
+    var pb = $.NSPasteboard.generalPasteboard;
+    var classes = $.NSArray.arrayWithObject($.NSURL.class);
+    var options = $.NSDictionary.dictionaryWithObjectForKey(
+        $.NSNumber.numberWithBool(true),
+        $.NSPasteboardURLReadingFileURLsOnlyKey
+    );
+    var urls = pb.readObjectsForClassesOptions(classes, options);
+    var res = [];
+    if (urls && urls.count > 0) {
+        for (var i = 0; i < urls.count; i++) {
+            res.push(ObjC.unwrap(urls.objectAtIndex(i).path));
+        }
+    }
+    JSON.stringify(res);
+    """
+    try:
+        proc = subprocess.run(["osascript", "-l", "JavaScript", "-e", js_code], capture_output=True, text=True, timeout=1.5)
+        if proc.returncode == 0 and proc.stdout.strip():
+            import json
+            paths = json.loads(proc.stdout.strip())
+            return [p for p in paths if os.path.exists(p)]
+    except Exception:
+        pass
+    return []
 
 
 class FileEntry:
@@ -657,7 +723,7 @@ class EasyDateienApp:
             self.status_message = f"{len(self.selected_paths)} Elemente markiert."
 
     def cut_selection(self):
-        """Markiert die aktuelle Auswahl (oder das aktuelle Element) zum Ausschneiden."""
+        """Markiert die aktuelle Auswahl (oder das aktuelle Element) zum Ausschneiden und synchronisiert mit macOS-Clipboard."""
         if not self.items:
             return
         cur_item = self.items[self.selected_idx]
@@ -673,6 +739,7 @@ class EasyDateienApp:
         # Fall 2: Bereits im Copy-Modus ohne neue Auswahl -> Nahtlos von Copy zu Cut wechseln
         if self.clipboard_mode == "copy" and not self.selected_paths and self.clipboard_paths:
             self.clipboard_mode = "cut"
+            sync_to_macos_clipboard(self.clipboard_paths)
             count = len(self.clipboard_paths)
             if count == 1:
                 name = os.path.basename(self.clipboard_paths[0])
@@ -685,6 +752,7 @@ class EasyDateienApp:
         self.clipboard_mode = "cut"
         self.clipboard_paths = targets
         self.selected_paths.clear()
+        sync_to_macos_clipboard(targets)
         count = len(targets)
         if count == 1:
             name = os.path.basename(targets[0])
@@ -693,7 +761,7 @@ class EasyDateienApp:
             self.status_message = f"{count} Elemente zum Ausschneiden markiert (mit 'p' einfügen)."
 
     def copy_selection(self):
-        """Markiert die aktuelle Auswahl (oder das aktuelle Element) zum Kopieren."""
+        """Markiert die aktuelle Auswahl (oder das aktuelle Element) zum Kopieren und synchronisiert mit macOS-Clipboard."""
         if not self.items:
             return
         cur_item = self.items[self.selected_idx]
@@ -709,27 +777,35 @@ class EasyDateienApp:
         # Fall 2: Bereits im Cut-Modus ohne neue Auswahl -> Nahtlos von Cut zu Copy wechseln
         if self.clipboard_mode == "cut" and not self.selected_paths and self.clipboard_paths:
             self.clipboard_mode = "copy"
+            sync_to_macos_clipboard(self.clipboard_paths)
             count = len(self.clipboard_paths)
             if count == 1:
                 name = os.path.basename(self.clipboard_paths[0])
-                self.status_message = f"„{name}“ zum Kopieren markiert (mit 'p' einfügen)."
+                self.status_message = f"„{name}“ zum Kopieren markiert (auch in Finder/Apps einsetzbar)."
             else:
-                self.status_message = f"{count} Elemente zum Kopieren markiert (mit 'p' einfügen)."
+                self.status_message = f"{count} Elemente zum Kopieren markiert (auch in Finder/Apps einsetzbar)."
             return
 
         targets = list(self.selected_paths) if self.selected_paths else [cur_item.path]
         self.clipboard_mode = "copy"
         self.clipboard_paths = targets
         self.selected_paths.clear()
+        sync_to_macos_clipboard(targets)
         count = len(targets)
         if count == 1:
             name = os.path.basename(targets[0])
-            self.status_message = f"„{name}“ zum Kopieren markiert (mit 'p' einfügen)."
+            self.status_message = f"„{name}“ zum Kopieren markiert (auch in Finder/Apps einsetzbar)."
         else:
-            self.status_message = f"{count} Elemente zum Kopieren markiert (mit 'p' einfügen)."
+            self.status_message = f"{count} Elemente zum Kopieren markiert (auch in Finder/Apps einsetzbar)."
 
     def paste_clipboard(self):
-        """Fügt Elemente aus dem Zwischenspeicher in das aktuelle Verzeichnis ein."""
+        """Fügt Elemente aus dem Zwischenspeicher oder der macOS-Systemzwischenablage in das aktuelle Verzeichnis ein."""
+        if not self.clipboard_paths:
+            sys_files = get_macos_clipboard_files()
+            if sys_files:
+                self.clipboard_paths = sys_files
+                self.clipboard_mode = "copy"
+
         if not self.clipboard_mode or not self.clipboard_paths:
             self.status_message = "Zwischenspeicher ist leer."
             return
@@ -988,28 +1064,25 @@ class EasyDateienApp:
 
                 if self.clipboard_mode in ("cut", "copy"):
                     ctrl_tiers = [
-                        "[↑↓] Bewegen  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [Space] *  [m] Menü  [q] Beenden",
-                        "[↑↓] Bewegen  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [Space] *  [m] Menü  [q] Ende",
-                        "[↑↓] Bewegen  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [m] Menü  [q] Ende",
-                        "[↑↓] Nav  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [q] Ende",
-                        "[p] Einfügen  [ESC] Abbr  [Enter] open  [q] Ende",
-                        "[p] Einfügen  [ESC] Abbr  [q]",
+                        "[↑↓] Bewegen  [p] Einfügen  [Y/X/ESC] Abbrechen  [Enter] open  [c z] Zip  [m] Menü  [q] Beenden",
+                        "[↑↓] Bewegen  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [c z] Zip  [m] Menü  [q] Ende",
+                        "[↑↓] Nav  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [c z] Zip  [q] Ende",
+                        "[p] Einfügen  [ESC] Abbr  [c z] Zip  [q]",
                     ]
                 elif self.selected_paths:
                     ctrl_tiers = [
-                        "[↑↓] Bewegen  [x] Ausschneiden  [c] Kopieren  [d] Papierkorb  [ESC] Abwählen  [Enter] open  [q] Beenden",
-                        "[↑↓] Bewegen  [x] Ausschneiden  [c] Kopieren  [d] Löschen  [ESC] Abwählen  [q] Ende",
-                        "[↑↓] Bewegen  [x] Cut  [c] Copy  [d] Löschen  [ESC] Abwählen  [q] Ende",
-                        "[↑↓] Nav  [x] Cut  [c] Copy  [ESC] Abw  [Enter] open  [q] Ende",
-                        "[x] Cut  [c] Copy  [ESC] Abw  [q]",
+                        "[↑↓] Bewegen  [y] Kopieren  [x] Ausschneiden  [c z] Zip  [d] Papierkorb  [ESC] Abwählen  [q] Beenden",
+                        "[↑↓] Bewegen  [y] Kopieren  [x] Cut  [c z] Zip  [d] Löschen  [ESC] Abwählen  [q] Ende",
+                        "[↑↓] Nav  [y] Copy  [x] Cut  [c z] Zip  [d] Löschen  [ESC] Abw  [q]",
+                        "[y] Copy  [x] Cut  [c z] Zip  [q]",
                     ]
                 else:
                     ctrl_tiers = [
-                        "[↑↓] Bewegen  [→] Ordner (Doppel-→ nano)  [←] Zurück  [Enter] open  [Space] *  [m] Menü  [q] Beenden",
-                        "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [Space] *  [m] Menü  [q] Ende",
-                        "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [m] Menü  [q] Ende",
-                        "[↑↓] Nav  [→] Rein/nano  [←] Zurück  [Enter] open  [m] Menü  [q] Ende",
-                        "[↑↓] Nav  [→] Ordner/nano  [Enter] open  [m] Menü  [q] Ende",
+                        "[↑↓] Bewegen  [→] Ordner (Doppel-→ nano)  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [c z] Zip  [m] Menü  [q] Beenden",
+                        "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [c z] Zip  [m] Menü  [q] Ende",
+                        "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [m] Menü  [q] Ende",
+                        "[↑↓] Nav  [→] Rein/nano  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [q] Ende",
+                        "[↑↓] Nav  [→] Ordner/nano  [Enter] open  [y] Copy  [q] Ende",
                         "[↑↓] Nav  [→] In  [Enter] open  [q] Ende",
                         "[↑↓] Nav  [Enter] open  [q]",
                     ]
@@ -1290,14 +1363,14 @@ class EasyDateienApp:
                 size_str = format_size(item.size) if not item.is_dir else ""
 
                 if w_mid >= 28:
-                    avail_name = max(3, w_mid - prefix_len - 8)
+                    avail_name = max(3, w_mid - prefix_len - 10)
                     name_trunc = truncate_end(name_display, avail_name)
-                    size_part = f"{size_str:>7} " if size_str else "        "
+                    size_part = f"  {size_str:>8}" if size_str else " " * 10
                     if is_cursor:
                         left_part = f"{BOLD}{prefix_str}{name_trunc}{RESET}"
                     else:
                         left_part = f"{prefix_str}{name_trunc}"
-                    cell_mid = pad_visible(left_part, w_mid - 8) + size_part
+                    cell_mid = pad_visible(left_part, w_mid - 10) + size_part
                 else:
                     avail_name = max(3, w_mid - prefix_len - 1)
                     name_trunc = truncate_end(name_display, avail_name)
@@ -1320,9 +1393,9 @@ class EasyDateienApp:
                             c_name = c_it.name + ("/" if c_it.is_dir else "")
                             c_size = format_size(c_it.size) if not c_it.is_dir else ""
                             if w_right >= 22 and c_size:
-                                avail_c = max(3, w_right - 2 - 8)
+                                avail_c = max(3, w_right - 2 - 10)
                                 c_trunc = truncate_end(c_name, avail_c)
-                                cell_right = pad_visible(f"  {c_trunc}", w_right - 8) + f"{c_size:>7} "
+                                cell_right = pad_visible(f"  {c_trunc}", w_right - 10) + f"  {c_size:>8}"
                             else:
                                 avail_c = max(3, w_right - 3)
                                 c_trunc = truncate_end(c_name, avail_c)
@@ -1591,6 +1664,12 @@ class EasyDateienApp:
                 elif key.startswith("MOUSE_EVENT:"):
                     continue
 
+                if key == "ESC" and self.pending_key_seq:
+                    self.pending_key_seq = ""
+                    self.status_message = ""
+                    needs_redraw = True
+                    continue
+
                 # Mehrschrittige Tastenfolgen (z.B. g d, g f, g i, c z)
                 if self.pending_key_seq:
                     full_seq = self.pending_key_seq + key
@@ -1606,6 +1685,10 @@ class EasyDateienApp:
                         continue
                     elif full_seq in ("gh", "g~"):
                         self.change_directory(os.path.expanduser("~"))
+                        needs_redraw = True
+                        continue
+                    elif full_seq in ("gg",):
+                        self.selected_idx = 0
                         needs_redraw = True
                         continue
                     elif full_seq == "gi":
@@ -1624,18 +1707,45 @@ class EasyDateienApp:
                             self.status_message = "Konnte Zwischenablage nicht abfragen."
                         needs_redraw = True
                         continue
-                    elif full_seq == "cz":
+                    elif full_seq in ("cz", "c z"):
                         self.create_zip_archive()
                         needs_redraw = True
                         continue
-                    elif full_seq == "zh":
+                    elif full_seq in ("cc", "c c"):
+                        if self.items:
+                            p = self.items[self.selected_idx].path
+                            copy_text_to_clipboard(p)
+                            self.status_message = f"Pfad kopiert: {p}"
+                            needs_redraw = True
+                        continue
+                    elif full_seq in ("cf", "c f"):
+                        if self.items:
+                            fn = self.items[self.selected_idx].name
+                            copy_text_to_clipboard(fn)
+                            self.status_message = f"Dateiname kopiert: {fn}"
+                            needs_redraw = True
+                        continue
+                    elif full_seq in ("cd", "c d"):
+                        p = self.current_dir
+                        copy_text_to_clipboard(p)
+                        self.status_message = f"Ordnerpfad kopiert: {p}"
+                        needs_redraw = True
+                        continue
+                    elif full_seq in ("cy", "c y"):
+                        self.copy_selection()
+                        needs_redraw = True
+                        continue
+                    elif full_seq in ("zh", "z h"):
                         self.toggle_hidden_files()
                         needs_redraw = True
                         continue
 
-                if key in ("g",):
-                    self.pending_key_seq = "g"
-                    self.status_message = "[g...] (d: Downloads, f: Dokumente, h: Home, i: Pfad, p: Paste-Pfad)"
+                if key in ("g", "c"):
+                    self.pending_key_seq = key
+                    if key == "g":
+                        self.status_message = "[g...] (d: Downloads, f: Dokumente, h: Home, g: Oben, i: Pfad, p: Paste-Pfad)"
+                    elif key == "c":
+                        self.status_message = "[c...] (z: ZIP-Archiv, c: Pfad, f: Dateiname, d: Ordnerpfad, y: Kopieren)"
                     needs_redraw = True
                     continue
 
@@ -1688,16 +1798,22 @@ class EasyDateienApp:
                     self.toggle_select_all()
                     needs_redraw = True
                 # 7. Ausschneiden (x)
-                elif key in kb.get("cut", ["x"]):
+                elif key == "x" or key in kb.get("cut", ["x"]):
                     self.cut_selection()
                     needs_redraw = True
-                # 8. Kopieren (c)
-                elif key in kb.get("copy", ["c"]):
+                # 8. Kopieren / Yank (y / c)
+                elif key == "y" or key in kb.get("copy", ["y", "c"]):
                     self.copy_selection()
                     needs_redraw = True
                 # 9. Einfügen (p)
-                elif key in kb.get("paste", ["p"]):
+                elif key == "p" or key in kb.get("paste", ["p"]):
                     self.paste_clipboard()
+                    needs_redraw = True
+                # 9b. Unyank / Zwischenspeicher leeren (Y / X wie in Yazi)
+                elif key in ("Y", "X"):
+                    self.clipboard_mode = None
+                    self.clipboard_paths = []
+                    self.status_message = "Zwischenspeicher geleert."
                     needs_redraw = True
                 # 10. Papierkorb mit Sicherheitsdialog (d)
                 elif key in kb.get("trash", ["d"]):
@@ -1732,7 +1848,7 @@ class EasyDateienApp:
                 elif key == "HOME":
                     self.selected_idx = 0
                     needs_redraw = True
-                elif key == "END":
+                elif key in ("END", "G"):
                     if self.items:
                         self.selected_idx = len(self.items) - 1
                         needs_redraw = True
