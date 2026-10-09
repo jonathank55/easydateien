@@ -168,7 +168,8 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
             except Exception: return ""
         try: return raw.decode("utf-8")
         except Exception: return ""
-    except Exception: return ""
+    except Exception:
+        return ""
 
 class EasyDateienApp:
     def __init__(self, initial_path: Optional[str] = None):
@@ -1007,9 +1008,11 @@ class EasyDateienApp:
                     last_size = curr_size; needs_redraw = True
                 if needs_redraw:
                     lines = self.build_screen(term_cols, term_rows)
+                    out_buf = []
                     for r_idx, l in enumerate(lines[:term_rows]):
-                        sys.stdout.write(f"\033[{r_idx+1};1H\033[2K{l}")
-                    sys.stdout.write("\033[J")
+                        out_buf.append(f"\033[{r_idx+1};1H\033[2K{l}")
+                    out_buf.append("\033[J")
+                    sys.stdout.write("".join(out_buf))
                     sys.stdout.flush()
                     needs_redraw = False
                 key = read_key(fd, timeout=0.05)
@@ -1222,7 +1225,6 @@ def main():
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
     parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.2.0")
     args = parser.parse_args()
-
     if args.config:
         from easydateien_konfigurator import run_konfigurator
         run_konfigurator(standalone=True)

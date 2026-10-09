@@ -104,7 +104,7 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
 
 def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str):
     term_cols, term_rows = shutil.get_terminal_size((80, 24))
-    box_w = max(24, min(term_cols - 2, 72))
+    box_w = max(24, term_cols)
     inner = max(4, box_w - 2)
     fixed_h = 7
     avail_items = max(3, term_rows - fixed_h)
@@ -115,8 +115,6 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         start = 0
         view_rows = rows
 
-    # Feste Spaltenbreite für perfekt vertikal bündige Werte [Tag]
-    lbl_col = max(16, min(40, inner - 16))
     lines = []
     lines.append("╭" + "─" * inner + "╮")
     t_disp = title if len(title) <= inner - 4 else title[:inner - 6] + ".."
@@ -128,22 +126,24 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         actual_idx = start + i
         is_sel = (actual_idx == cur_idx)
         pfx = "  ▸ " if is_sel else "    "
-        lbl_trunc = label if len(label) <= lbl_col else label[:lbl_col - 2] + ".."
         tag_str = f" {tag}" if tag else ""
-        base_str = f"{pfx}{lbl_trunc:<{lbl_col}}{tag_str}"
-        content = base_str.ljust(inner)[:inner]
-        if is_sel: lines.append(f"│\033[1m{content}\033[0m│")
-        else: lines.append(f"│{content}│")
+        avail_lbl = max(2, inner - len(pfx) - len(tag_str) - 2)
+        lbl_trunc = label if len(label) <= avail_lbl else label[:avail_lbl - 2] + ".."
+        pad = " " * max(0, inner - len(pfx) - len(lbl_trunc) - len(tag_str) - 2)
+        content = f"{pfx}{lbl_trunc}{pad}{tag_str}  "
+        content_fixed = content[:inner].ljust(inner)
+        if is_sel: lines.append(f"│\033[1m{content_fixed}\033[0m│")
+        else: lines.append(f"│{content_fixed}│")
     lines.append("├" + "─" * inner + "┤")
     f_disp = footer if len(footer) <= inner - 4 else footer[:inner - 6] + ".."
     lines.append("│  " + f_disp.ljust(inner - 2) + "│")
     lines.append("╰" + "─" * inner + "╯")
 
-    # Absolute Positionierung verhindert Zeilenumbrüche und Geisterlinien
-    sys.stdout.write("\033[H")
+    out = []
     for r_i, l in enumerate(lines[:term_rows]):
-        sys.stdout.write(f"\033[{r_i+1};1H\033[2K{l}")
-    sys.stdout.write("\033[J")
+        out.append(f"\033[{r_i+1};1H\033[2K{l}")
+    out.append("\033[J")
+    sys.stdout.write("".join(out))
     sys.stdout.flush()
     return start, len(view_rows)
 
@@ -211,7 +211,7 @@ def main_menu(fd: int):
                 if 0 <= row_i < count: idx = start + row_i
             except Exception: pass
             continue
-        if k in ("ENTER", "SPACE", "RIGHT"):
+        if k in ("ENTER", "SPACE"):
             act = rows[idx][0]
             if act == "divider":
                 opts = ["alle", "vertikal", "horizontal", "außen", "keine"]
@@ -232,6 +232,25 @@ def main_menu(fd: int):
             elif act == "reset":
                 cfg = dict(DEFAULT_CONFIG); save_config(cfg)
             elif act == "quit": break
+        elif k == "RIGHT":
+            act = rows[idx][0]
+            if act == "keybindings":
+                keybindings_menu(fd)
+                cfg = load_config()
+            elif act not in ("reset", "quit"):
+                if act == "divider":
+                    opts = ["alle", "vertikal", "horizontal", "außen", "keine"]
+                    cur = cfg.get("divider_style", "alle")
+                    cfg["divider_style"] = opts[(opts.index(cur) + 1) % len(opts)] if cur in opts else "alle"
+                    save_config(cfg)
+                elif act == "columns":
+                    cfg["columns_enabled"] = not cfg.get("columns_enabled", True); save_config(cfg)
+                elif act == "controls":
+                    cfg["show_controls"] = not cfg.get("show_controls", False); save_config(cfg)
+                elif act == "mouse":
+                    cfg["mouse_support"] = not cfg.get("mouse_support", True); save_config(cfg)
+                elif act == "console":
+                    cfg["show_console"] = not cfg.get("show_console", False); save_config(cfg)
     return cfg
 
 def run_konfigurator(standalone: bool = True):
