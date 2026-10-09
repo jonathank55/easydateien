@@ -3,7 +3,6 @@ import os, sys, json, termios, tty, select, shutil
 
 CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
-BOX_WIDTH = 86
 
 DEFAULT_CONFIG = {
     "divider_style": "alle", "columns_enabled": True, "show_controls": False,
@@ -16,8 +15,8 @@ KEYBINDING_ITEMS = [
     ("up", "Cursor nach oben bewegen", "[UP, k]"),
     ("down", "Cursor nach unten bewegen", "[DOWN, j]"),
     ("left", "Übergeordnetes Verzeichnis (Zurück)", "[LEFT, h]"),
-    ("right", "Ordner öffnen (bei Datei: Doppel-→ für nano)", "[RIGHT, l]"),
-    ("open", "Systemweit öffnen (open, Finder für Ordner)", "[ENTER]"),
+    ("right", "Ordner öffnen (Datei: Doppel-→ für nano)", "[RIGHT, l]"),
+    ("open", "Systemweit öffnen (open, Finder)", "[ENTER]"),
     ("select", "Element auswählen / abwählen (*)", "[SPACE, v]"),
     ("select_all", "Alle Elemente auswählen / abwählen", "[V, a]"),
     ("cut", "Auswahl ausschneiden (×)", "[x]"),
@@ -74,23 +73,39 @@ def read_key():
     except Exception: return ""
 
 def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str):
-    inner = BOX_WIDTH - 2
+    term_cols, term_rows = shutil.get_terminal_size((80, 24))
+    box_w = max(40, min(term_cols, 80))
+    inner = box_w - 2
     out = ["\033[H"]
     out.append("╭" + "─" * inner + "╮")
-    out.append("│  " + title.ljust(inner - 2) + "│")
-    out.append("│  " + subtitle.ljust(inner - 2) + "│")
+    out.append("│  " + title[:inner - 4].ljust(inner - 2) + "│")
+    out.append("│  " + subtitle[:inner - 4].ljust(inner - 2) + "│")
     out.append("├" + "─" * inner + "┤")
-    for i, (key, label, tag) in enumerate(rows):
-        is_sel = (i == cur_idx)
+    # Scrollbarer Inhaltsbereich bei kleiner Terminalhöhe
+    avail_h = max(5, term_rows - 8)
+    if len(rows) > avail_h:
+        start = max(0, min(cur_idx - avail_h // 2, len(rows) - avail_h))
+        view_rows = rows[start : start + avail_h]
+    else:
+        start = 0
+        view_rows = rows
+    for i, (key, label, tag) in enumerate(view_rows):
+        actual_idx = start + i
+        is_sel = (actual_idx == cur_idx)
         pfx = "  ▸ " if is_sel else "    "
-        line_txt = f"{pfx}{label:<45} {tag}"
-        line_txt = line_txt.ljust(inner)
+        tag_str = f" {tag}"
+        avail_lbl = max(4, inner - len(pfx) - len(tag_str) - 2)
+        lbl_trunc = label if len(label) <= avail_lbl else label[:avail_lbl-2] + ".."
+        pad = " " * max(1, inner - len(pfx) - len(lbl_trunc) - len(tag_str))
+        content = f"{pfx}{lbl_trunc}{pad}{tag_str}"
+        line_txt = content.ljust(inner)
         if is_sel: line_txt = "\033[1m" + line_txt + "\033[0m"
         out.append("│" + line_txt + "│")
     out.append("├" + "─" * inner + "┤")
-    out.append("│  " + footer.ljust(inner - 2) + "│")
+    out.append("│  " + footer[:inner - 4].ljust(inner - 2) + "│")
     out.append("╰" + "─" * inner + "╯")
-    sys.stdout.write("\n".join([f"\r\033[2K{l}" for l in out]))
+    for l in out[:term_rows]:
+        sys.stdout.write(f"\r\033[2K{l}\n")
     sys.stdout.flush()
 
 def keybindings_menu():
@@ -98,7 +113,7 @@ def keybindings_menu():
     while True:
         render_box(
             "TASTENBELEGUNGEN BEARBEITEN",
-            "Wählen Sie eine Aktion aus, um ihre Tastenbelegung zu ändern",
+            "Übersicht der aktiven Tastenkürzel",
             KEYBINDING_ITEMS,
             idx,
             "[↑/↓/j/k] Navigieren  [Enter/→] Auswählen  [ESC/q] Zurück"
@@ -109,11 +124,9 @@ def keybindings_menu():
         elif k in ("DOWN", "j"): idx = min(len(KEYBINDING_ITEMS) - 1, idx + 1)
         elif k in ("ESC", "q"): break
         elif k in ("ENTER", "RIGHT"):
-            action_key = KEYBINDING_ITEMS[idx][0]
-            if action_key == "back": break
-            elif action_key == "reset":
-                # Setzt Konfiguration auf Standard
-                save_config(dict(DEFAULT_CONFIG))
+            act = KEYBINDING_ITEMS[idx][0]
+            if act in ("back", "reset"):
+                if act == "reset": save_config(dict(DEFAULT_CONFIG))
                 break
 
 MAIN_MENU_ITEMS = [
@@ -122,7 +135,7 @@ MAIN_MENU_ITEMS = [
     ("controls", "Steuerungshilfe unten", "Aus"),
     ("mouse", "Mausunterstützung", "Ein"),
     ("console", "Terminal-Konsole", "Aus"),
-    ("keybindings", "Tastenbelegungen anpassen...", "Öffnen"),
+    ("keybindings", "Tastenbelegungen ansehen...", "Öffnen"),
     ("reset", "Auf Standardwerte zurücksetzen", "Standard"),
     ("quit", "Konfigurator beenden", "Beenden"),
 ]
@@ -149,7 +162,7 @@ def main_menu():
             "Einstellungen verwalten und anpassen",
             rows,
             idx,
-            "[↑/↓/j/k] Navigieren  [Enter/Leertaste] Umschalten  [ESC/q] Speichern & Beenden"
+            "[↑/↓/j/k] Navigieren  [Enter/Leertaste] Umschalten  [ESC/q] Beenden"
         )
         k = read_key()
         if not k: continue

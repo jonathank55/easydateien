@@ -52,23 +52,11 @@ def sync_to_macos_clipboard(paths: List[str]):
     if not paths: return
     abs_paths = [os.path.abspath(p) for p in paths if os.path.exists(p)]
     if not abs_paths: return
-    # Schreibt native NSURLs + NSFilenamesPboardType + utf8-Text ins macOS Pasteboard
+    # Nativ für Finder, Mail & WhatsApp
     try:
-        url_adds = "\n".join([f'urls.addObject($.NSURL.fileURLWithPath("{p.replace(chr(92), chr(92)+chr(92)).replace(chr(34), chr(92)+chr(34))}")); paths.addObject($("{p.replace(chr(92), chr(92)+chr(92)).replace(chr(34), chr(92)+chr(34))}"));' for p in abs_paths])
-        plain_text = "\n".join([p.replace(chr(92), chr(92)+chr(92)).replace(chr(34), chr(92)+chr(34)) for p in abs_paths])
-        jxa = f"""
-        ObjC.import("AppKit");
-        var pb = $.NSPasteboard.generalPasteboard;
-        pb.clearContents();
-        var urls = $.NSMutableArray.array;
-        var paths = $.NSMutableArray.array;
-        {url_adds}
-        pb.writeObjects(urls);
-        pb.setPropertyListForType(paths, $("NSFilenamesPboardType"));
-        pb.setStringForType($("{plain_text}"), $("public.utf8-plain-text"));
-        """
-        r = subprocess.run(["osascript", "-l", "JavaScript", "-e", jxa], capture_output=True, timeout=1.5)
-        if r.returncode == 0: return
+        items = ", ".join([f'(POSIX file "{p.replace(chr(34), chr(92)+chr(34))}" as alias)' for p in abs_paths])
+        as_code = f'tell application "Finder" to set the clipboard to {{{items}}}'
+        subprocess.run(["osascript", "-e", as_code], capture_output=True, timeout=1.0)
     except Exception: pass
     try:
         p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
@@ -76,30 +64,6 @@ def sync_to_macos_clipboard(paths: List[str]):
     except Exception: pass
 
 def get_macos_clipboard_files() -> List[str]:
-    jxa = """
-    ObjC.import("AppKit");
-    var pb = $.NSPasteboard.generalPasteboard;
-    var classes = $.NSArray.arrayWithObject($.NSURL.class);
-    var options = $.NSDictionary.dictionaryWithObjectForKey(
-        $.NSNumber.numberWithBool(true),
-        $.NSPasteboardURLReadingFileURLsOnlyKey
-    );
-    var urls = pb.readObjectsForClassesOptions(classes, options);
-    var res = [];
-    if (urls && urls.count > 0) {
-        for (var i = 0; i < urls.count; i++) {
-            res.push(ObjC.unwrap(urls.objectAtIndex(i).path));
-        }
-    }
-    JSON.stringify(res);
-    """
-    try:
-        proc = subprocess.run(["osascript", "-l", "JavaScript", "-e", jxa], capture_output=True, text=True, timeout=1.5)
-        if proc.returncode == 0 and proc.stdout.strip():
-            paths = json.loads(proc.stdout.strip())
-            valid = [p for p in paths if os.path.exists(p)]
-            if valid: return valid
-    except Exception: pass
     try:
         out = subprocess.check_output(["pbpaste"], text=True)
         lines = [l.strip() for l in out.splitlines() if l.strip() and os.path.exists(l.strip())]
@@ -226,6 +190,7 @@ class EasyDateienApp:
         self.clipboard_mode: Optional[str] = None
         self.status_message: str = ""
         self.status_expiry_moves: int = 0
+        self.pending_g_mode: bool = False
         self.last_click_time: float = 0.0
         self.last_click_idx: Optional[int] = None
         self.last_right_arrow_time: float = 0.0
@@ -282,8 +247,7 @@ class EasyDateienApp:
     def select_filename(self, name: str):
         for i, it in enumerate(self.items):
             if it.name == name:
-                self.selected_idx = i
-                break
+                self.selected_idx = i; break
 
     def go_parent_directory(self):
         parent = os.path.dirname(self.current_dir)
@@ -319,38 +283,31 @@ class EasyDateienApp:
                 break
             elif k == "BACKSPACE":
                 if p_in: p_in = p_in[:-1]
-            elif k == " ": p_in += " "
+            elif k in (" ", "SPACE"): p_in += " "
             elif len(k) == 1 and k.isprintable(): p_in += k
         self.status_expiry_moves = 0
 
-    def handle_goto_menu(self, fd: int):
-        self.status_message = "g: [d] Downloads  [f] Dok  [h] Home  [t] Papierkorb  [i] Pfad  [p] Clip"
-        lines = self.build_screen(shutil.get_terminal_size().columns, shutil.get_terminal_size().lines)
-        sys.stdout.write("\033[H" + "\n".join([f"\r\033[2K{l}" for l in lines]))
-        sys.stdout.flush()
-        sub = read_key(fd, timeout=3.0)
-        if not sub or sub in ("ESC", "QUIT"):
-            self.status_message = ""
-            return
-        sub_l = sub.lower()
-        if sub_l == "d":
+    def handle_goto_choice(self, choice: str, fd: int):
+        self.pending_g_mode = False
+        c = choice.lower()
+        if c == "d":
             self.change_directory(os.path.expanduser("~/Downloads"))
             self.status_message = "Downloads"
-        elif sub_l == "f":
+        elif c == "f":
             self.change_directory(os.path.expanduser("~/Documents"))
             self.status_message = "Dokumente"
-        elif sub_l in ("h", "~"):
+        elif c in ("h", "~"):
             self.change_directory(HOME_DIR)
             self.status_message = "~"
-        elif sub_l == "t":
+        elif c == "t":
             trash_p = os.path.expanduser("~/.Trash")
             if os.path.isdir(trash_p):
                 self.change_directory(trash_p)
                 self.status_message = "Papierkorb"
             else: self.status_message = "Papierkorb nicht verfügbar"
-        elif sub_l == "i":
+        elif c == "i":
             self.prompt_goto_path(fd)
-        elif sub_l == "p":
+        elif c == "p":
             c_files = get_macos_clipboard_files()
             target = c_files[0] if c_files else ""
             if not target:
@@ -558,6 +515,8 @@ class EasyDateienApp:
         out = []
         needed = height - 1
         if needed > 0:
+            max_off = max(0, len(self.console_output_lines) - needed)
+            self.console_scroll_offset = max(0, min(max_off, self.console_scroll_offset))
             start = max(0, len(self.console_output_lines) - needed - self.console_scroll_offset)
             chunk = self.console_output_lines[start : start + needed]
             for l in chunk: out.append(pad_visible(truncate_end(l, width), width))
@@ -606,8 +565,7 @@ class EasyDateienApp:
             finally:
                 tty.setcbreak(fd, termios.TCSADRAIN)
                 sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
-                if mouse_on and not (self.show_console and self.console_focused):
-                    sys.stdout.write("\033[?1000h\033[?1006h")
+                if mouse_on: sys.stdout.write("\033[?1000h\033[?1006h")
                 sys.stdout.write("\033[2J\033[H"); sys.stdout.flush()
                 self.refresh_items()
             return
@@ -1011,32 +969,23 @@ class EasyDateienApp:
         except Exception: pass
         tty.setcbreak(fd, termios.TCSADRAIN)
         sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
-        mouse_config = self.config.get("mouse_support", True)
-        mouse_active = False
-        if mouse_config:
+        if self.config.get("mouse_support", True):
             sys.stdout.write("\033[?1000h\033[?1006h")
-            mouse_active = True
         sys.stdout.write("\033[2J\033[H"); sys.stdout.flush()
         last_size = None
         needs_redraw = True
         try:
             while True:
-                if mouse_config:
-                    should_mouse = not (self.show_console and self.console_focused)
-                    if should_mouse != mouse_active:
-                        if should_mouse: sys.stdout.write("\033[?1000h\033[?1006h")
-                        else: sys.stdout.write("\033[?1006l\033[?1000l")
-                        sys.stdout.flush()
-                        mouse_active = should_mouse
                 curr_size = shutil.get_terminal_size((80, 24))
                 term_cols, term_rows = curr_size.columns, curr_size.lines
                 if curr_size != last_size:
                     last_size = curr_size; needs_redraw = True
                 if needs_redraw:
                     lines = self.build_screen(term_cols, term_rows)
-                    out_buf = ["\033[H"]
-                    for l in lines: out_buf.append(f"\r\033[2K{l}")
-                    sys.stdout.write("\n".join(out_buf))
+                    sys.stdout.write("\033[H")
+                    for i, l in enumerate(lines[:term_rows]):
+                        if i > 0: sys.stdout.write("\n")
+                        sys.stdout.write(f"\r\033[2K{l}")
                     sys.stdout.flush()
                     needs_redraw = False
                 key = read_key(fd, timeout=0.05)
@@ -1046,12 +995,16 @@ class EasyDateienApp:
                         self.status_expiry_moves += 1
                         if self.status_expiry_moves >= 3: self.status_message = ""
                 if key == "MOUSE_WHEEL_UP":
-                    if self.show_console and self.console_focused: self.console_scroll_offset += 2
-                    elif self.items: self.selected_idx = max(0, self.selected_idx - 1)
+                    if self.show_console and self.console_focused:
+                        self.console_scroll_offset += 2
+                    elif self.items:
+                        self.selected_idx = max(0, self.selected_idx - 1)
                     needs_redraw = True; continue
                 elif key == "MOUSE_WHEEL_DOWN":
-                    if self.show_console and self.console_focused: self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
-                    elif self.items: self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1)
+                    if self.show_console and self.console_focused:
+                        self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
+                    elif self.items:
+                        self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1)
                     needs_redraw = True; continue
                 elif key.startswith("MOUSE_CLICK:"):
                     p = key.split(":")
@@ -1065,6 +1018,13 @@ class EasyDateienApp:
                         cx, cy = int(p[1]), int(p[2])
                         if self.handle_mouse_right_click(cx, cy): needs_redraw = True
                     continue
+                if self.pending_g_mode:
+                    if key == "ESC":
+                        self.pending_g_mode = False
+                        self.status_message = "Abgebrochen"
+                    else:
+                        self.handle_goto_choice(key, fd)
+                    needs_redraw = True; continue
                 if key == "ESC":
                     if self.show_console:
                         self.show_console = False; self.console_focused = False
@@ -1132,7 +1092,9 @@ class EasyDateienApp:
                 if key == "t":
                     self.toggle_console(); needs_redraw = True; continue
                 if key == "g":
-                    self.handle_goto_menu(fd); needs_redraw = True; continue
+                    self.pending_g_mode = True
+                    self.status_message = "Gehe zu: [d] Downloads  [f] Dok  [h/~] Home  [t] Papierkorb  [i] Pfad  [p] Clip"
+                    needs_redraw = True; continue
                 if key == "~":
                     self.change_directory(HOME_DIR); self.status_message = "~"; needs_redraw = True; continue
                 if key in ("UP", "k"):
@@ -1208,7 +1170,7 @@ class EasyDateienApp:
                     except Exception as e: self.status_message = f"Fehler Konfigurator: {e}"
                     tty.setcbreak(fd, termios.TCSADRAIN)
                     sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
-                    if mouse_config: sys.stdout.write("\033[?1000h\033[?1006h")
+                    if self.config.get("mouse_support", True): sys.stdout.write("\033[?1000h\033[?1006h")
                     sys.stdout.write("\033[2J\033[H"); sys.stdout.flush()
                     self.refresh_items()
                     self.status_message = "Einstellungen übernommen"
