@@ -74,7 +74,7 @@ except ImportError:
                 "goto_interactive": ["gi"],
                 "goto_clipboard": ["gp"],
                 "zip": ["cz"],
-                "quit": ["q", "ESC"],
+                "quit": ["q"],
             },
         }
 
@@ -740,32 +740,23 @@ class EasyDateienApp:
         self.status_message = "Konfiguration übernommen."
 
     def get_effective_columns(self, term_cols: int) -> int:
-        """Ermittelt die effektive Spaltenanzahl (1, 2 oder 3) basierend auf Fensterbreite und Konfiguration."""
-        cfg_cols = str(self.config.get("columns", "auto")).lower()
-        if cfg_cols == "1":
+        """Ermittelt die effektive Spaltenanzahl (1, 2 oder 3) basierend auf Spaltendarstellung und Fensterbreite."""
+        if not self.config.get("columns_enabled", True):
             return 1
-        elif cfg_cols == "2":
-            return 2 if term_cols >= 65 else 1
-        elif cfg_cols == "3":
-            return 3 if term_cols >= 105 else (2 if term_cols >= 65 else 1)
-        else:  # "auto"
-            if term_cols >= 110:
-                return 3
-            elif term_cols >= 70:
-                return 2
-            else:
-                return 1
+        if term_cols >= 110:
+            return 3
+        elif term_cols >= 70:
+            return 2
+        else:
+            return 1
 
     def build_screen(self, term_cols: int, term_rows: int) -> List[str]:
         """Erstellt alle Zeilen der Anzeige angepasst an Fensterhöhe, -breite und Spaltenlayout."""
         lines = []
         eff_cols = self.get_effective_columns(term_cols)
+        div_style = self.config.get("divider_style", "horizontal").lower()
 
-        # 1. Titelzeile
-        lines.append(f"\t{BOLD}EASYDATEIEN{RESET}")
-        lines.append(f"\t{get_divider('─', term_cols - 16)}")
-
-        # 2. Pfadzeile & Status
+        # Pfadzeile & Status (Titel 'EASYDATEIEN' und '[3 Spalten]' entfernt)
         home_dir = os.path.expanduser("~")
         disp_path = self.current_dir
         if disp_path.startswith(home_dir):
@@ -779,20 +770,24 @@ class EasyDateienApp:
             mode_lbl = "Ausschneiden" if self.clipboard_mode == "cut" else "Kopieren"
             clip_info = f" | {BOLD}[{mode_lbl}: {len(self.clipboard_paths)}]{RESET}"
 
-        cols_label = f"[{eff_cols} Spalte{'n' if eff_cols > 1 else ''}]"
-        lines.append(f"\t{ITALIC}Pfad:{RESET} {disp_path}  ({num_items} Objekte{sel_info}){clip_info}  {ITALIC}{cols_label}{RESET}")
-        lines.append(f"\t{get_divider('─', term_cols - 16)}")
+        lines.append(f"\t{ITALIC}Pfad:{RESET} {disp_path}  ({num_items} Objekte{sel_info}){clip_info}")
+        if div_style == "horizontal":
+            lines.append(f"\t{get_divider('─', term_cols - 16)}")
 
-        # Feste Zeilen oben (Titel, Linie, Pfad, Linie) = 4
-        # Wenn Spaltenüberschriften: +2 Zeilen
-        has_headers = (eff_cols >= 2)
-        fixed_lines = 4 + (2 if has_headers else 0) + 3  # +3 für Fußzeile
+        # Feste Zeilen oben: 1 Pfadzeile + (1 Linie falls horizontal)
+        # Feste Zeilen unten: (1 Linie falls horizontal) + 1 Meldung/Hilfe
+        fixed_lines = 1 + (1 if div_style == "horizontal" else 0) + (1 if div_style == "horizontal" else 0) + 1
         avail_rows = max(3, term_rows - fixed_lines)
 
         usable_w = max(36, term_cols - 16)
 
+        # Trennzeichen je nach Trennungslinien-Einstellung
+        if div_style == "vertikal":
+            sep = " │ "
+        else:
+            sep = "   "
+
         # Spaltenbreiten berechnen
-        sep = " │ "
         if eff_cols == 1:
             w_left = 0
             w_mid = usable_w
@@ -805,19 +800,6 @@ class EasyDateienApp:
             w_left = max(16, min(24, int(usable_w * 0.20)))
             w_right = max(22, min(36, int(usable_w * 0.32)))
             w_mid = max(24, usable_w - w_left - w_right - 2 * len(sep))
-
-        # Spaltenüberschriften bei Mehrspaltenansicht
-        if eff_cols == 2:
-            hdr_left = pad_visible(f"{ITALIC}Eltern-Ordner{RESET}", w_left)
-            hdr_mid = pad_visible(f"{ITALIC}Aktueller Ordner{RESET}", w_mid)
-            lines.append(f"\t{hdr_left}{sep}{hdr_mid}")
-            lines.append(f"\t{get_divider('─', w_left + len(sep) + w_mid)}")
-        elif eff_cols == 3:
-            hdr_left = pad_visible(f"{ITALIC}Eltern-Ordner{RESET}", w_left)
-            hdr_mid = pad_visible(f"{ITALIC}Aktueller Ordner{RESET}", w_mid)
-            hdr_right = pad_visible(f"{ITALIC}Inhalt / Details{RESET}", w_right)
-            lines.append(f"\t{hdr_left}{sep}{hdr_mid}{sep}{hdr_right}")
-            lines.append(f"\t{get_divider('─', w_left + len(sep) + w_mid + len(sep) + w_right)}")
 
         # Daten für Eltern-Spalte vorbereiten
         parent_items: List[FileEntry] = []
@@ -977,7 +959,8 @@ class EasyDateienApp:
                 lines.append(f"\t{cell_left}{sep}{cell_mid}{sep}{cell_right}")
 
         # Fußzeile
-        lines.append(f"\t{get_divider('─', term_cols - 16)}")
+        if div_style == "horizontal":
+            lines.append(f"\t{get_divider('─', term_cols - 16)}")
 
         # Statusmeldung oder Hilfetext
         if self.status_message:
@@ -985,7 +968,7 @@ class EasyDateienApp:
         else:
             help_hints = "[↑↓] Navigieren  [Enter/→] Öffnen  [←] Zurück  [Space] Markieren  [x] Cut  [c] Copy  [p] Paste  [d] Trash  [m] Menü  [q] Quit"
             if len(help_hints) > term_cols - 16:
-                help_hints = "[↑↓] Bewegen  [Enter] Öffnen  [←] Zurück  [x] Cut  [c] Copy  [p] Paste  [d] Trash  [m] Menü  [q] Beenden"
+                help_hints = "[↑↓] Bewegen  [Enter] Öffnen  [←] Zurück  [Space] Markieren  [m] Menü  [q] Beenden"
             lines.append(f"\t{ITALIC}{help_hints}{RESET}")
 
         return lines
@@ -1024,11 +1007,7 @@ class EasyDateienApp:
 
                 if needs_redraw:
                     lines = self.build_screen(term_cols, term_rows)
-                    top_padding = max(0, (term_rows - len(lines)) // 2)
-
                     sys.stdout.write("\033[H")
-                    for _ in range(top_padding):
-                        sys.stdout.write(f"\r{CLEAR_LINE}\n")
                     for line in lines:
                         sys.stdout.write(f"\r{CLEAR_LINE}{line}\n")
                     sys.stdout.write("\033[J")
@@ -1159,7 +1138,9 @@ class EasyDateienApp:
                         self.status_message = "Zwischenspeicher geleert."
                         needs_redraw = True
                     else:
-                        break
+                        if self.config.get("esc_to_quit", False):
+                            break
+                        needs_redraw = True
                 # Spezielle Sprungtasten
                 elif key == "HOME":
                     self.selected_idx = 0

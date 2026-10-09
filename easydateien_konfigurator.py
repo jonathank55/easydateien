@@ -51,7 +51,7 @@ DEFAULT_KEYMAP = {
     "goto_interactive": ["gi"],
     "goto_clipboard": ["gp"],
     "zip": ["cz"],
-    "quit": ["q", "ESC"],
+    "quit": ["q"],
 }
 
 ACTION_NAMES = {
@@ -86,7 +86,9 @@ def get_default_config() -> dict:
         "sort_dir_first": True,
         "show_hidden": False,
         "preview": False,
-        "columns": "auto",
+        "columns_enabled": True,
+        "divider_style": "horizontal",
+        "esc_to_quit": False,
         "text_editor": "nano %s",
         "opener": "open %s",
         "edit_opener": "open -e %s",
@@ -591,29 +593,25 @@ def menu_sort_criteria(cfg: dict):
         save_config(cfg)
 
 
-def menu_columns(cfg: dict):
-    """Auswahl des Spaltenlayouts."""
+def menu_dividers(cfg: dict):
+    """Auswahl des Trennlinien-Stils (horizontal / vertikal / keine)."""
     options = [
-        "Dynamisch (Auto — Passt Spaltenanzahl live an Fensterbreite an)",
-        "1 Spalte (Kompakt — Nur aktueller Ordner)",
-        "2 Spalten (Eltern-Ordner + Aktueller Ordner)",
-        "3 Spalten (Eltern-Ordner + Aktueller Ordner + Ordnerinhalt)",
+        "Horizontal (Klassische horizontale Linien oben und unten)",
+        "Vertikal (Spaltentrennung mit vertikalem Trennstrich │)",
+        "Keine (Puristisches, linienfreies Layout mit Leerräumen)",
         "Abbrechen / Zurück",
     ]
-    cur = str(cfg.get("columns", "auto"))
-    def_idx = 0 if cur == "auto" else (1 if cur == "1" else (2 if cur == "2" else (3 if cur == "3" else 0)))
-    choice = select_menu_interactive("SPALTENLAYOUT WÄHLEN", options, default_idx=def_idx)
+    cur = cfg.get("divider_style", "horizontal").lower()
+    def_idx = 0 if cur == "horizontal" else (1 if cur == "vertikal" else (2 if cur == "keine" else 0))
+    choice = select_menu_interactive("TRENNUNGSLINIEN WÄHLEN", options, default_idx=def_idx)
     if choice == 0:
-        cfg["columns"] = "auto"
+        cfg["divider_style"] = "horizontal"
         save_config(cfg)
     elif choice == 1:
-        cfg["columns"] = "1"
+        cfg["divider_style"] = "vertikal"
         save_config(cfg)
     elif choice == 2:
-        cfg["columns"] = "2"
-        save_config(cfg)
-    elif choice == 3:
-        cfg["columns"] = "3"
+        cfg["divider_style"] = "keine"
         save_config(cfg)
 
 
@@ -631,14 +629,20 @@ def run_konfigurator() -> dict:
             "size": "Dateigröße",
             "ext": "Dateiendung",
         }.get(cfg.get("sort_by", "mtime"), "Änderungsdatum")
-        cols_cfg = str(cfg.get("columns", "auto"))
-        cols_display = "Dynamisch (Auto)" if cols_cfg == "auto" else f"{cols_cfg} Spalte(n)"
+        cols_enabled = cfg.get("columns_enabled", True)
+        cols_status = "[Ein]" if cols_enabled else "[Aus]"
+        esc_quit = cfg.get("esc_to_quit", False)
+        esc_status = "[Ein]" if esc_quit else "[Aus]"
+        div_style = cfg.get("divider_style", "horizontal").lower()
+        div_display = {"horizontal": "Horizontal", "vertikal": "Vertikal", "keine": "Keine"}.get(div_style, "Horizontal")
         editor_cmd = cfg.get("text_editor", "nano %s")
         opener_cmd = cfg.get("opener", "open %s")
 
         menu_items = [
             "Tastenbelegungen ansehen & anpassen",
-            f"Spaltenanzahl / Layout:            {BOLD}[{cols_display}]{RESET}",
+            f"Spaltendarstellung:                 {BOLD}{cols_status}{RESET}",
+            f"Trennungslinien:                   {BOLD}[{div_display}]{RESET}",
+            f"Mit ESC beenden:                   {BOLD}{esc_status}{RESET}",
             f"Versteckte Dateien anzeigen:       {BOLD}{hidden_status}{RESET}",
             f"Text- & Code-Editor festlegen:    {BOLD}[{editor_cmd}]{RESET}",
             f"Standard-Öffner (Medien etc.):    {BOLD}[{opener_cmd}]{RESET}",
@@ -655,41 +659,50 @@ def run_konfigurator() -> dict:
             subtitle="Konfiguration wird automatisch in ~/.config/easydateien/config.json gesichert",
         )
 
-        if choice is None or choice == 9:
+        if choice is None or choice == 11:
             break
         elif choice == 0:
             menu_keybindings(cfg)
         elif choice == 1:
-            menu_columns(cfg)
+            # Spaltendarstellung ein/aus
+            cfg["columns_enabled"] = not cfg.get("columns_enabled", True)
+            save_config(cfg)
         elif choice == 2:
+            # Trennungslinien vertikal / horizontal / keine
+            menu_dividers(cfg)
+        elif choice == 3:
+            # Mit ESC beenden ein/aus
+            cfg["esc_to_quit"] = not cfg.get("esc_to_quit", False)
+            save_config(cfg)
+        elif choice == 4:
             # Versteckte Dateien ein/aus
             cfg["show_hidden"] = not cfg.get("show_hidden", False)
             save_config(cfg)
-        elif choice == 3:
+        elif choice == 5:
             # Text-Editor bearbeiten
             prompt = "Text-/Code-Editor-Befehl eingeben (%s = Dateipfad, z. B. nano %s): "
             new_ed = edit_line_interactive(prompt, initial=cfg.get("text_editor", "nano %s"))
             if new_ed and new_ed.strip():
                 cfg["text_editor"] = new_ed.strip()
                 save_config(cfg)
-        elif choice == 4:
+        elif choice == 6:
             # Standard-Öffner bearbeiten
             prompt = "Standard-Öffner-Befehl eingeben (%s = Dateipfad): "
             new_opener = edit_line_interactive(prompt, initial=cfg.get("opener", "open %s"))
             if new_opener and new_opener.strip():
                 cfg["opener"] = new_opener.strip()
                 save_config(cfg)
-        elif choice == 5:
+        elif choice == 7:
             menu_sort_criteria(cfg)
-        elif choice == 6:
+        elif choice == 8:
             # Sortierrichtung umkehren
             cfg["sort_reverse"] = not cfg.get("sort_reverse", True)
             save_config(cfg)
-        elif choice == 7:
+        elif choice == 9:
             # Ordner zuerst
             cfg["sort_dir_first"] = not cfg.get("sort_dir_first", True)
             save_config(cfg)
-        elif choice == 8:
+        elif choice == 10:
             # Reset auf Standardwerte
             cfg = get_default_config()
             save_config(cfg)

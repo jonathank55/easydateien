@@ -4,7 +4,9 @@
   "sort_dir_first": true,
   "show_hidden": false,
   "preview": false,
-  "columns": "auto",
+  "columns_enabled": true,
+  "divider_style": "horizontal",
+  "esc_to_quit": false,
   "text_editor": "nano %s",
   "opener": "open %s",
   "edit_opener": "open -e %s",
@@ -29,6 +31,6 @@
     "goto_interactive": ["gi"],
     "goto_clipboard": ["gp"],
     "zip": ["cz"],
-    "quit": ["q", "ESC"]
+    "quit": ["q"]
   }
 }

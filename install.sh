@@ -28,10 +28,10 @@ fi
 # 2. Konfigurationsverzeichnis vorbereiten
 mkdir -p "$CONFIG_DIR"
 
-echo "Kopiere Programmdateien nach $CONFIG_DIR..."
-cp "$SCRIPT_DIR/easydateien" "$CONFIG_DIR/easydateien"
-cp "$SCRIPT_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
-chmod +x "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_konfigurator.py"
+echo "Verlinke Programmdateien nach $CONFIG_DIR..."
+ln -sf "$SCRIPT_DIR/easydateien" "$CONFIG_DIR/easydateien"
+ln -sf "$SCRIPT_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
+chmod +x "$SCRIPT_DIR/easydateien" "$SCRIPT_DIR/easydateien_konfigurator.py"
 
 # 3. Standard-Konfiguration initialisieren, falls noch nicht vorhanden
 if [ ! -f "$CONFIG_DIR/config.json" ]; then

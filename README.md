@@ -62,7 +62,9 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
 - **Interaktives Konfigurationsmenü (Taste `m`):**  
   Wie bei SCHNELLSTART verfügt EasyDateien über einen vollwertigen interaktiven Konfigurator:
   - **Tastenbelegungen bearbeiten:** Jede Aktion kann interaktiv auf eine neue Taste umbelegt oder mit Alternativtasten belegt werden.
-  - **Spaltenanzahl & Layout:** `[Dynamisch (Auto)]`, `[1 Spalte]`, `[2 Spalten]` oder `[3 Spalten]` frei konfigurierbar.
+  - **Spaltendarstellung:** `[Ein]` / `[Aus]` (Ein = mehrspaltiges Miller-Layout, Aus = klassische 1-Spalten-Ansicht).
+  - **Trennungslinien:** `[Horizontal]`, `[Vertikal]` oder `[Keine]` für ein puristisches Layout.
+  - **Mit ESC beenden:** `[Ein]` / `[Aus]` (standardmäßig deaktiviert; ESC hebt stattdessen Auswahlen/Zwischenspeicher auf).
   - **Versteckte Dateien anzeigen:** `[Ein]` / `[Aus]` umschalten.
   - **Text- & Code-Editor festlegen:** z. B. `nano %s`, `vim %s`, `micro %s` oder `code %s`.
   - **Standard-Öffner anpassen:** z. B. `open %s`.
@@ -140,6 +142,9 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
   "sort_dir_first": true,
   "show_hidden": false,
   "preview": false,
+  "columns_enabled": true,
+  "divider_style": "horizontal",
+  "esc_to_quit": false,
   "text_editor": "nano %s",
   "opener": "open %s",
   "edit_opener": "open -e %s",
@@ -164,7 +169,7 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
     "goto_interactive": ["gi"],
     "goto_clipboard": ["gp"],
     "zip": ["cz"],
-    "quit": ["q", "ESC"]
+    "quit": ["q"]
   }
 }
 ```
