@@ -565,7 +565,7 @@ class EasyDateienApp:
 
     def load_config(self) -> dict:
         cfg = {
-            "divider_style": "alle", "columns_enabled": True, "show_controls": False,
+            "divider_style": "alle", "columns_enabled": True, "show_controls": True,
             "esc_to_quit": False, "mouse_support": True, "show_console": False,
             "console_position": "unten", "text_editor": "nano %s", "opener": "open %s",
             "sort_by": "mtime", "sort_reverse": True, "sort_dir_first": True,
@@ -1061,7 +1061,7 @@ class EasyDateienApp:
 
         cur_item = self.items[self.selected_idx] if (self.items and 0 <= self.selected_idx < total_items) else None
 
-        show_controls = self.config.get("show_controls", False)
+        show_controls = self.config.get("show_controls", True)
         has_dialog = bool(self.active_dialog)
         has_status_bar = (show_controls or has_dialog) and (term_rows >= 5)
 
@@ -2123,15 +2123,19 @@ class EasyDateienApp:
                     try:
                         from easydateien_konfigurator import run_konfigurator
                         new_cfg = run_konfigurator(standalone=False)
+                        self.config.clear()
                         self.config.update(new_cfg)
                         self.show_console = self.config.get("show_console", False)
-                        self.console_position = self.config.get("console_position", "unten")
+                        self.console_position = self.config.get("console_position", "unten").lower()
                     except Exception as e:
                         self.set_status(f"Fehler Konfigurator: {e}", "error")
+                    mouse_enabled = self.config.get("mouse_support", True)
                     tty.setcbreak(fd, termios.TCSADRAIN)
                     sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
                     if mouse_enabled:
                         sys.stdout.write("\033[?1000h\033[?1006h")
+                    else:
+                        sys.stdout.write("\033[?1006l\033[?1000l")
                     sys.stdout.write("\033[2J\033[H")
                     sys.stdout.flush()
                     self.refresh_items()

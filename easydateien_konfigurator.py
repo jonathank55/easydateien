@@ -44,7 +44,7 @@ ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 DEFAULT_CONFIG = {
     "divider_style": "alle",
     "columns_enabled": True,
-    "show_controls": False,
+    "show_controls": True,
     "esc_to_quit": False,
     "mouse_support": True,
     "show_console": False,
@@ -97,7 +97,7 @@ KEYBINDING_ITEMS = [
 MAIN_MENU_ITEMS = [
     ("divider", "Trennungslinien-Stil", "alle"),
     ("columns", "3-Spalten-Layout", "Ein"),
-    ("controls", "Steuerungshilfe unten", "Aus"),
+    ("controls", "Steuerungshilfe unten", "Ein"),
     ("mouse", "Mausunterstützung", "Ein"),
     ("console", "Terminal-Konsole", "Aus"),
     ("hidden", "Versteckte Dateien anzeigen", "Aus"),
@@ -176,6 +176,7 @@ def save_config(cfg: dict):
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
+        f.write("\n")
 
 
 def read_key(fd: int, timeout: float = 0.05) -> str:
@@ -346,6 +347,7 @@ def keybindings_menu(fd: int):
 def main_menu(fd: int):
     cfg = load_config()
     idx = 0
+    status_hint = ""
     while True:
         rows = []
         for key, lbl, _ in MAIN_MENU_ITEMS:
@@ -354,7 +356,7 @@ def main_menu(fd: int):
             elif key == "columns":
                 val = f"[{'Ein' if cfg.get('columns_enabled', True) else 'Aus'}]"
             elif key == "controls":
-                val = f"[{'Ein' if cfg.get('show_controls', False) else 'Aus'}]"
+                val = f"[{'Ein' if cfg.get('show_controls', True) else 'Aus'}]"
             elif key == "mouse":
                 val = f"[{'Ein' if cfg.get('mouse_support', True) else 'Aus'}]"
             elif key == "console":
@@ -371,13 +373,15 @@ def main_menu(fd: int):
                 val = ""
             rows.append((key, lbl, val))
 
+        footer_text = status_hint if status_hint else "[↑↓] Nav  [Enter / Space / →] Ändern  [ESC / q] Beenden"
         start, count = render_box(
             "EASYDATEIEN KONFIGURATION",
             "Einstellungen verwalten und anpassen",
             rows,
             idx,
-            "[↑↓] Nav  [Enter / Space / →] Ändern  [ESC / q] Beenden"
+            footer_text
         )
+        status_hint = ""
         k = read_key(fd)
         if not k:
             continue
@@ -408,7 +412,7 @@ def main_menu(fd: int):
                 cfg["columns_enabled"] = not cfg.get("columns_enabled", True)
                 save_config(cfg)
             elif act == "controls":
-                cfg["show_controls"] = not cfg.get("show_controls", False)
+                cfg["show_controls"] = not cfg.get("show_controls", True)
                 save_config(cfg)
             elif act == "mouse":
                 cfg["mouse_support"] = not cfg.get("mouse_support", True)
@@ -425,6 +429,7 @@ def main_menu(fd: int):
             elif act == "reset":
                 cfg = dict(DEFAULT_CONFIG)
                 save_config(cfg)
+                status_hint = f"{C_BOLD_GREEN}✓ Auf Standardwerte zurückgesetzt{C_RESET}"
             elif act == "quit":
                 break
     return cfg

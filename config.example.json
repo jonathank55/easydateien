@@ -1,7 +1,7 @@
 {
   "divider_style": "alle",
   "columns_enabled": true,
-  "show_controls": false,
+  "show_controls": true,
   "esc_to_quit": false,
   "mouse_support": true,
   "show_console": false,
