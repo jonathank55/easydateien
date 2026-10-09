@@ -844,8 +844,8 @@ class EasyDateienApp:
             return 1
 
     def build_screen(self, term_cols: int, term_rows: int) -> List[str]:
-        """Erstellt alle Zeilen der Anzeige dynamisch angepasst an jede Fenstergröße im Yazi-Box-Design."""
-        # 1. Pfad formatieren
+        """Erstellt alle Zeilen der Anzeige dynamisch angepasst an jede Fenstergröße."""
+        # 1. Pfad und Zähler oben formatieren (Pfad ganz links, Zähler z. B. 2/33 ganz rechts)
         home_dir = os.path.expanduser("~")
         disp_path = self.current_dir
         if disp_path.startswith(home_dir):
@@ -855,148 +855,167 @@ class EasyDateienApp:
         cur_item = self.items[self.selected_idx] if (self.items and 0 <= self.selected_idx < total_items) else None
         cur_name = (cur_item.name + ("/" if cur_item.is_dir else "")) if cur_item else ""
 
+        cur_idx_str = f"{self.selected_idx + 1}/{total_items}" if total_items > 0 else "0/0"
+        if term_cols > visible_len(cur_idx_str) + 3:
+            avail_p = term_cols - visible_len(cur_idx_str) - 1
+            path_trunc = truncate_end(disp_path, avail_p)
+            path_line = pad_visible(path_trunc, term_cols - visible_len(cur_idx_str)) + cur_idx_str
+        else:
+            path_line = pad_visible(truncate_end(disp_path, term_cols), term_cols)
+
         # Sonderfälle bei winziger Fensterhöhe
         if term_rows <= 1:
-            return [pad_visible(truncate_end(disp_path, term_cols), term_cols)]
+            return [path_line]
         if term_rows == 2:
             return [
-                pad_visible(truncate_end(disp_path, term_cols), term_cols),
+                path_line,
                 pad_visible(truncate_end(cur_name, term_cols), term_cols),
             ]
 
-        # Statuszeile (NOR, Steuerung ODER Dateimetadaten)
-        if self.clipboard_mode == "cut":
-            mode_lbl = "CUT"
-        elif self.clipboard_mode == "copy":
-            mode_lbl = "CPY"
-        elif self.selected_paths:
-            mode_lbl = f"SEL {len(self.selected_paths)}"
-        else:
-            mode_lbl = "NOR"
-
-        pos_str = "Top" if self.selected_idx == 0 else ("Bot" if self.selected_idx == total_items - 1 else f"{int((self.selected_idx + 1) / max(1, total_items) * 100)}%")
-        idx_str = f"{self.selected_idx + 1}/{total_items}" if total_items > 0 else "0/0"
+        # 2. Statuszeile unten ("Entweder Steuerung oder nix")
         show_controls = self.config.get("show_controls", True)
+        has_status_bar = bool(self.status_message) or show_controls
+        status_line = ""
 
-        if self.status_message:
-            left_txt = f" {BOLD}{mode_lbl}{RESET}  {self.status_message}"
-            status_line = pad_visible(left_txt, term_cols)
-        elif show_controls:
-            # Yazi-Stil mit Steuerung
-            if term_cols >= 95:
-                right_txt = f" {pos_str:>4}  {idx_str:>6} "
-            elif term_cols >= 45:
-                right_txt = f" {idx_str:>5} "
+        if has_status_bar:
+            if self.clipboard_mode == "cut":
+                mode_lbl = "CUT"
+            elif self.clipboard_mode == "copy":
+                mode_lbl = "CPY"
+            elif self.selected_paths:
+                mode_lbl = f"SEL {len(self.selected_paths)}"
             else:
-                right_txt = ""
+                mode_lbl = "NOR"
 
-            left_badge = f" {BOLD}{mode_lbl}{RESET}  "
-            avail_ctrl = max(0, term_cols - visible_len(left_badge) - visible_len(right_txt))
+            if self.status_message:
+                status_line = pad_visible(f" {BOLD}{mode_lbl}{RESET}  {self.status_message}", term_cols)
+            elif show_controls:
+                left_badge = f" {BOLD}{mode_lbl}{RESET}  "
+                avail_ctrl = max(0, term_cols - visible_len(left_badge))
 
-            ctrl_tiers = [
-                "[↑↓] Bewegen  [→] Ordner (Doppel-→ nano)  [←] Zurück  [Enter] open  [Space] *  [m] Menü  [q] Beenden",
-                "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [Space] *  [m] Menü  [q] Ende",
-                "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [m] Menü  [q] Ende",
-                "[↑↓] Nav  [→] Rein/nano  [←] Zurück  [Enter] open  [m] Menü  [q] Ende",
-                "[↑↓] Nav  [→] Ordner/nano  [Enter] open  [m] Menü  [q] Ende",
-                "[↑↓] Nav  [→] In  [Enter] open  [q] Ende",
-                "[↑↓] Nav  [Enter] open  [q]",
-            ]
+                ctrl_tiers = [
+                    "[↑↓] Bewegen  [→] Ordner (Doppel-→ nano)  [←] Zurück  [Enter] open  [Space] *  [m] Menü  [q] Beenden",
+                    "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [Space] *  [m] Menü  [q] Ende",
+                    "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [m] Menü  [q] Ende",
+                    "[↑↓] Nav  [→] Rein/nano  [←] Zurück  [Enter] open  [m] Menü  [q] Ende",
+                    "[↑↓] Nav  [→] Ordner/nano  [Enter] open  [m] Menü  [q] Ende",
+                    "[↑↓] Nav  [→] In  [Enter] open  [q] Ende",
+                    "[↑↓] Nav  [Enter] open  [q]",
+                ]
 
-            ctrl_str = ""
-            for tier in ctrl_tiers:
-                if len(tier) <= avail_ctrl:
-                    ctrl_str = tier
-                    break
-            if not ctrl_str:
-                ctrl_str = truncate_end(ctrl_tiers[-1], avail_ctrl)
+                ctrl_str = ""
+                for tier in ctrl_tiers:
+                    if len(tier) <= avail_ctrl:
+                        ctrl_str = tier
+                        break
+                if not ctrl_str:
+                    ctrl_str = truncate_end(ctrl_tiers[-1], avail_ctrl)
 
-            status_line = pad_visible(f"{left_badge}{ctrl_str}", term_cols - visible_len(right_txt)) + right_txt
-        else:
-            # Klassische Yazi-Dateimetadaten (Größe, Name, Rechte, Position, Index)
-            size_str = format_size(cur_item.size) if (cur_item and not cur_item.is_dir) else ""
-            size_txt = f"{size_str:>7} " if size_str else "        "
-            perm_str = cur_item.mode_str if cur_item else "----------"
+                status_line = pad_visible(f"{left_badge}{ctrl_str}", term_cols)
 
-            if term_cols >= 75:
-                right_txt = f" {perm_str}  {pos_str:>4}  {idx_str:>6} "
-            elif term_cols >= 50:
-                right_txt = f" {pos_str:>4}  {idx_str:>6} "
-            elif term_cols >= 28:
-                right_txt = f" {idx_str:>6} "
-            else:
-                right_txt = ""
-
-            left_txt = f" {BOLD}{mode_lbl}{RESET}  {size_txt} "
-            avail_name = term_cols - visible_len(left_txt) - visible_len(right_txt)
-            if avail_name > 3:
-                name_trunc = truncate_end(cur_name, avail_name)
-                status_line = pad_visible(f"{left_txt}{name_trunc}", term_cols - visible_len(right_txt)) + right_txt
-            else:
-                status_line = pad_visible(f" {BOLD}{mode_lbl}{RESET}", term_cols - visible_len(right_txt)) + right_txt
-
-        if term_rows == 3:
-            return [
-                pad_visible(truncate_end(disp_path, term_cols), term_cols),
-                pad_visible(truncate_end(cur_name, term_cols), term_cols),
-                status_line,
-            ]
-
-        # Zeilenaufteilung für Kasten:
-        # Zeile 0: Pfadzeile
-        # Zeile 1: Kasten oben (╭...╮)
-        # Zeile 2 .. term_rows - 3 (oder -2): Inhaltszeilen
-        # Zeile term_rows - 2: Kasten unten (╰...╯)
-        # Zeile term_rows - 1: Statuszeile
-        show_status = (term_rows >= 5)
-        if show_status:
-            avail_rows = term_rows - 4
-        else:
-            avail_rows = 1
-
-        path_line = pad_visible(truncate_end(disp_path, term_cols), term_cols)
-
-        # Spalten und Breiten
-        eff_cols = self.get_effective_columns(term_cols)
+        # 3. Trennungslinien & Kasten-Konfiguration
         div_style = self.config.get("divider_style", "vertikal").lower()
-        use_inner_div = (div_style != "keine")
+        if div_style not in ("vertikal", "horizontal", "keine"):
+            div_style = "vertikal"
 
-        if eff_cols == 3:
-            avail = max(10, term_cols - 4)
-            w_left = max(6, int(avail * 0.16))
-            w_right = max(10, int(avail * 0.28))
-            w_mid = avail - w_left - w_right
-            if w_mid < 12:
-                w_left = max(4, w_left - (12 - w_mid) // 2)
-                w_right = max(6, w_right - (12 - w_mid) // 2)
+        has_top_border = (div_style in ("vertikal", "horizontal")) and (term_rows >= 4)
+        has_bottom_border = (div_style in ("vertikal", "horizontal")) and (term_rows >= 4)
+
+        # Zeilenbudget berechnen
+        consumed = 1  # path_line
+        if has_top_border:
+            consumed += 1
+        if has_bottom_border:
+            consumed += 1
+        if has_status_bar and term_rows >= consumed + 1:
+            consumed += 1
+        else:
+            has_status_bar = False
+
+        avail_rows = max(1, term_rows - consumed)
+        header_lines = 1 + (1 if has_top_border else 0)
+
+        # Spaltenanzahl und Breiten
+        eff_cols = self.get_effective_columns(term_cols)
+
+        top_line = ""
+        bot_line = ""
+
+        if div_style == "vertikal":
+            if eff_cols == 3:
+                avail = max(10, term_cols - 4)
+                w_left = max(6, int(avail * 0.16))
+                w_right = max(10, int(avail * 0.28))
                 w_mid = avail - w_left - w_right
+                if w_mid < 12:
+                    w_left = max(4, w_left - (12 - w_mid) // 2)
+                    w_right = max(6, w_right - (12 - w_mid) // 2)
+                    w_mid = avail - w_left - w_right
 
-            if use_inner_div:
                 top_line = f"╭{'─' * w_left}┬{'─' * w_mid}┬{'─' * w_right}╮"
                 bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}╯"
-            else:
-                top_line = f"╭{'─' * (term_cols - 2)}╮"
-                bot_line = f"╰{'─' * (term_cols - 2)}╯"
 
-        elif eff_cols == 2:
-            avail = max(8, term_cols - 3)
-            w_left = max(6, int(avail * 0.25))
-            w_mid = avail - w_left
-            w_right = 0
+            elif eff_cols == 2:
+                avail = max(8, term_cols - 3)
+                w_left = max(6, int(avail * 0.25))
+                w_mid = avail - w_left
+                w_right = 0
 
-            if use_inner_div:
                 top_line = f"╭{'─' * w_left}┬{'─' * w_mid}╮"
                 bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}╯"
-            else:
-                top_line = f"╭{'─' * (term_cols - 2)}╮"
-                bot_line = f"╰{'─' * (term_cols - 2)}╯"
 
-        else:  # 1 Spalte
-            w_left = 0
-            w_right = 0
-            w_mid = max(4, term_cols - 2)
-            top_line = f"╭{'─' * w_mid}╮"
-            bot_line = f"╰{'─' * w_mid}╯"
+            else:  # 1 Spalte
+                w_left = 0
+                w_right = 0
+                w_mid = max(4, term_cols - 2)
+                top_line = f"╭{'─' * w_mid}╮"
+                bot_line = f"╰{'─' * w_mid}╯"
+
+        elif div_style == "horizontal":
+            top_line = "─" * term_cols
+            bot_line = "─" * term_cols
+
+            if eff_cols == 3:
+                avail = max(10, term_cols - 4)
+                w_left = max(6, int(avail * 0.16))
+                w_right = max(10, int(avail * 0.28))
+                w_mid = avail - w_left - w_right
+                if w_mid < 12:
+                    w_left = max(4, w_left - (12 - w_mid) // 2)
+                    w_right = max(6, w_right - (12 - w_mid) // 2)
+                    w_mid = avail - w_left - w_right
+            elif eff_cols == 2:
+                avail = max(8, term_cols - 2)
+                w_left = max(6, int(avail * 0.25))
+                w_mid = avail - w_left
+                w_right = 0
+            else:
+                w_left = 0
+                w_right = 0
+                w_mid = term_cols
+
+        else:  # div_style == "keine"
+            top_line = ""
+            bot_line = ""
+
+            if eff_cols == 3:
+                avail = max(10, term_cols - 4)
+                w_left = max(6, int(avail * 0.16))
+                w_right = max(10, int(avail * 0.28))
+                w_mid = avail - w_left - w_right
+                if w_mid < 12:
+                    w_left = max(4, w_left - (12 - w_mid) // 2)
+                    w_right = max(6, w_right - (12 - w_mid) // 2)
+                    w_mid = avail - w_left - w_right
+            elif eff_cols == 2:
+                avail = max(8, term_cols - 2)
+                w_left = max(6, int(avail * 0.25))
+                w_mid = avail - w_left
+                w_right = 0
+            else:
+                w_left = 0
+                w_right = 0
+                w_mid = term_cols
 
         # Daten für Elternverzeichnis (Spalte 1)
         parent_items: List[FileEntry] = []
@@ -1064,9 +1083,10 @@ class EasyDateienApp:
 
         # Layout-Metriken für Mausklick-Erkennung sichern
         self.last_layout = {
-            "header_lines": 2,
+            "header_lines": header_lines,
             "avail_rows": avail_rows,
             "eff_cols": eff_cols,
+            "div_style": div_style,
             "w_left": w_left,
             "w_mid": w_mid,
             "w_right": w_right,
@@ -1075,7 +1095,7 @@ class EasyDateienApp:
             "child_items": child_items,
             "cur_item": cur_item,
             "is_cur_dir": is_cur_dir,
-            "show_status": show_status,
+            "show_status": has_status_bar,
         }
 
         # Zeilen rendern
@@ -1107,7 +1127,7 @@ class EasyDateienApp:
                 in_cut = (self.clipboard_mode == "cut" and item.path in self.clipboard_paths)
                 in_copy = (self.clipboard_mode == "copy" and item.path in self.clipboard_paths)
 
-                # Badges: * für Auswahl, × für Cut, + für Copy, 2 Leerzeichen normal
+                # Badges: * für Auswahl, × für Cut, + für Copy
                 if in_cut:
                     badge = "× "
                 elif in_copy:
@@ -1179,7 +1199,6 @@ class EasyDateienApp:
                     else:
                         card = [
                             f" {BOLD}Details{RESET}",
-                            f" {get_divider('─', max(1, w_right - 3))}",
                             f" Name:   {truncate_end(cur_item.name, max(3, w_right - 10))}",
                             f" Typ:    {truncate_end(get_file_type_desc(cur_item), max(3, w_right - 10))}",
                             f" Größe:  {format_size(cur_item.size)}",
@@ -1188,6 +1207,8 @@ class EasyDateienApp:
                             f" nano:   Doppel-→",
                             f" Enter:  Öffnen (open)",
                         ]
+                        if div_style != "keine":
+                            card.insert(1, f" {get_divider('─', max(1, w_right - 3))}")
                         if r < len(card):
                             cell_right = pad_visible(card[r], w_right)
                         else:
@@ -1195,25 +1216,40 @@ class EasyDateienApp:
                 else:
                     cell_right = " " * w_right
 
-            # Zeile zusammensetzen
-            if eff_cols == 1:
-                row_line = f"│{cell_mid}│"
-            elif eff_cols == 2:
-                sep = "│" if use_inner_div else " "
-                row_line = f"│{cell_left}{sep}{cell_mid}│"
-            else:
-                sep = "│" if use_inner_div else " "
-                row_line = f"│{cell_left}{sep}{cell_mid}{sep}{cell_right}│"
+            # Zeile zusammensetzen je nach Trennungslinien-Stil
+            if div_style == "vertikal":
+                if eff_cols == 1:
+                    row_line = f"│{cell_mid}│"
+                elif eff_cols == 2:
+                    row_line = f"│{cell_left}│{cell_mid}│"
+                else:
+                    row_line = f"│{cell_left}│{cell_mid}│{cell_right}│"
+            elif div_style == "horizontal":
+                if eff_cols == 1:
+                    row_line = f" {cell_mid} "
+                elif eff_cols == 2:
+                    row_line = f"{cell_left}  {cell_mid}"
+                else:
+                    row_line = f"{cell_left}  {cell_mid}  {cell_right}"
+            else:  # keine
+                if eff_cols == 1:
+                    row_line = cell_mid
+                elif eff_cols == 2:
+                    row_line = f"{cell_left}  {cell_mid}"
+                else:
+                    row_line = f"{cell_left}  {cell_mid}  {cell_right}"
 
-            if visible_len(row_line) > term_cols:
-                plain = ANSI_ESCAPE_RE.sub("", row_line)
-                row_line = truncate_end(plain, term_cols)
-
+            row_line = pad_visible(row_line, term_cols)
             file_lines.append(row_line)
 
         # 8. Vollständigen Bildschirm zusammensetzen
-        all_lines = [path_line, top_line] + file_lines + [bot_line]
-        if show_status:
+        all_lines = [path_line]
+        if has_top_border and top_line:
+            all_lines.append(top_line)
+        all_lines.extend(file_lines)
+        if has_bottom_border and bot_line:
+            all_lines.append(bot_line)
+        if has_status_bar and status_line:
             all_lines.append(status_line)
 
         return all_lines[:term_rows]
@@ -1227,6 +1263,7 @@ class EasyDateienApp:
         hdr_count = layout.get("header_lines", 2)
         avail_rows = layout.get("avail_rows", 0)
         eff_cols = layout.get("eff_cols", 1)
+        div_style = layout.get("div_style", "vertikal")
         w_left = layout.get("w_left", 0)
         w_mid = layout.get("w_mid", 0)
         m_start = layout.get("m_start", 0)
@@ -1241,16 +1278,19 @@ class EasyDateienApp:
         if 0 <= file_row < avail_rows:
             col_x = x - 1  # 0-basiert
 
-            if eff_cols >= 2 and 1 <= col_x <= w_left:
-                # Klick in Eltern-Spalte: Zum übergeordneten Ordner wechseln
+            if div_style == "vertikal":
+                in_left = (eff_cols >= 2 and 1 <= col_x <= w_left)
+                in_mid = (eff_cols == 1 and 1 <= col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 1 + w_mid))
+                in_right = (eff_cols == 3 and col_x >= (w_left + w_mid + 3))
+            else:
+                in_left = (eff_cols >= 2 and col_x < w_left)
+                in_mid = (eff_cols == 1 and col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 2 + w_mid))
+                in_right = (eff_cols == 3 and col_x > (w_left + 2 + w_mid))
+
+            if in_left:
                 self.go_parent_directory()
                 return True
-
-            elif eff_cols >= 2 and col_x == w_left + 1:
-                return False
-
-            elif (eff_cols == 1 and 1 <= col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 1 + w_mid)):
-                # Klick in aktuelle Spalte
+            elif in_mid:
                 target_idx = m_start + file_row
                 if 0 <= target_idx < len(self.items):
                     now = datetime.datetime.now().timestamp()
@@ -1268,9 +1308,7 @@ class EasyDateienApp:
                         self.last_click_time = now
                         self.last_click_idx = target_idx
                     return True
-
-            elif eff_cols == 3 and col_x >= (w_left + w_mid + 3):
-                # Klick in rechte Spalte
+            elif in_right:
                 cur_item = layout.get("cur_item")
                 if cur_item and layout.get("is_cur_dir"):
                     child_items = layout.get("child_items", [])
@@ -1293,6 +1331,7 @@ class EasyDateienApp:
         hdr_count = layout.get("header_lines", 2)
         avail_rows = layout.get("avail_rows", 0)
         eff_cols = layout.get("eff_cols", 1)
+        div_style = layout.get("div_style", "vertikal")
         w_left = layout.get("w_left", 0)
         w_mid = layout.get("w_mid", 0)
         m_start = layout.get("m_start", 0)
@@ -1300,11 +1339,10 @@ class EasyDateienApp:
         file_row = (y - 1) - hdr_count
         if 0 <= file_row < avail_rows:
             col_x = x - 1
-            in_mid = False
-            if eff_cols == 1:
-                in_mid = (1 <= col_x <= w_mid)
-            elif eff_cols >= 2:
-                in_mid = ((w_left + 2) <= col_x <= (w_left + 1 + w_mid))
+            if div_style == "vertikal":
+                in_mid = (eff_cols == 1 and 1 <= col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 1 + w_mid))
+            else:
+                in_mid = (eff_cols == 1 and col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 2 + w_mid))
 
             if in_mid:
                 target_idx = m_start + file_row
