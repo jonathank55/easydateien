@@ -130,7 +130,7 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
         if raw == b"\x1b":
             seq = b""
             while True:
-                r2, _, _ = select.select([fd], [], [], 0.03)
+                r2, _, _ = select.select([fd], [], [], 0.05)
                 if not r2: break
                 c = os.read(fd, 1)
                 if not c: break
@@ -144,12 +144,10 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
                 try:
                     is_rel = seq.endswith(b"m")
                     b_s, x_s, y_s = seq[2:-1].decode("ascii").split(";")
-                    b_c, x_p, y_p = int(b_s), int(x_s), int(y_s)
+                    b_c = int(b_s)
                     if b_c == 64: return "MOUSE_WHEEL_UP"
                     elif b_c == 65: return "MOUSE_WHEEL_DOWN"
-                    elif not is_rel:
-                        if b_c == 0: return f"MOUSE_CLICK:{x_p}:{y_p}"
-                        elif b_c == 2: return f"MOUSE_RIGHT_CLICK:{x_p}:{y_p}"
+                    elif not is_rel and b_c == 0: return f"MOUSE_CLICK:{int(x_s)}:{int(y_s)}"
                 except Exception: pass
                 return "MOUSE_EVENT"
             mapping = {b"[A":"UP", b"[B":"DOWN", b"[C":"RIGHT", b"[D":"LEFT", b"[H":"HOME", b"[F":"END", b"[5~":"PAGE_UP", b"[6~":"PAGE_DOWN", b"[3~":"DELETE"}
@@ -975,12 +973,10 @@ class EasyDateienApp:
                     last_size = curr_size; needs_redraw = True
                 if needs_redraw:
                     lines = self.build_screen(term_cols, term_rows)
-                    out_buf = ["\033[H"]
-                    for i, l in enumerate(lines[:term_rows]):
-                        if i > 0: out_buf.append("\n")
-                        out_buf.append(f"\r\033[2K{l}")
-                    out_buf.append("\033[J")
-                    sys.stdout.write("".join(out_buf))
+                    for r_idx, l in enumerate(lines[:term_rows]):
+                        l_safe = truncate_end(l, term_cols - 1) if r_idx == term_rows - 1 else l
+                        sys.stdout.write(f"\033[{r_idx+1};1H\033[2K{l_safe}")
+                    sys.stdout.write("\033[J")
                     sys.stdout.flush()
                     needs_redraw = False
                 key = read_key(fd, timeout=0.05)

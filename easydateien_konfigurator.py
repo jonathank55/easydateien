@@ -71,7 +71,7 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
         if raw == b"\x1b":
             seq = b""
             while True:
-                r2, _, _ = select.select([fd], [], [], 0.03)
+                r2, _, _ = select.select([fd], [], [], 0.05)
                 if not r2: break
                 c = os.read(fd, 1)
                 if not c: break
@@ -103,8 +103,8 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
 
 def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str):
     term_cols, term_rows = shutil.get_terminal_size((80, 24))
-    # Exakte Box-Breite: Niemals größer als das Terminal (verhindert Zeilenumbruch)
-    box_w = max(24, min(term_cols, 74))
+    # Mindestens 2 Zeichen schmaler als Terminal -> verhindert JEDES Umbrechen/Scrollen!
+    box_w = max(24, min(term_cols - 2, 68))
     inner = max(4, box_w - 2)
     fixed_h = 7
     avail_items = max(3, term_rows - fixed_h)
@@ -118,9 +118,9 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     lines = []
     lines.append("╭" + "─" * inner + "╮")
     t_disp = title if len(title) <= inner - 4 else title[:inner - 6] + ".."
-    lines.append("│  " + t_disp + " " * (inner - 2 - len(t_disp)) + "│")
+    lines.append("│  " + t_disp.ljust(inner - 2) + "│")
     s_disp = subtitle if len(subtitle) <= inner - 4 else subtitle[:inner - 6] + ".."
-    lines.append("│  " + s_disp + " " * (inner - 2 - len(s_disp)) + "│")
+    lines.append("│  " + s_disp.ljust(inner - 2) + "│")
     lines.append("├" + "─" * inner + "┤")
     for i, (key, label, tag) in enumerate(view_rows):
         actual_idx = start + i
@@ -131,22 +131,19 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         lbl_trunc = label if len(label) <= avail_lbl else label[:avail_lbl - 2] + ".."
         pad = " " * max(0, avail_lbl - len(lbl_trunc))
         content = f"{pfx}{lbl_trunc}{pad}{tag_str}"
-        if len(content) > inner: content = content[:inner]
-        elif len(content) < inner: content += " " * (inner - len(content))
-        if is_sel: lines.append(f"│\033[1m{content}\033[0m│")
-        else: lines.append(f"│{content}│")
+        content_padded = content.ljust(inner)[:inner]
+        if is_sel: lines.append(f"│\033[1m{content_padded}\033[0m│")
+        else: lines.append(f"│{content_padded}│")
     lines.append("├" + "─" * inner + "┤")
     f_disp = footer if len(footer) <= inner - 4 else footer[:inner - 6] + ".."
-    lines.append("│  " + f_disp + " " * (inner - 2 - len(f_disp)) + "│")
+    lines.append("│  " + f_disp.ljust(inner - 2) + "│")
     lines.append("╰" + "─" * inner + "╯")
 
-    # Atomar ohne Scrollen zeichnen: \033[J tilgt alle Geisterlinien unter der Box!
-    out = ["\033[H"]
-    for i, l in enumerate(lines[:term_rows]):
-        if i > 0: out.append("\n")
-        out.append(f"\r\033[2K{l}")
-    out.append("\033[J")
-    sys.stdout.write("".join(out))
+    # Absolute Cursorpositionierung verhindert JEDES Scrollen nach oben
+    sys.stdout.write("\033[H")
+    for r_i, l in enumerate(lines[:term_rows]):
+        sys.stdout.write(f"\033[{r_i+1};1H\033[2K{l}")
+    sys.stdout.write("\033[J")
     sys.stdout.flush()
     return start, len(view_rows)
 
@@ -154,11 +151,11 @@ def keybindings_menu(fd: int):
     idx = 0
     while True:
         start, count = render_box(
-            "TASTENBELEGUNGEN BEARBEITEN",
-            "Übersicht der aktiven Tastenkürzel",
+            "TASTENBELEGUNGEN",
+            "Aktive Tastenkombinationen",
             KEYBINDING_ITEMS,
             idx,
-            "[↑/↓/j/k] Navigieren  [Enter/→] Auswählen  [ESC/q] Zurück"
+            "[↑↓] Nav  [ESC] Zurück"
         )
         k = read_key(fd)
         if not k: continue
@@ -168,17 +165,16 @@ def keybindings_menu(fd: int):
         elif k.startswith("CLICK:"):
             try:
                 _, cx_s, cy_s = k.split(":")
-                cy = int(cy_s)
-                row_i = cy - 1 - 4
+                row_i = int(cy_s) - 5
                 if 0 <= row_i < count:
-                    target = start + row_i
-                    if target == idx: k = "ENTER"
-                    else: idx = target
+                    idx = start + row_i
             except Exception: pass
-        if k in ("ENTER", "SPACE", "RIGHT"):
+            continue
+        if k in ("ENTER", "SPACE"):
             act = KEYBINDING_ITEMS[idx][0]
-            if act in ("back", "reset"):
-                if act == "reset": save_config(dict(DEFAULT_CONFIG))
+            if act == "back": break
+            elif act == "reset":
+                save_config(dict(DEFAULT_CONFIG))
                 break
 
 def main_menu(fd: int):
@@ -202,7 +198,7 @@ def main_menu(fd: int):
             "Einstellungen verwalten und anpassen",
             rows,
             idx,
-            "[↑/↓/j/k] Navigieren  [Enter/Leertaste] Umschalten  [ESC/q] Beenden"
+            "[↑↓] Nav  [Enter/Space] Ändern  [ESC] Ende"
         )
         k = read_key(fd)
         if not k: continue
@@ -212,14 +208,12 @@ def main_menu(fd: int):
         elif k.startswith("CLICK:"):
             try:
                 _, cx_s, cy_s = k.split(":")
-                cy = int(cy_s)
-                row_i = cy - 1 - 4
+                row_i = int(cy_s) - 5
                 if 0 <= row_i < count:
-                    target = start + row_i
-                    if target == idx: k = "ENTER"
-                    else: idx = target
+                    idx = start + row_i
             except Exception: pass
-        if k in ("ENTER", "SPACE", "RIGHT"):
+            continue
+        if k in ("ENTER", "SPACE"):
             act = rows[idx][0]
             if act == "divider":
                 opts = ["alle", "vertikal", "horizontal", "außen", "keine"]
@@ -240,6 +234,25 @@ def main_menu(fd: int):
             elif act == "reset":
                 cfg = dict(DEFAULT_CONFIG); save_config(cfg)
             elif act == "quit": break
+        elif k == "RIGHT":
+            act = rows[idx][0]
+            if act == "keybindings":
+                keybindings_menu(fd)
+                cfg = load_config()
+            elif act not in ("reset", "quit"):
+                if act == "divider":
+                    opts = ["alle", "vertikal", "horizontal", "außen", "keine"]
+                    cur = cfg.get("divider_style", "alle")
+                    cfg["divider_style"] = opts[(opts.index(cur) + 1) % len(opts)] if cur in opts else "alle"
+                    save_config(cfg)
+                elif act == "columns":
+                    cfg["columns_enabled"] = not cfg.get("columns_enabled", True); save_config(cfg)
+                elif act == "controls":
+                    cfg["show_controls"] = not cfg.get("show_controls", False); save_config(cfg)
+                elif act == "mouse":
+                    cfg["mouse_support"] = not cfg.get("mouse_support", True); save_config(cfg)
+                elif act == "console":
+                    cfg["show_console"] = not cfg.get("show_console", False); save_config(cfg)
     return cfg
 
 def run_konfigurator(standalone: bool = True):
