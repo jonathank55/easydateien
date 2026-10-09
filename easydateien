@@ -47,6 +47,8 @@ C_INVERT = "\033[7m"
 CLEAR_LINE = "\033[2K"
 HIDE_CURSOR = "\033[?25l"
 SHOW_CURSOR = "\033[?25h"
+DISABLE_AUTOWRAP = "\033[?7l"
+ENABLE_AUTOWRAP = "\033[?7h"
 
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
@@ -332,7 +334,6 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
                     pass
                 return "MOUSE_EVENT"
 
-            # ANSI- und SS3-Sequenzen mappen
             mapping = {
                 b"[A": "UP", b"[B": "DOWN", b"[C": "RIGHT", b"[D": "LEFT",
                 b"OA": "UP", b"OB": "DOWN", b"OC": "RIGHT", b"OD": "LEFT",
@@ -384,24 +385,21 @@ class EasyDateienApp:
         self.clipboard_paths: List[str] = []
         self.clipboard_mode: Optional[str] = None
         self.status_message: str = ""
-        self.status_level: str = "info"  # "info", "success", "warning", "error"
+        self.status_level: str = "info"
         self.status_expiry_moves: int = 0
         self.filter_query: str = ""
 
-        # Interaktiver Eingabemodus
-        self.active_dialog: Optional[str] = None  # None, "rename", "new", "search", "goto_path", "trash_confirm", "goto_menu"
+        self.active_dialog: Optional[str] = None
         self.dialog_input: str = ""
         self.dialog_cursor: int = 0
         self.dialog_target_item: Optional[FileEntry] = None
 
-        # Mausklick & Navigation
         self.last_click_time: float = 0.0
         self.last_click_idx: Optional[int] = None
         self.last_right_arrow_time: float = 0.0
         self.last_right_arrow_path: str = ""
         self.last_layout: Dict = {}
 
-        # Terminal-Konsole
         self.show_console: bool = self.config.get("show_console", False)
         self.console_position: str = self.config.get("console_position", "unten").lower()
         self.console_focused: bool = False
@@ -412,7 +410,6 @@ class EasyDateienApp:
         self.console_history_idx: int = 0
         self.console_scroll_offset: int = 0
 
-        # Caching
         self.cached_parent_dir: Optional[str] = None
         self.cached_parent_items: List[FileEntry] = []
         self.cached_child_path: Optional[str] = None
@@ -494,14 +491,14 @@ class EasyDateienApp:
                 sys.stdout.write("\033[?1006l\033[?1000l")
                 sys.stdout.flush()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            sys.stdout.write(SHOW_CURSOR + "\033[?1049l")
+            sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
             editor_cmd = self.config.get("text_editor", "nano %s").replace("%s", f'"{item.path}"')
             try:
                 subprocess.run(editor_cmd, shell=True)
             finally:
                 tty.setcbreak(fd, termios.TCSADRAIN)
-                sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
+                sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
                 if mouse_on:
                     sys.stdout.write("\033[?1000h\033[?1006h")
                 sys.stdout.write("\033[2J\033[H")
@@ -651,7 +648,6 @@ class EasyDateienApp:
         return path
 
     def load_file_preview_lines(self, path: str, max_lines: int) -> List[str]:
-        """Lädt die ersten Zeilen einer Textdatei oder Metadaten für die Vorschau."""
         if self.cached_file_preview_path == path and self.cached_file_preview_lines:
             return self.cached_file_preview_lines[:max_lines]
 
@@ -744,7 +740,7 @@ class EasyDateienApp:
                 sys.stdout.write("\033[?1006l\033[?1000l")
                 sys.stdout.flush()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            sys.stdout.write(SHOW_CURSOR + "\033[?1049l")
+            sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
             try:
                 subprocess.run(cmd, shell=True, cwd=self.current_dir)
@@ -752,7 +748,7 @@ class EasyDateienApp:
                 pass
             finally:
                 tty.setcbreak(fd, termios.TCSADRAIN)
-                sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
+                sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
                 if mouse_on:
                     sys.stdout.write("\033[?1000h\033[?1006h")
                 sys.stdout.write("\033[2J\033[H")
@@ -799,7 +795,6 @@ class EasyDateienApp:
         total_items = len(self.items)
         cur_idx_str = f"{self.selected_idx + 1}/{total_items}" if total_items > 0 else "0/0"
         
-        # Status-Text & Level formatieren
         if self.status_message:
             lvl_color = C_BOLD_GREEN if self.status_level == "success" else (C_BOLD_RED if self.status_level == "error" else (C_YELLOW if self.status_level == "warning" else C_CYAN))
             msg_str = f" [{lvl_color}{self.status_message}{C_RESET}]"
@@ -809,7 +804,6 @@ class EasyDateienApp:
         right_header = f"{msg_str}  {C_BOLD_CYAN}{cur_idx_str}{C_RESET}".strip() if msg_str else f"{C_BOLD_CYAN}{cur_idx_str}{C_RESET}"
         right_header_plain = ANSI_ESCAPE_RE.sub("", right_header)
 
-        # Header-Zeile zusammenstellen
         avail_for_path = max(1, term_cols - str_width(right_header_plain) - 2)
         path_styled = f"{C_BOLD_BLUE}{truncate_to_width(disp_path, avail_for_path)}{C_RESET}"
         pad_space = " " * max(1, term_cols - str_width(path_styled) - str_width(right_header_plain))
@@ -822,7 +816,6 @@ class EasyDateienApp:
         cur_item = self.items[self.selected_idx] if (self.items and 0 <= self.selected_idx < total_items) else None
 
         show_controls = self.config.get("show_controls", False)
-        # Bei aktivem Dialog oder Suche immer Footer-Leiste erzwingen
         has_dialog = bool(self.active_dialog)
         has_status_bar = (show_controls or has_dialog) and (term_rows >= 5)
 
@@ -833,7 +826,7 @@ class EasyDateienApp:
         has_top_border = (div_style in ("alle", "vertikal", "außen", "horizontal")) and (term_rows >= 4)
         has_bottom_border = (div_style in ("alle", "vertikal", "außen", "horizontal")) and (term_rows >= 4)
 
-        consumed = 1  # Header-Zeile
+        consumed = 1
         if has_top_border:
             consumed += 1
         if has_bottom_border:
@@ -853,14 +846,13 @@ class EasyDateienApp:
 
         if active_console and console_pos == "unten" and avail_total >= 4:
             console_h = max(2, min(8, avail_total // 3))
-            fm_rows = avail_total - console_h - 1  # -1 für Trennzeile
+            fm_rows = avail_total - console_h - 1
         else:
             console_h = 0
             fm_rows = avail_total
 
         eff_cols = self.get_effective_columns(term_cols)
 
-        # Breitenberechnung der Spalten
         if div_style in ("alle", "vertikal"):
             if eff_cols == 3:
                 avail = max(10, term_cols - 4)
@@ -989,7 +981,6 @@ class EasyDateienApp:
 
         file_lines = []
         for r in range(fm_rows):
-            # 1. Linke Spalte (Übergeordnetes Verzeichnis oder Konsole links)
             if active_console and console_pos == "links":
                 cell_left = c_left_lines[r] if r < len(c_left_lines) else " " * w_left
             elif eff_cols >= 2:
@@ -1010,7 +1001,6 @@ class EasyDateienApp:
             else:
                 cell_left = ""
 
-            # 2. Mittlere Spalte (Aktuelles Verzeichnis)
             m_idx = m_start + r
             if m_idx < len(self.items):
                 it = self.items[m_idx]
@@ -1032,12 +1022,10 @@ class EasyDateienApp:
                 prefix_str = f" {c_char}{b_char} "
                 prefix_len = 4
                 s_str = format_size(it.size) if not it.is_dir else ""
-                name_colored = get_file_colored_name(it)
 
                 if w_mid >= 26:
                     avail_n = max(3, w_mid - prefix_len - 10)
                     n_trunc = truncate_to_width(it.name + ("/" if it.is_dir else ""), avail_n)
-                    # Farbe auf n_trunc anwenden
                     it_fake = FileEntry(it.path, n_trunc)
                     it_fake.is_dir = it.is_dir
                     it_fake.is_symlink = it.is_symlink
@@ -1067,14 +1055,12 @@ class EasyDateienApp:
             else:
                 cell_mid = " " * w_mid
 
-            # 3. Rechte Spalte (Vorschau / Unterordner oder Konsole rechts)
             if active_console and console_pos == "rechts":
                 cell_right = c_right_lines[r] if r < len(c_right_lines) else " " * w_right
             elif eff_cols == 3:
                 if cur_item and is_cur_dir:
                     if r < len(child_items):
                         c_it = child_items[r]
-                        c_name = get_file_colored_name(c_it)
                         c_size = format_size(c_it.size) if not c_it.is_dir else ""
                         if w_right >= 22 and c_size:
                             avail_c = max(3, w_right - 2 - 10)
@@ -1101,7 +1087,6 @@ class EasyDateienApp:
                     else:
                         cell_right = " " * w_right
                 elif cur_item and not is_cur_dir:
-                    # Details & Dateivorschau
                     card = [
                         f" {C_BOLD_BLUE}Details{C_RESET}",
                         f" {C_BOLD}Typ:{C_RESET}    {truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 9))}",
@@ -1130,7 +1115,6 @@ class EasyDateienApp:
             else:
                 cell_right = ""
 
-            # Rahmen um Zeile anlegen
             b_c = C_BLUE
             if div_style in ("alle", "vertikal"):
                 if eff_cols == 3:
@@ -1161,7 +1145,6 @@ class EasyDateienApp:
             all_lines.append(pad_to_width(f"{C_BLUE}{top_line}{C_RESET}", term_cols))
         all_lines.extend(file_lines)
 
-        # Konsole unten einbetten
         if active_console and console_pos == "unten" and console_h > 0:
             all_lines.append(pad_to_width(f"{C_BLUE}{mid_sep}{C_RESET}", term_cols))
             inner_cw = max(4, term_cols - 2 if div_style in ("alle", "vertikal", "außen") else term_cols)
@@ -1178,10 +1161,8 @@ class EasyDateienApp:
         elif has_bottom_border and bot_line:
             all_lines.append(pad_to_width(f"{C_BLUE}{bot_line}{C_RESET}", term_cols))
 
-        # Status- & Dialog-Leiste unten rendern
         if has_status_bar:
             if self.active_dialog:
-                # Interaktiver Dialog
                 if self.active_dialog == "rename":
                     prompt_lbl = f"{C_BOLD_YELLOW}[UMBENENNEN]{C_RESET} Name: "
                     inp_txt = self.dialog_input
@@ -1218,7 +1199,6 @@ class EasyDateienApp:
                 else:
                     st_line = " " * term_cols
             else:
-                # Normale Statusleiste
                 if self.show_console and self.console_focused:
                     mode_lbl = f"{C_BOLD_GREEN}TERM{C_RESET}"
                 elif self.selected_paths:
@@ -1322,7 +1302,6 @@ class EasyDateienApp:
         return False
 
     def handle_dialog_key(self, key: str, fd: int) -> bool:
-        """Behandelt Tastatureingaben in aktiven Dialogen deterministisch."""
         if not self.active_dialog:
             return False
 
@@ -1541,7 +1520,7 @@ class EasyDateienApp:
         except Exception:
             pass
         tty.setcbreak(fd, termios.TCSADRAIN)
-        sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
+        sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
         mouse_enabled = self.config.get("mouse_support", True)
         if mouse_enabled:
             sys.stdout.write("\033[?1000h\033[?1006h")
@@ -1563,7 +1542,6 @@ class EasyDateienApp:
                     out_buf = []
                     for r_idx, l in enumerate(lines[:term_rows]):
                         out_buf.append(f"\033[{r_idx+1};1H\033[2K{l}")
-                    out_buf.append("\033[J")
                     sys.stdout.write("".join(out_buf))
                     sys.stdout.flush()
                     needs_redraw = False
@@ -1640,7 +1618,6 @@ class EasyDateienApp:
                         break
                     continue
 
-                # Konsole-Eingabemodus
                 if self.show_console and self.console_focused:
                     if key == "ENTER":
                         self.run_console_command(self.console_input, fd, old_settings)
@@ -1891,7 +1868,7 @@ class EasyDateienApp:
                     except Exception as e:
                         self.set_status(f"Fehler Konfigurator: {e}", "error")
                     tty.setcbreak(fd, termios.TCSADRAIN)
-                    sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
+                    sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
                     if mouse_enabled:
                         sys.stdout.write("\033[?1000h\033[?1006h")
                     sys.stdout.write("\033[2J\033[H")
@@ -1914,7 +1891,7 @@ class EasyDateienApp:
         finally:
             if mouse_enabled:
                 sys.stdout.write("\033[?1006l\033[?1000l")
-            sys.stdout.write(SHOW_CURSOR + "\033[?1049l")
+            sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
@@ -1934,7 +1911,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.3.0", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.3.1", help="Programmversion anzeigen")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
 

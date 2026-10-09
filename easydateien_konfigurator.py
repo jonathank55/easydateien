@@ -36,6 +36,9 @@ C_MAGENTA = "\033[0;35m"
 C_GRAY = "\033[90m"
 C_INVERT = "\033[7m"
 
+DISABLE_AUTOWRAP = "\033[?7l"
+ENABLE_AUTOWRAP = "\033[?7h"
+
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
 DEFAULT_CONFIG = {
@@ -241,10 +244,11 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     term_cols, term_rows = shutil.get_terminal_size((80, 24))
     inner = max(4, term_cols - 2)
     fixed_h = 7
-    avail_items = max(3, term_rows - fixed_h)
-    if len(rows) > avail_items:
-        start = max(0, min(cur_idx - avail_items // 2, len(rows) - avail_items))
-        view_rows = rows[start: start + avail_items]
+    avail_rows = max(1, term_rows - fixed_h)
+
+    if len(rows) > avail_rows:
+        start = max(0, min(cur_idx - avail_rows // 2, len(rows) - avail_rows))
+        view_rows = rows[start: start + avail_rows]
     else:
         start = 0
         view_rows = rows
@@ -274,14 +278,14 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
 
         avail_lbl = max(2, inner - 4 - str_width(tag) - 2)
         lbl_trunc = truncate_to_width(label, avail_lbl)
-        if is_sel:
-            lbl_styled = f"{C_BOLD}{lbl_trunc}{C_RESET}"
-        else:
-            lbl_styled = lbl_trunc
-
+        lbl_styled = f"{C_BOLD}{lbl_trunc}{C_RESET}" if is_sel else lbl_trunc
         pad_len = max(1, inner - 2 - str_width(pfx) - str_width(lbl_trunc) - str_width(tag))
         content_row = f" {pfx}{lbl_styled}{' ' * pad_len}{tag_colored} "
         lines.append(f"{b_c}│{C_RESET}{pad_to_width(content_row, inner)}{b_c}│{C_RESET}")
+
+    empty_needed = avail_rows - len(view_rows)
+    for _ in range(empty_needed):
+        lines.append(f"{b_c}│{C_RESET}{' ' * inner}{b_c}│{C_RESET}")
 
     lines.append(f"{b_c}├{'─' * inner}┤{C_RESET}")
     f_styled = f"{C_GRAY}{truncate_to_width(footer, inner - 4)}{C_RESET}"
@@ -291,7 +295,6 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     out = []
     for r_i, l in enumerate(lines[:term_rows]):
         out.append(f"\033[{r_i+1};1H\033[2K{l}")
-    out.append("\033[J")
     sys.stdout.write("".join(out))
     sys.stdout.flush()
     return start, len(view_rows)
@@ -430,14 +433,20 @@ def run_konfigurator(standalone: bool = True):
     old = termios.tcgetattr(fd)
     tty.setcbreak(fd, termios.TCSADRAIN)
     if standalone:
-        sys.stdout.write("\033[?1049h\033[?25l\033[?1000h\033[?1006h\033[2J\033[H")
+        sys.stdout.write("\033[?1049h\033[?25l" + DISABLE_AUTOWRAP + "\033[?1000h\033[?1006h\033[2J\033[H")
+        sys.stdout.flush()
+    else:
+        sys.stdout.write(DISABLE_AUTOWRAP)
         sys.stdout.flush()
     try:
         cfg = main_menu(fd)
         return cfg
     finally:
         if standalone:
-            sys.stdout.write("\033[?1006l\033[?1000l\033[?25h\033[?1049l")
+            sys.stdout.write("\033[?1006l\033[?1000l\033[?25h" + ENABLE_AUTOWRAP + "\033[?1049l")
+            sys.stdout.flush()
+        else:
+            sys.stdout.write(ENABLE_AUTOWRAP)
             sys.stdout.flush()
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
