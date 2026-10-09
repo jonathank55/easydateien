@@ -745,7 +745,7 @@ def run_konfigurator(standalone: bool = True) -> dict:
     needs_redraw = True
     opt_row_map = {}
 
-    DIVIDER_OPTIONS = ["vertikal", "horizontal", "keine"]
+    DIVIDER_OPTIONS = ["vertikal", "horizontal", "außen", "keine"]
     SORT_OPTIONS = ["mtime", "name", "size", "ext"]
 
     try:
@@ -760,7 +760,7 @@ def run_konfigurator(standalone: bool = True) -> dict:
             cols_status = "Ein" if cfg.get("columns_enabled", True) else "Aus"
             mouse_status = "Ein" if cfg.get("mouse_support", True) else "Aus"
             div_style = cfg.get("divider_style", "vertikal").lower()
-            div_display = {"vertikal": "Vertikal", "horizontal": "Horizontal", "keine": "Keine"}.get(div_style, "Vertikal")
+            div_display = {"vertikal": "Vertikal", "horizontal": "Horizontal", "außen": "Außen", "keine": "Keine"}.get(div_style, "Vertikal")
             esc_status = "Ein" if cfg.get("esc_to_quit", False) else "Aus"
             hidden_status = "Ein" if cfg.get("show_hidden", False) else "Aus"
             ed_cmd = cfg.get("text_editor", "nano %s")
@@ -925,7 +925,7 @@ def run_konfigurator(standalone: bool = True) -> dict:
                     next_div = DIVIDER_OPTIONS[(DIVIDER_OPTIONS.index(cur) + 1) % len(DIVIDER_OPTIONS)] if cur in DIVIDER_OPTIONS else "vertikal"
                     cfg["divider_style"] = next_div
                     save_config(cfg)
-                    div_disp = {"vertikal": "Vertikal", "horizontal": "Horizontal", "keine": "Keine"}.get(next_div, "Vertikal")
+                    div_disp = {"vertikal": "Vertikal", "horizontal": "Horizontal", "außen": "Außen", "keine": "Keine"}.get(next_div, "Vertikal")
                     feedback_msg = f"Trennungslinien: [{div_disp}]"
                     return True
                 elif action_idx == 5:

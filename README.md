@@ -79,7 +79,7 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
   - **Steuerung in Statusleiste:** `[Ein]` / `[Aus]` (zeigt die Tastensteuerung im Yazi-Badge-Design oder klassische Dateimetadaten).
   - **Spaltendarstellung:** `[Ein]` / `[Aus]` (Ein = mehrspaltiges Miller-Layout, Aus = klassische 1-Spalten-Ansicht).
   - **Maussteuerung:** `[Ein]` / `[Aus]` umschalten.
-  - **Trennungslinien:** `[Vertikal]`, `[Horizontal]` oder `[Keine]` direkt durchschalten.
+  - **Trennungslinien:** `[Vertikal]`, `[Horizontal]`, `[Außen]` oder `[Keine]` direkt durchschalten.
   - **Mit ESC beenden:** `[Ein]` / `[Aus]` (standardmäßig deaktiviert; ESC hebt stattdessen Auswahlen/Zwischenspeicher auf).
   - **Versteckte Dateien anzeigen:** `[Ein]` / `[Aus]` umschalten.
   - **Text- & Code-Editor festlegen:** z. B. `nano %s`, `vim %s`, `micro %s` oder `code %s`.

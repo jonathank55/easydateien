@@ -632,6 +632,11 @@ class EasyDateienApp:
             self.selected_paths.remove(item.path)
         else:
             self.selected_paths.add(item.path)
+            # Falls das Element im Zwischenspeicher war, dort entfernen
+            if item.path in self.clipboard_paths:
+                self.clipboard_paths.remove(item.path)
+                if not self.clipboard_paths:
+                    self.clipboard_mode = None
 
         if self.selected_idx < len(self.items) - 1:
             self.selected_idx += 1
@@ -639,32 +644,89 @@ class EasyDateienApp:
     def toggle_select_all(self):
         """Wählt alle sichtbaren Elemente aus oder hebt die Auswahl vollständig auf."""
         all_paths = {it.path for it in self.items}
-        if self.selected_paths.issuperset(all_paths) and all_paths:
+        if not all_paths:
+            return
+        if self.selected_paths.issuperset(all_paths):
             self.selected_paths.clear()
             self.status_message = "Auswahl aufgehoben."
         else:
             self.selected_paths.update(all_paths)
+            self.clipboard_paths = [p for p in self.clipboard_paths if p not in self.selected_paths]
+            if not self.clipboard_paths:
+                self.clipboard_mode = None
             self.status_message = f"{len(self.selected_paths)} Elemente markiert."
 
     def cut_selection(self):
         """Markiert die aktuelle Auswahl (oder das aktuelle Element) zum Ausschneiden."""
         if not self.items:
             return
-        targets = list(self.selected_paths) if self.selected_paths else [self.items[self.selected_idx].path]
+        cur_item = self.items[self.selected_idx]
+
+        # Fall 1: Bereits im Cut-Modus ohne neue Auswahl
+        if self.clipboard_mode == "cut" and not self.selected_paths and self.clipboard_paths:
+            if cur_item.path in self.clipboard_paths:
+                self.clipboard_mode = None
+                self.clipboard_paths = []
+                self.status_message = "Ausschneiden aufgehoben."
+                return
+
+        # Fall 2: Bereits im Copy-Modus ohne neue Auswahl -> Nahtlos von Copy zu Cut wechseln
+        if self.clipboard_mode == "copy" and not self.selected_paths and self.clipboard_paths:
+            self.clipboard_mode = "cut"
+            count = len(self.clipboard_paths)
+            if count == 1:
+                name = os.path.basename(self.clipboard_paths[0])
+                self.status_message = f"„{name}“ zum Ausschneiden markiert (mit 'p' einfügen)."
+            else:
+                self.status_message = f"{count} Elemente zum Ausschneiden markiert (mit 'p' einfügen)."
+            return
+
+        targets = list(self.selected_paths) if self.selected_paths else [cur_item.path]
         self.clipboard_mode = "cut"
         self.clipboard_paths = targets
         self.selected_paths.clear()
-        self.status_message = f"{len(targets)} Element(e) zum Ausschneiden markiert (mit 'p' einfügen)."
+        count = len(targets)
+        if count == 1:
+            name = os.path.basename(targets[0])
+            self.status_message = f"„{name}“ zum Ausschneiden markiert (mit 'p' einfügen)."
+        else:
+            self.status_message = f"{count} Elemente zum Ausschneiden markiert (mit 'p' einfügen)."
 
     def copy_selection(self):
         """Markiert die aktuelle Auswahl (oder das aktuelle Element) zum Kopieren."""
         if not self.items:
             return
-        targets = list(self.selected_paths) if self.selected_paths else [self.items[self.selected_idx].path]
+        cur_item = self.items[self.selected_idx]
+
+        # Fall 1: Bereits im Copy-Modus ohne neue Auswahl
+        if self.clipboard_mode == "copy" and not self.selected_paths and self.clipboard_paths:
+            if cur_item.path in self.clipboard_paths:
+                self.clipboard_mode = None
+                self.clipboard_paths = []
+                self.status_message = "Kopieren aufgehoben."
+                return
+
+        # Fall 2: Bereits im Cut-Modus ohne neue Auswahl -> Nahtlos von Cut zu Copy wechseln
+        if self.clipboard_mode == "cut" and not self.selected_paths and self.clipboard_paths:
+            self.clipboard_mode = "copy"
+            count = len(self.clipboard_paths)
+            if count == 1:
+                name = os.path.basename(self.clipboard_paths[0])
+                self.status_message = f"„{name}“ zum Kopieren markiert (mit 'p' einfügen)."
+            else:
+                self.status_message = f"{count} Elemente zum Kopieren markiert (mit 'p' einfügen)."
+            return
+
+        targets = list(self.selected_paths) if self.selected_paths else [cur_item.path]
         self.clipboard_mode = "copy"
         self.clipboard_paths = targets
         self.selected_paths.clear()
-        self.status_message = f"{len(targets)} Element(e) zum Kopieren markiert (mit 'p' einfügen)."
+        count = len(targets)
+        if count == 1:
+            name = os.path.basename(targets[0])
+            self.status_message = f"„{name}“ zum Kopieren markiert (mit 'p' einfügen)."
+        else:
+            self.status_message = f"{count} Elemente zum Kopieren markiert (mit 'p' einfügen)."
 
     def paste_clipboard(self):
         """Fügt Elemente aus dem Zwischenspeicher in das aktuelle Verzeichnis ein."""
@@ -674,6 +736,7 @@ class EasyDateienApp:
 
         success_count = 0
         errors = []
+        last_dest_name = ""
 
         for src in self.clipboard_paths:
             if not os.path.exists(src) and not os.path.islink(src):
@@ -683,15 +746,31 @@ class EasyDateienApp:
             src_name = os.path.basename(src)
             dest = os.path.join(self.current_dir, src_name)
 
-            if os.path.abspath(src) == os.path.abspath(dest) and self.clipboard_mode == "copy":
-                dest = generate_unique_dest(self.current_dir, src_name)
+            # Gleiches Quell- und Zielverzeichnis
+            if os.path.abspath(src) == os.path.abspath(dest):
+                if self.clipboard_mode == "cut":
+                    success_count += 1
+                    last_dest_name = src_name
+                    continue
+                else:
+                    dest = generate_unique_dest(self.current_dir, src_name)
             elif os.path.exists(dest) and os.path.abspath(src) != os.path.abspath(dest):
                 dest = generate_unique_dest(self.current_dir, src_name)
+
+            # Schutz vor Verschieben in eigenen Unterordner
+            if self.clipboard_mode == "cut" and os.path.isdir(src):
+                try:
+                    if os.path.commonpath([src]) == os.path.commonpath([src, dest]) and os.path.abspath(src) != os.path.abspath(dest):
+                        errors.append(f"Kann nicht in Unterordner verschoben werden: {src_name}")
+                        continue
+                except Exception:
+                    pass
 
             try:
                 if self.clipboard_mode == "cut":
                     shutil.move(src, dest)
                     success_count += 1
+                    last_dest_name = os.path.basename(dest)
                 elif self.clipboard_mode == "copy":
                     if os.path.islink(src):
                         link_target = os.readlink(src)
@@ -701,6 +780,7 @@ class EasyDateienApp:
                     else:
                         shutil.copy2(src, dest)
                     success_count += 1
+                    last_dest_name = os.path.basename(dest)
             except Exception as e:
                 errors.append(f"{src_name}: {e}")
 
@@ -709,6 +789,13 @@ class EasyDateienApp:
             self.clipboard_paths = []
 
         self.refresh_items()
+
+        if last_dest_name:
+            for i, it in enumerate(self.items):
+                if it.name == last_dest_name:
+                    self.selected_idx = i
+                    break
+
         if errors:
             self.status_message = f"{success_count} eingefügt, Fehler: {', '.join(errors[:2])}"
         else:
@@ -741,6 +828,9 @@ class EasyDateienApp:
         if ans.lower() in ("y", "j"):
             count, errs = move_to_trash(targets)
             self.selected_paths.clear()
+            self.clipboard_paths = [p for p in self.clipboard_paths if p not in targets]
+            if not self.clipboard_paths:
+                self.clipboard_mode = None
             self.refresh_items()
             if errs:
                 self.status_message = f"{count} gelöscht, Fehler: {', '.join(errs[:1])}"
@@ -874,16 +964,19 @@ class EasyDateienApp:
 
         # 2. Statuszeile unten ("Entweder Steuerung oder nix")
         show_controls = self.config.get("show_controls", True)
-        has_status_bar = bool(self.status_message) or show_controls
+        has_status_bar = show_controls
         status_line = ""
 
         if has_status_bar:
-            if self.clipboard_mode == "cut":
-                mode_lbl = "CUT"
+            if self.selected_paths:
+                count = len(self.selected_paths)
+                mode_lbl = f"SEL {count}"
+            elif self.clipboard_mode == "cut":
+                count = len(self.clipboard_paths)
+                mode_lbl = f"CUT {count}" if count > 1 else "CUT"
             elif self.clipboard_mode == "copy":
-                mode_lbl = "CPY"
-            elif self.selected_paths:
-                mode_lbl = f"SEL {len(self.selected_paths)}"
+                count = len(self.clipboard_paths)
+                mode_lbl = f"CPY {count}" if count > 1 else "CPY"
             else:
                 mode_lbl = "NOR"
 
@@ -893,15 +986,33 @@ class EasyDateienApp:
                 left_badge = f" {BOLD}{mode_lbl}{RESET}  "
                 avail_ctrl = max(0, term_cols - visible_len(left_badge))
 
-                ctrl_tiers = [
-                    "[↑↓] Bewegen  [→] Ordner (Doppel-→ nano)  [←] Zurück  [Enter] open  [Space] *  [m] Menü  [q] Beenden",
-                    "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [Space] *  [m] Menü  [q] Ende",
-                    "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [m] Menü  [q] Ende",
-                    "[↑↓] Nav  [→] Rein/nano  [←] Zurück  [Enter] open  [m] Menü  [q] Ende",
-                    "[↑↓] Nav  [→] Ordner/nano  [Enter] open  [m] Menü  [q] Ende",
-                    "[↑↓] Nav  [→] In  [Enter] open  [q] Ende",
-                    "[↑↓] Nav  [Enter] open  [q]",
-                ]
+                if self.clipboard_mode in ("cut", "copy"):
+                    ctrl_tiers = [
+                        "[↑↓] Bewegen  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [Space] *  [m] Menü  [q] Beenden",
+                        "[↑↓] Bewegen  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [Space] *  [m] Menü  [q] Ende",
+                        "[↑↓] Bewegen  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [m] Menü  [q] Ende",
+                        "[↑↓] Nav  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [q] Ende",
+                        "[p] Einfügen  [ESC] Abbr  [Enter] open  [q] Ende",
+                        "[p] Einfügen  [ESC] Abbr  [q]",
+                    ]
+                elif self.selected_paths:
+                    ctrl_tiers = [
+                        "[↑↓] Bewegen  [x] Ausschneiden  [c] Kopieren  [d] Papierkorb  [ESC] Abwählen  [Enter] open  [q] Beenden",
+                        "[↑↓] Bewegen  [x] Ausschneiden  [c] Kopieren  [d] Löschen  [ESC] Abwählen  [q] Ende",
+                        "[↑↓] Bewegen  [x] Cut  [c] Copy  [d] Löschen  [ESC] Abwählen  [q] Ende",
+                        "[↑↓] Nav  [x] Cut  [c] Copy  [ESC] Abw  [Enter] open  [q] Ende",
+                        "[x] Cut  [c] Copy  [ESC] Abw  [q]",
+                    ]
+                else:
+                    ctrl_tiers = [
+                        "[↑↓] Bewegen  [→] Ordner (Doppel-→ nano)  [←] Zurück  [Enter] open  [Space] *  [m] Menü  [q] Beenden",
+                        "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [Space] *  [m] Menü  [q] Ende",
+                        "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [m] Menü  [q] Ende",
+                        "[↑↓] Nav  [→] Rein/nano  [←] Zurück  [Enter] open  [m] Menü  [q] Ende",
+                        "[↑↓] Nav  [→] Ordner/nano  [Enter] open  [m] Menü  [q] Ende",
+                        "[↑↓] Nav  [→] In  [Enter] open  [q] Ende",
+                        "[↑↓] Nav  [Enter] open  [q]",
+                    ]
 
                 ctrl_str = ""
                 for tier in ctrl_tiers:
@@ -915,11 +1026,11 @@ class EasyDateienApp:
 
         # 3. Trennungslinien & Kasten-Konfiguration
         div_style = self.config.get("divider_style", "vertikal").lower()
-        if div_style not in ("vertikal", "horizontal", "keine"):
+        if div_style not in ("vertikal", "horizontal", "außen", "keine"):
             div_style = "vertikal"
 
-        has_top_border = (div_style in ("vertikal", "horizontal")) and (term_rows >= 4)
-        has_bottom_border = (div_style in ("vertikal", "horizontal")) and (term_rows >= 4)
+        has_top_border = (div_style in ("vertikal", "horizontal", "außen")) and (term_rows >= 4)
+        has_bottom_border = (div_style in ("vertikal", "horizontal", "außen")) and (term_rows >= 4)
 
         # Zeilenbudget berechnen
         consumed = 1  # path_line
@@ -970,6 +1081,30 @@ class EasyDateienApp:
                 w_mid = max(4, term_cols - 2)
                 top_line = f"╭{'─' * w_mid}╮"
                 bot_line = f"╰{'─' * w_mid}╯"
+
+        elif div_style == "außen":
+            inner_w = max(4, term_cols - 2)
+            top_line = f"╭{'─' * inner_w}╮"
+            bot_line = f"╰{'─' * inner_w}╯"
+
+            if eff_cols == 3:
+                avail = max(10, inner_w - 4)
+                w_left = max(6, int(avail * 0.16))
+                w_right = max(10, int(avail * 0.28))
+                w_mid = avail - w_left - w_right
+                if w_mid < 12:
+                    w_left = max(4, w_left - (12 - w_mid) // 2)
+                    w_right = max(6, w_right - (12 - w_mid) // 2)
+                    w_mid = avail - w_left - w_right
+            elif eff_cols == 2:
+                avail = max(8, inner_w - 2)
+                w_left = max(6, int(avail * 0.25))
+                w_mid = avail - w_left
+                w_right = 0
+            else:  # 1 Spalte
+                w_left = 0
+                w_right = 0
+                w_mid = inner_w
 
         elif div_style == "horizontal":
             top_line = "─" * term_cols
@@ -1137,15 +1272,15 @@ class EasyDateienApp:
                 else:
                     badge = "  "
 
-                if w_mid < 25:
+                if w_mid < 15:
+                    cur_c = "▸" if is_cursor else ("×" if in_cut else ("+" if in_copy else ("*" if is_sel else " ")))
+                    prefix_str = f" {cur_c}"
+                    prefix_len = 2
+                elif w_mid < 25:
                     cur_c = "▸" if is_cursor else " "
                     bad_c = "×" if in_cut else ("+" if in_copy else ("*" if is_sel else " "))
                     prefix_str = f" {cur_c}{bad_c}"
                     prefix_len = 3
-                elif w_mid < 15:
-                    cur_c = "▸" if is_cursor else ("*" if is_sel else " ")
-                    prefix_str = f" {cur_c}"
-                    prefix_len = 2
                 else:
                     cur_prefix = "▸ " if is_cursor else "  "
                     prefix_str = f" {cur_prefix}{badge}"
@@ -1224,6 +1359,13 @@ class EasyDateienApp:
                     row_line = f"│{cell_left}│{cell_mid}│"
                 else:
                     row_line = f"│{cell_left}│{cell_mid}│{cell_right}│"
+            elif div_style == "außen":
+                if eff_cols == 1:
+                    row_line = f"│{cell_mid}│"
+                elif eff_cols == 2:
+                    row_line = f"│{cell_left}  {cell_mid}│"
+                else:
+                    row_line = f"│{cell_left}  {cell_mid}  {cell_right}│"
             elif div_style == "horizontal":
                 if eff_cols == 1:
                     row_line = f" {cell_mid} "
@@ -1282,6 +1424,10 @@ class EasyDateienApp:
                 in_left = (eff_cols >= 2 and 1 <= col_x <= w_left)
                 in_mid = (eff_cols == 1 and 1 <= col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 1 + w_mid))
                 in_right = (eff_cols == 3 and col_x >= (w_left + w_mid + 3))
+            elif div_style == "außen":
+                in_left = (eff_cols >= 2 and 1 <= col_x <= w_left)
+                in_mid = (eff_cols == 1 and 1 <= col_x <= w_mid) or (eff_cols >= 2 and (w_left + 3) <= col_x <= (w_left + 2 + w_mid))
+                in_right = (eff_cols == 3 and col_x >= (w_left + w_mid + 5))
             else:
                 in_left = (eff_cols >= 2 and col_x < w_left)
                 in_mid = (eff_cols == 1 and col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 2 + w_mid))
@@ -1341,6 +1487,8 @@ class EasyDateienApp:
             col_x = x - 1
             if div_style == "vertikal":
                 in_mid = (eff_cols == 1 and 1 <= col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 1 + w_mid))
+            elif div_style == "außen":
+                in_mid = (eff_cols == 1 and 1 <= col_x <= w_mid) or (eff_cols >= 2 and (w_left + 3) <= col_x <= (w_left + 2 + w_mid))
             else:
                 in_mid = (eff_cols == 1 and col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 2 + w_mid))
 
@@ -1403,8 +1551,9 @@ class EasyDateienApp:
                 if not key:
                     continue
 
-                # Statusmeldung bei neuem Tastendruck zurücksetzen
-                self.status_message = ""
+                # Statusmeldung bei Cursor-Bewegung leeren
+                if key in ("UP", "DOWN", "k", "j", "PAGE_UP", "PAGE_DOWN", "HOME", "END", "MOUSE_WHEEL_UP", "MOUSE_WHEEL_DOWN"):
+                    self.status_message = ""
 
                 # Maus-Ereignisse verarbeiten
                 if key == "MOUSE_WHEEL_UP":
@@ -1570,7 +1719,7 @@ class EasyDateienApp:
                         self.selected_paths.clear()
                         self.status_message = "Auswahl aufgehoben."
                         needs_redraw = True
-                    elif self.clipboard_mode:
+                    elif self.clipboard_mode or self.clipboard_paths:
                         self.clipboard_mode = None
                         self.clipboard_paths = []
                         self.status_message = "Zwischenspeicher geleert."
