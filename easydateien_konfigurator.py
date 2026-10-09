@@ -87,7 +87,6 @@ KEYBINDING_ITEMS = [
     ("toggle_console", "Integrierte Konsole umschalten", "[t]"),
     ("quit", "EasyDateien beenden", "[q]"),
     ("reset", "Auf Standardwerte zurücksetzen", "[Standard]"),
-    ("back", "Zurück zum Hauptmenü", "[Zurück]"),
 ]
 
 MAIN_MENU_ITEMS = [
@@ -97,9 +96,8 @@ MAIN_MENU_ITEMS = [
     ("mouse", "Mausunterstützung", "Ein"),
     ("console", "Terminal-Konsole", "Aus"),
     ("hidden", "Versteckte Dateien anzeigen", "Aus"),
-    ("keybindings", "Tastenbelegungen ansehen...", "Öffnen"),
+    ("keybindings", "Tastenbelegungen ansehen", "Öffnen"),
     ("reset", "Auf Standardwerte zurücksetzen", "Standard"),
-    ("quit", "Konfigurator beenden", "Beenden"),
 ]
 
 
@@ -333,9 +331,7 @@ def keybindings_menu(fd: int):
             continue
         if k in ("ENTER", "SPACE"):
             act = KEYBINDING_ITEMS[idx][0]
-            if act == "back":
-                break
-            elif act == "reset":
+            if act == "reset":
                 save_config(dict(DEFAULT_CONFIG))
                 break
 
@@ -363,8 +359,6 @@ def main_menu(fd: int):
                 val = "[Öffnen]"
             elif key == "reset":
                 val = "[Standard]"
-            elif key == "quit":
-                val = "[Beenden]"
             else:
                 val = ""
             rows.append((key, lbl, val))
@@ -426,8 +420,6 @@ def main_menu(fd: int):
                 cfg = dict(DEFAULT_CONFIG)
                 save_config(cfg)
                 status_hint = f"{C_BOLD_GREEN}✓ Auf Standardwerte zurückgesetzt{C_RESET}"
-            elif act == "quit":
-                break
     return cfg
 
 

@@ -1471,13 +1471,94 @@ class EasyDateienApp:
                     mode_lbl = ""
 
                 left_b = f" {mode_lbl}  " if mode_lbl else " "
-                ctrl = f"{C_GRAY}[←↑↓→] Navigieren  [Eingabe] Öffnen  [e] Nano  [o] Vim  [n] Neu  [r] Umbenennen  [u] Rückgängig  [d] Papierkorb  [y] Kopieren  [x] Ausschneiden  [p] Einfügen  [g] Gehe zu  [m] Menü  [q] Beenden{C_RESET}"
                 avail_ctrl = max(1, term_cols - str_width(left_b))
-                st_line = pad_to_width(f"{left_b}{truncate_to_width(ctrl, avail_ctrl)}", term_cols)
+                ctrl = self.build_dynamic_controls(avail_ctrl)
+                st_line = pad_to_width(f"{left_b}{ctrl}", term_cols)
 
             all_lines.append(st_line)
 
         return all_lines[:term_rows]
+
+    def build_dynamic_controls(self, avail_w: int) -> str:
+        cur_item = self.items[self.selected_idx] if (self.items and 0 <= self.selected_idx < len(self.items)) else None
+        is_cur_dir = bool(cur_item and cur_item.is_dir)
+        has_sel = bool(self.selected_paths)
+        has_clip = bool(self.clipboard_paths)
+
+        core: List[Tuple[str, str]] = [("[←↑↓→]", "Nav")]
+
+        if has_clip:
+            core.append(("[p]", "Einfügen"))
+
+        if has_sel:
+            core.append(("[x]", "Ausschneiden"))
+            core.append(("[y]", "Kopieren"))
+            core.append(("[d]", "Löschen"))
+            core.append(("[z]", "ZIP"))
+            core.append(("[Leertaste]", "Auswahl"))
+        elif cur_item:
+            if is_cur_dir:
+                core.append(("[→]", "Betreten"))
+                core.append(("[Eingabe]", "Öffnen"))
+            else:
+                core.append(("[e]", "Nano"))
+                core.append(("[o]", "Vim"))
+                core.append(("[Eingabe]", "Öffnen"))
+            core.append(("[n]", "Neu"))
+            core.append(("[r]", "Umbenennen"))
+            core.append(("[u]", "Rückgängig"))
+            core.append(("[d]", "Löschen"))
+            core.append(("[y]", "Kopieren"))
+            core.append(("[x]", "Ausschneiden"))
+            if not has_clip:
+                core.append(("[p]", "Einfügen"))
+        else:
+            core.append(("[n]", "Neu"))
+            core.append(("[u]", "Rückgängig"))
+            if has_clip:
+                core.append(("[p]", "Einfügen"))
+
+        ext: List[Tuple[str, str]] = [
+            ("[/]", "Filter"),
+            ("[g]", "Gehe zu"),
+            ("[s]", "Sortieren"),
+            ("[.]", "Versteckt"),
+            ("[t]", "Konsole"),
+            ("[z]", "ZIP"),
+            ("[m]", "Menü"),
+            ("[q]", "Beenden"),
+        ]
+
+        all_candidates = core + [it for it in ext if it not in core]
+        tail_candidates = [("[m]", "Menü"), ("[q]", "Beenden")]
+        tail_str = "  ".join(f"{k} {l}" for k, l in tail_candidates)
+        tail_w = str_width(tail_str)
+
+        fitted: List[str] = []
+        cur_len = 0
+        budget_for_body = max(0, avail_w - (tail_w + 2)) if avail_w >= (tail_w + 20) else avail_w
+
+        for key, lbl in all_candidates:
+            if (key, lbl) in tail_candidates:
+                continue
+            item_str = f"{key} {lbl}"
+            item_w = str_width(item_str)
+            sep_w = 2 if fitted else 0
+            if cur_len + sep_w + item_w <= budget_for_body:
+                fitted.append(item_str)
+                cur_len += sep_w + item_w
+            else:
+                break
+
+        for key, lbl in tail_candidates:
+            item_str = f"{key} {lbl}"
+            item_w = str_width(item_str)
+            sep_w = 2 if fitted else 0
+            if cur_len + sep_w + item_w <= avail_w:
+                fitted.append(item_str)
+                cur_len += sep_w + item_w
+
+        return f"{C_GRAY}{'  '.join(fitted)}{C_RESET}"
 
     def handle_mouse_click(self, x: int, y: int) -> bool:
         if not self.last_layout:
