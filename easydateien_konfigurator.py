@@ -82,6 +82,7 @@ DEFAULT_KEYMAP = {
     "goto_interactive": ["gi"],
     "goto_clipboard": ["gp"],
     "zip": ["cz"],
+    "toggle_console": ["t"],
     "quit": ["q"],
 }
 
@@ -105,6 +106,7 @@ ACTION_NAMES = {
     "goto_interactive": "Pfad manuell eingeben (g i)",
     "goto_clipboard": "Gehe zu Pfad in Zwischenablage (g p)",
     "zip": "ZIP-Archiv erstellen (c z)",
+    "toggle_console": "Konsole anzeigen / ausblenden (t)",
     "quit": "EasyDateien beenden (q)",
 }
 
@@ -120,6 +122,8 @@ def get_default_config() -> dict:
         "columns_enabled": True,
         "divider_style": "vertikal",
         "show_controls": True,
+        "show_console": False,
+        "console_position": "unten",
         "esc_to_quit": False,
         "mouse_support": True,
         "text_editor": "nano %s",
@@ -128,6 +132,10 @@ def get_default_config() -> dict:
         "finder_opener": "open -R %s",
         "keybindings": dict(DEFAULT_KEYMAP),
     }
+
+
+DIVIDER_OPTIONS = ["vertikal", "horizontal", "außen", "keine"]
+CONSOLE_POS_OPTIONS = ["unten", "rechts", "links"]
 
 
 def safe_backup_file(filepath: str) -> str:
@@ -746,6 +754,7 @@ def run_konfigurator(standalone: bool = True) -> dict:
     opt_row_map = {}
 
     DIVIDER_OPTIONS = ["vertikal", "horizontal", "außen", "keine"]
+    CONSOLE_POS_OPTIONS = ["unten", "rechts", "links"]
     SORT_OPTIONS = ["mtime", "name", "size", "ext"]
 
     try:
@@ -761,6 +770,12 @@ def run_konfigurator(standalone: bool = True) -> dict:
             mouse_status = "Ein" if cfg.get("mouse_support", True) else "Aus"
             div_style = cfg.get("divider_style", "vertikal").lower()
             div_display = {"vertikal": "Vertikal", "horizontal": "Horizontal", "außen": "Außen", "keine": "Keine"}.get(div_style, "Vertikal")
+            show_console = cfg.get("show_console", False)
+            console_status = "Ein" if show_console else "Aus"
+            console_pos = cfg.get("console_position", "unten").lower()
+            if console_pos not in CONSOLE_POS_OPTIONS:
+                console_pos = "unten"
+            console_pos_display = {"unten": "Unten", "rechts": "Rechts", "links": "Links"}.get(console_pos, "Unten")
             esc_status = "Ein" if cfg.get("esc_to_quit", False) else "Aus"
             hidden_status = "Ein" if cfg.get("show_hidden", False) else "Aus"
             ed_cmd = cfg.get("text_editor", "nano %s")
@@ -789,6 +804,8 @@ def run_konfigurator(standalone: bool = True) -> dict:
                 ("Spaltendarstellung:", cols_status),
                 ("Maussteuerung:", mouse_status),
                 ("Trennungslinien:", div_display),
+                ("Konsole anzeigen:", console_status),
+                ("Konsolen-Position:", console_pos_display),
                 ("Mit ESC beenden:", esc_status),
                 ("Versteckte Dateien anzeigen:", hidden_status),
                 ("Text- & Code-Editor:", ed_cmd),
@@ -929,30 +946,43 @@ def run_konfigurator(standalone: bool = True) -> dict:
                     feedback_msg = f"Trennungslinien: [{div_disp}]"
                     return True
                 elif action_idx == 5:
+                    cfg["show_console"] = not cfg.get("show_console", False)
+                    save_config(cfg)
+                    feedback_msg = f"Konsole anzeigen: {'[Ein]' if cfg['show_console'] else '[Aus]'}"
+                    return True
+                elif action_idx == 6:
+                    cur_p = cfg.get("console_position", "unten").lower()
+                    next_p = CONSOLE_POS_OPTIONS[(CONSOLE_POS_OPTIONS.index(cur_p) + 1) % len(CONSOLE_POS_OPTIONS)] if cur_p in CONSOLE_POS_OPTIONS else "unten"
+                    cfg["console_position"] = next_p
+                    save_config(cfg)
+                    p_disp = {"unten": "Unten", "rechts": "Rechts", "links": "Links"}.get(next_p, "Unten")
+                    feedback_msg = f"Konsolen-Position: [{p_disp}]"
+                    return True
+                elif action_idx == 7:
                     cfg["esc_to_quit"] = not cfg.get("esc_to_quit", False)
                     save_config(cfg)
                     feedback_msg = f"Mit ESC beenden: {'[Ein]' if cfg['esc_to_quit'] else '[Aus]'}"
                     return True
-                elif action_idx == 6:
+                elif action_idx == 8:
                     cfg["show_hidden"] = not cfg.get("show_hidden", False)
                     save_config(cfg)
                     feedback_msg = f"Versteckte Dateien: {'[Ein]' if cfg['show_hidden'] else '[Aus]'}"
                     return True
-                elif action_idx == 7:
+                elif action_idx == 9:
                     new_ed = edit_line_interactive("Editor-Befehl (%s = Pfad): ", initial=cfg.get("text_editor", "nano %s"))
                     if new_ed and new_ed.strip():
                         cfg["text_editor"] = new_ed.strip()
                         save_config(cfg)
                         feedback_msg = f"Editor gesetzt auf: [{new_ed.strip()}]"
                     return True
-                elif action_idx == 8:
+                elif action_idx == 10:
                     new_op = edit_line_interactive("Öffner-Befehl (%s = Pfad): ", initial=cfg.get("opener", "open %s"))
                     if new_op and new_op.strip():
                         cfg["opener"] = new_op.strip()
                         save_config(cfg)
                         feedback_msg = f"Standard-Öffner gesetzt auf: [{new_op.strip()}]"
                     return True
-                elif action_idx == 9:
+                elif action_idx == 11:
                     cur_s = cfg.get("sort_by", "mtime")
                     next_s = SORT_OPTIONS[(SORT_OPTIONS.index(cur_s) + 1) % len(SORT_OPTIONS)] if cur_s in SORT_OPTIONS else "mtime"
                     cfg["sort_by"] = next_s
@@ -960,7 +990,7 @@ def run_konfigurator(standalone: bool = True) -> dict:
                     s_name = {"mtime": "Änderungsdatum", "name": "Dateiname", "size": "Dateigröße", "ext": "Dateiendung"}.get(next_s, "Änderungsdatum")
                     feedback_msg = f"Sortierkriterium: [{s_name}]"
                     return True
-                elif action_idx == 10:
+                elif action_idx == 12:
                     cfg["sort_reverse"] = not cfg.get("sort_reverse", True)
                     save_config(cfg)
                     s_by = cfg.get("sort_by", "mtime")
@@ -973,18 +1003,18 @@ def run_konfigurator(standalone: bool = True) -> dict:
                         r_name = "Neueste zuerst" if s_rev else "Älteste zuerst"
                     feedback_msg = f"Sortierrichtung: [{r_name}]"
                     return True
-                elif action_idx == 11:
+                elif action_idx == 13:
                     cfg["sort_dir_first"] = not cfg.get("sort_dir_first", True)
                     save_config(cfg)
                     feedback_msg = f"Ordner zuerst: {'[Ein]' if cfg['sort_dir_first'] else '[Aus]'}"
                     return True
-                elif action_idx == 12:
+                elif action_idx == 14:
                     cfg.clear()
                     cfg.update(get_default_config())
                     save_config(cfg)
                     feedback_msg = "Standardeinstellungen erfolgreich wiederhergestellt!"
                     return True
-                elif action_idx == 13:
+                elif action_idx == 15:
                     return False
                 return True
 

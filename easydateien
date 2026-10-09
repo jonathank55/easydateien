@@ -52,6 +52,8 @@ except ImportError:
             "sort_dir_first": True,
             "show_hidden": False,
             "preview": False,
+            "show_console": False,
+            "console_position": "unten",
             "opener": "open %s",
             "edit_opener": "open -e %s",
             "finder_opener": "open -R %s",
@@ -75,6 +77,7 @@ except ImportError:
                 "goto_interactive": ["gi"],
                 "goto_clipboard": ["gp"],
                 "zip": ["cz"],
+                "toggle_console": ["t"],
                 "quit": ["q"],
             },
         }
@@ -581,6 +584,19 @@ class EasyDateienApp:
         self.last_right_arrow_path: str = ""
         self.last_layout: Dict = {}
 
+        # Integrierte Konsole / Terminal (Taste 't')
+        self.show_console: bool = self.config.get("show_console", False)
+        self.console_position: str = self.config.get("console_position", "unten").lower()
+        if self.console_position not in ("unten", "rechts", "links"):
+            self.console_position = "unten"
+        self.console_focused: bool = False
+        self.console_input: str = ""
+        self.console_cursor_idx: int = 0
+        self.console_output_lines: List[str] = []
+        self.console_cmd_history: List[str] = []
+        self.console_history_idx: int = 0
+        self.console_scroll_offset: int = 0
+
         # Caching für Parent- und Child-Spalten für maximale Flüssigkeit
         self.cached_parent_dir: Optional[str] = None
         self.cached_parent_items: List[FileEntry] = []
@@ -643,6 +659,181 @@ class EasyDateienApp:
             if it.name == old_dir_name:
                 self.selected_idx = i
                 break
+
+    def get_short_dir(self, path: str) -> str:
+        """Gibt eine kompakte Pfaddarstellung zurück (z.B. ~/Downloads)."""
+        home = os.path.expanduser("~")
+        if path == home:
+            return "~"
+        if path.startswith(home + "/"):
+            return "~" + path[len(home):]
+        return path
+
+    def get_console_display_lines(self, width: int, height: int) -> List[str]:
+        """Formatiert genau height Zeilen für die Konsole, jede Zeile mit sichtbarer Breite width."""
+        if height <= 0 or width <= 0:
+            return []
+
+        # Die letzte Zeile ist immer die Eingabeaufforderung (Prompt)
+        short_dir = self.get_short_dir(self.current_dir)
+        prompt_prefix = f"{short_dir} $ "
+        if visible_len(prompt_prefix) > width - 4:
+            prompt_prefix = "$ "
+            if visible_len(prompt_prefix) > width - 2:
+                prompt_prefix = "> "
+
+        avail_input = max(1, width - visible_len(prompt_prefix))
+
+        inp = self.console_input
+        c_idx = max(0, min(self.console_cursor_idx, len(inp)))
+
+        if len(inp) >= avail_input:
+            scroll_left = max(0, c_idx - avail_input + 4)
+            disp_inp = inp[scroll_left:scroll_left + avail_input - 1]
+            rel_c_idx = c_idx - scroll_left
+        else:
+            disp_inp = inp
+            rel_c_idx = c_idx
+
+        if self.console_focused:
+            if rel_c_idx >= len(disp_inp):
+                prompt_content = f"{prompt_prefix}{disp_inp}\033[7m \033[0m"
+            else:
+                ch = disp_inp[rel_c_idx]
+                prompt_content = f"{prompt_prefix}{disp_inp[:rel_c_idx]}\033[7m{ch}\033[0m{disp_inp[rel_c_idx+1:]}"
+        else:
+            prompt_content = f"{prompt_prefix}{disp_inp}"
+
+        prompt_line = pad_visible(prompt_content, width)
+
+        if height == 1:
+            return [prompt_line]
+
+        num_output_rows = height - 1
+        lines_above: List[str] = []
+
+        if not self.console_output_lines:
+            lines_above.append(pad_visible(f"  {ITALIC}Terminal aktiv ({short_dir}){RESET}", width))
+            while len(lines_above) < num_output_rows:
+                lines_above.append(" " * width)
+        else:
+            total_out = len(self.console_output_lines)
+            max_scroll = max(0, total_out - num_output_rows)
+            curr_scroll = max(0, min(self.console_scroll_offset, max_scroll))
+
+            end_idx = total_out - curr_scroll
+            start_idx = max(0, end_idx - num_output_rows)
+            slice_lines = self.console_output_lines[start_idx:end_idx]
+
+            empty_count = num_output_rows - len(slice_lines)
+            for _ in range(empty_count):
+                lines_above.append(" " * width)
+            for raw_l in slice_lines:
+                lines_above.append(pad_visible(truncate_end(raw_l, width), width))
+
+        return lines_above[:num_output_rows] + [prompt_line]
+
+    def run_console_command(self, cmd_line: str, fd: int, old_settings):
+        """Führt einen Konsolenbefehl im aktuellen Verzeichnis aus."""
+        cmd_line = cmd_line.strip()
+        if not cmd_line:
+            return
+
+        if not self.console_cmd_history or self.console_cmd_history[-1] != cmd_line:
+            self.console_cmd_history.append(cmd_line)
+        self.console_history_idx = len(self.console_cmd_history)
+
+        short_dir = self.get_short_dir(self.current_dir)
+        self.console_output_lines.append(f"{short_dir} $ {cmd_line}")
+
+        self.console_input = ""
+        self.console_cursor_idx = 0
+        self.console_scroll_offset = 0
+
+        if cmd_line in ("exit", "quit"):
+            self.show_console = False
+            self.console_focused = False
+            self.status_message = "Konsole geschlossen."
+            return
+
+        if cmd_line == "clear":
+            self.console_output_lines.clear()
+            return
+
+        if cmd_line == "cd" or cmd_line.startswith("cd "):
+            target = cmd_line[3:].strip() if cmd_line.startswith("cd ") else "~"
+            target_path = os.path.expanduser(os.path.expandvars(target))
+            if not os.path.isabs(target_path):
+                target_path = os.path.abspath(os.path.join(self.current_dir, target_path))
+            if os.path.isdir(target_path):
+                self.change_directory(target_path)
+                self.console_output_lines.append(f"Verzeichnis: {self.get_short_dir(target_path)}")
+            else:
+                self.console_output_lines.append(f"cd: Verzeichnis nicht gefunden: {target}")
+            return
+
+        parts = cmd_line.split()
+        first_token = os.path.basename(parts[0]) if parts else ""
+        interactive_apps = {
+            "nano", "vim", "vi", "nvim", "micro", "emacs",
+            "less", "more", "man", "top", "htop", "btop",
+            "zsh", "bash", "sh", "fish", "lazygit", "ranger", "yazi"
+        }
+        is_interactive = (first_token in interactive_apps) or (first_token in ("python", "python3", "node") and len(parts) == 1)
+
+        if is_interactive:
+            sys.stdout.write(SHOW_CURSOR + "\033[?1049l")
+            if self.config.get("mouse_support", True):
+                sys.stdout.write("\033[?1000l\033[?1006l")
+            sys.stdout.flush()
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            try:
+                subprocess.run(cmd_line, shell=True, cwd=self.current_dir, executable="/bin/zsh")
+            except Exception as e:
+                print(f"Fehler beim Ausführen: {e}")
+            finally:
+                tty.setcbreak(fd, termios.TCSADRAIN)
+                sys.stdout.write("\033[?1049h" + HIDE_CURSOR)
+                if self.config.get("mouse_support", True):
+                    sys.stdout.write("\033[?1000h\033[?1006h")
+                sys.stdout.flush()
+                self.console_output_lines.append(f"[Befehl beendet]")
+                self.refresh_items()
+        else:
+            try:
+                res = subprocess.run(
+                    cmd_line,
+                    shell=True,
+                    cwd=self.current_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=15.0,
+                    executable="/bin/zsh"
+                )
+                if res.stdout:
+                    for l in res.stdout.splitlines():
+                        self.console_output_lines.append(l)
+                if res.stderr:
+                    for l in res.stderr.splitlines():
+                        self.console_output_lines.append(l)
+                if res.returncode != 0 and not res.stdout and not res.stderr:
+                    self.console_output_lines.append(f"[Beendet mit Code {res.returncode}]")
+            except subprocess.TimeoutExpired:
+                self.console_output_lines.append("[Fehler: Zeitlimit von 15s überschritten]")
+            except Exception as e:
+                self.console_output_lines.append(f"[Fehler: {e}]")
+
+            self.refresh_items()
+
+    def toggle_console(self):
+        """Schaltet die Anzeige der Konsole ein oder aus."""
+        self.show_console = not self.show_console
+        if self.show_console:
+            self.console_focused = True
+            self.status_message = "Konsole geöffnet (Tab für Dateimanager, Enter für Ausführen)"
+        else:
+            self.console_focused = False
+            self.status_message = "Konsole geschlossen."
 
     def open_with_system(self, item: FileEntry):
         """Öffnet eine Datei oder einen Ordner mit dem Standard-Systemöffner (z. B. open)."""
@@ -991,6 +1182,8 @@ class EasyDateienApp:
         sys.stdout.write(SHOW_CURSOR)
         sys.stdout.flush()
         self.config = run_konfigurator(standalone=False)
+        self.show_console = self.config.get("show_console", self.show_console)
+        self.console_position = self.config.get("console_position", self.console_position)
         sys.stdout.write(HIDE_CURSOR)
         if self.config.get("mouse_support", True):
             sys.stdout.write("\033[?1000h\033[?1006h")
@@ -1044,7 +1237,9 @@ class EasyDateienApp:
         status_line = ""
 
         if has_status_bar:
-            if self.selected_paths:
+            if self.show_console and self.console_focused:
+                mode_lbl = "TERM"
+            elif self.selected_paths:
                 count = len(self.selected_paths)
                 mode_lbl = f"SEL {count}"
             elif self.clipboard_mode == "cut":
@@ -1062,29 +1257,43 @@ class EasyDateienApp:
                 left_badge = f" {BOLD}{mode_lbl}{RESET}  "
                 avail_ctrl = max(0, term_cols - visible_len(left_badge))
 
-                if self.clipboard_mode in ("cut", "copy"):
+                if self.show_console and self.console_focused:
                     ctrl_tiers = [
-                        "[↑↓] Bewegen  [p] Einfügen  [Y/X/ESC] Abbrechen  [Enter] open  [c z] Zip  [m] Menü  [q] Beenden",
-                        "[↑↓] Bewegen  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [c z] Zip  [m] Menü  [q] Ende",
-                        "[↑↓] Nav  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [c z] Zip  [q] Ende",
-                        "[p] Einfügen  [ESC] Abbr  [c z] Zip  [q]",
+                        "[Enter] Ausführen  [Tab] Dateien  [↑↓] Verlauf  [ESC] Zu Dateien  [exit] Schließen",
+                        "[Enter] Ausführen  [Tab/ESC] Dateien  [↑↓] Verlauf  [exit] Ende",
+                        "[Enter] Run  [Tab] Dateien  [exit] Ende",
+                        "[Enter] Run  [Tab] Dateien",
+                    ]
+                elif self.clipboard_mode in ("cut", "copy"):
+                    ctrl_tiers = [
+                        "[↑↓] Bewegen  [p] Einfügen  [Y/X/ESC] Abbrechen  [Enter] open  [c z] Zip  [t] Konsole  [m] Menü  [q] Beenden",
+                        "[↑↓] Bewegen  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [c z] Zip  [t] Konsole  [m] Menü  [q] Ende",
+                        "[↑↓] Nav  [p] Einfügen  [ESC] Abbrechen  [Enter] open  [c z] Zip  [t] Konsole  [q] Ende",
+                        "[p] Einfügen  [ESC] Abbr  [c z] Zip  [t] Konsole  [q]",
                     ]
                 elif self.selected_paths:
                     ctrl_tiers = [
-                        "[↑↓] Bewegen  [y] Kopieren  [x] Ausschneiden  [c z] Zip  [d] Papierkorb  [ESC] Abwählen  [q] Beenden",
-                        "[↑↓] Bewegen  [y] Kopieren  [x] Cut  [c z] Zip  [d] Löschen  [ESC] Abwählen  [q] Ende",
-                        "[↑↓] Nav  [y] Copy  [x] Cut  [c z] Zip  [d] Löschen  [ESC] Abw  [q]",
-                        "[y] Copy  [x] Cut  [c z] Zip  [q]",
+                        "[↑↓] Bewegen  [y] Kopieren  [x] Ausschneiden  [c z] Zip  [d] Papierkorb  [t] Konsole  [ESC] Abwählen  [q] Beenden",
+                        "[↑↓] Bewegen  [y] Kopieren  [x] Cut  [c z] Zip  [d] Löschen  [t] Konsole  [ESC] Abwählen  [q] Ende",
+                        "[↑↓] Nav  [y] Copy  [x] Cut  [c z] Zip  [d] Löschen  [t] Konsole  [ESC] Abw  [q]",
+                        "[y] Copy  [x] Cut  [c z] Zip  [t] Konsole  [q]",
+                    ]
+                elif self.show_console:
+                    ctrl_tiers = [
+                        "[↑↓] Bewegen  [Enter] open  [Tab] Konsole fokussieren  [t] Konsole schließen  [m] Menü  [q] Beenden",
+                        "[↑↓] Bewegen  [Enter] open  [Tab] Konsole  [t] Konsole zu  [m] Menü  [q] Ende",
+                        "[↑↓] Nav  [Enter] open  [Tab] Konsole  [t] Zu  [q] Ende",
+                        "[Tab] Konsole  [t] Zu  [q]",
                     ]
                 else:
                     ctrl_tiers = [
-                        "[↑↓] Bewegen  [→] Ordner (Doppel-→ nano)  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [c z] Zip  [m] Menü  [q] Beenden",
-                        "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [c z] Zip  [m] Menü  [q] Ende",
-                        "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [m] Menü  [q] Ende",
-                        "[↑↓] Nav  [→] Rein/nano  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [q] Ende",
-                        "[↑↓] Nav  [→] Ordner/nano  [Enter] open  [y] Copy  [q] Ende",
-                        "[↑↓] Nav  [→] In  [Enter] open  [q] Ende",
-                        "[↑↓] Nav  [Enter] open  [q]",
+                        "[↑↓] Bewegen  [→] Ordner (Doppel-→ nano)  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [c z] Zip  [t] Konsole  [m] Menü  [q] Beenden",
+                        "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [c z] Zip  [t] Konsole  [m] Menü  [q] Ende",
+                        "[↑↓] Bewegen  [→] Ordner/nano  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [t] Konsole  [m] Menü  [q] Ende",
+                        "[↑↓] Nav  [→] Rein/nano  [←] Zurück  [Enter] open  [y] Copy  [x] Cut  [t] Konsole  [q] Ende",
+                        "[↑↓] Nav  [→] Ordner/nano  [Enter] open  [y] Copy  [t] Konsole  [q] Ende",
+                        "[↑↓] Nav  [→] In  [Enter] open  [t] Konsole  [q] Ende",
+                        "[↑↓] Nav  [Enter] open  [t] Konsole  [q]",
                     ]
 
                 ctrl_str = ""
@@ -1111,13 +1320,28 @@ class EasyDateienApp:
             consumed += 1
         if has_bottom_border:
             consumed += 1
-        if has_status_bar and term_rows >= consumed + 1:
+        has_status_bar = show_controls and (term_rows >= consumed + 2)
+        if has_status_bar:
             consumed += 1
-        else:
-            has_status_bar = False
 
-        avail_rows = max(1, term_rows - consumed)
+        avail_total = max(0, term_rows - consumed)
         header_lines = 1 + (1 if has_top_border else 0)
+
+        active_console = self.show_console
+        console_pos = self.config.get("console_position", self.console_position).lower()
+        if console_pos not in ("unten", "rechts", "links"):
+            console_pos = "unten"
+        if active_console and console_pos in ("rechts", "links") and term_cols < 60:
+            console_pos = "unten"
+
+        if active_console and console_pos == "unten" and avail_total >= 3:
+            console_h = max(1, min(8, avail_total // 3))
+            fm_rows = avail_total - console_h - 1
+        else:
+            console_h = 0
+            fm_rows = avail_total
+
+        avail_rows = fm_rows
 
         # Spaltenanzahl und Breiten
         eff_cols = self.get_effective_columns(term_cols)
@@ -1125,110 +1349,169 @@ class EasyDateienApp:
         top_line = ""
         bot_line = ""
 
-        if div_style == "vertikal":
-            if eff_cols == 3:
-                avail = max(10, term_cols - 4)
+        if active_console and console_pos == "rechts":
+            if term_cols >= 90:
+                eff_cols = 3
+                avail = max(10, term_cols - 4 if div_style == "vertikal" else (term_cols - 2 if div_style == "außen" else term_cols - 4))
                 w_left = max(6, int(avail * 0.16))
-                w_right = max(10, int(avail * 0.28))
-                w_mid = avail - w_left - w_right
-                if w_mid < 12:
-                    w_left = max(4, w_left - (12 - w_mid) // 2)
-                    w_right = max(6, w_right - (12 - w_mid) // 2)
-                    w_mid = avail - w_left - w_right
-
-                top_line = f"╭{'─' * w_left}┬{'─' * w_mid}┬{'─' * w_right}╮"
-                bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}╯"
-
-            elif eff_cols == 2:
-                avail = max(8, term_cols - 3)
-                w_left = max(6, int(avail * 0.25))
-                w_mid = avail - w_left
-                w_right = 0
-
-                top_line = f"╭{'─' * w_left}┬{'─' * w_mid}╮"
-                bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}╯"
-
-            else:  # 1 Spalte
-                w_left = 0
-                w_right = 0
-                w_mid = max(4, term_cols - 2)
-                top_line = f"╭{'─' * w_mid}╮"
-                bot_line = f"╰{'─' * w_mid}╯"
-
-        elif div_style == "außen":
-            inner_w = max(4, term_cols - 2)
-            top_line = f"╭{'─' * inner_w}╮"
-            bot_line = f"╰{'─' * inner_w}╯"
-
-            if eff_cols == 3:
-                avail = max(10, inner_w - 4)
-                w_left = max(6, int(avail * 0.16))
-                w_right = max(10, int(avail * 0.28))
-                w_mid = avail - w_left - w_right
-                if w_mid < 12:
-                    w_left = max(4, w_left - (12 - w_mid) // 2)
-                    w_right = max(6, w_right - (12 - w_mid) // 2)
-                    w_mid = avail - w_left - w_right
-            elif eff_cols == 2:
-                avail = max(8, inner_w - 2)
-                w_left = max(6, int(avail * 0.25))
-                w_mid = avail - w_left
-                w_right = 0
-            else:  # 1 Spalte
-                w_left = 0
-                w_right = 0
-                w_mid = inner_w
-
-        elif div_style == "horizontal":
-            top_line = "─" * term_cols
-            bot_line = "─" * term_cols
-
-            if eff_cols == 3:
-                avail = max(10, term_cols - 4)
-                w_left = max(6, int(avail * 0.16))
-                w_right = max(10, int(avail * 0.28))
-                w_mid = avail - w_left - w_right
-                if w_mid < 12:
-                    w_left = max(4, w_left - (12 - w_mid) // 2)
-                    w_right = max(6, w_right - (12 - w_mid) // 2)
-                    w_mid = avail - w_left - w_right
-            elif eff_cols == 2:
-                avail = max(8, term_cols - 2)
-                w_left = max(6, int(avail * 0.25))
-                w_mid = avail - w_left
-                w_right = 0
+                w_mid = max(20, int(avail * 0.38))
+                w_right = avail - w_left - w_mid
             else:
+                eff_cols = 2
+                avail = max(8, term_cols - 3 if div_style == "vertikal" else (term_cols - 2 if div_style == "außen" else term_cols - 2))
                 w_left = 0
-                w_right = 0
-                w_mid = term_cols
+                w_mid = max(20, int(avail * 0.45))
+                w_right = avail - w_mid
 
-        else:  # div_style == "keine"
-            top_line = ""
-            bot_line = ""
+            if div_style == "vertikal":
+                top_line = f"╭{'─' * w_left}┬{'─' * w_mid}┬{'─' * w_right}╮" if eff_cols == 3 else f"╭{'─' * w_mid}┬{'─' * w_right}╮"
+                bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}╯" if eff_cols == 3 else f"╰{'─' * w_mid}┴{'─' * w_right}╯"
+            elif div_style == "außen":
+                inner_w = max(4, term_cols - 2)
+                top_line = f"╭{'─' * inner_w}╮"
+                bot_line = f"╰{'─' * inner_w}╯"
+            elif div_style == "horizontal":
+                top_line = "─" * term_cols
+                bot_line = "─" * term_cols
 
-            if eff_cols == 3:
-                avail = max(10, term_cols - 4)
-                w_left = max(6, int(avail * 0.16))
-                w_right = max(10, int(avail * 0.28))
-                w_mid = avail - w_left - w_right
-                if w_mid < 12:
-                    w_left = max(4, w_left - (12 - w_mid) // 2)
-                    w_right = max(6, w_right - (12 - w_mid) // 2)
-                    w_mid = avail - w_left - w_right
-            elif eff_cols == 2:
-                avail = max(8, term_cols - 2)
-                w_left = max(6, int(avail * 0.25))
+        elif active_console and console_pos == "links":
+            if term_cols >= 90:
+                eff_cols = 3
+                avail = max(10, term_cols - 4 if div_style == "vertikal" else (term_cols - 2 if div_style == "außen" else term_cols - 4))
+                w_left = max(20, int(avail * 0.42))
+                w_mid = max(20, int(avail * 0.36))
+                w_right = avail - w_left - w_mid
+            else:
+                eff_cols = 2
+                avail = max(8, term_cols - 3 if div_style == "vertikal" else (term_cols - 2 if div_style == "außen" else term_cols - 2))
+                w_left = max(20, int(avail * 0.48))
                 w_mid = avail - w_left
                 w_right = 0
+
+            if div_style == "vertikal":
+                top_line = f"╭{'─' * w_left}┬{'─' * w_mid}┬{'─' * w_right}╮" if eff_cols == 3 else f"╭{'─' * w_left}┬{'─' * w_mid}╮"
+                bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}╯" if eff_cols == 3 else f"╰{'─' * w_left}┴{'─' * w_mid}╯"
+            elif div_style == "außen":
+                inner_w = max(4, term_cols - 2)
+                top_line = f"╭{'─' * inner_w}╮"
+                bot_line = f"╰{'─' * inner_w}╯"
+            elif div_style == "horizontal":
+                top_line = "─" * term_cols
+                bot_line = "─" * term_cols
+
+        else:
+            if div_style == "vertikal":
+                if eff_cols == 3:
+                    avail = max(10, term_cols - 4)
+                    w_left = max(6, int(avail * 0.16))
+                    w_right = max(10, int(avail * 0.28))
+                    w_mid = avail - w_left - w_right
+                    if w_mid < 12:
+                        w_left = max(4, w_left - (12 - w_mid) // 2)
+                        w_right = max(6, w_right - (12 - w_mid) // 2)
+                        w_mid = avail - w_left - w_right
+
+                    top_line = f"╭{'─' * w_left}┬{'─' * w_mid}┬{'─' * w_right}╮"
+                    bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}╯"
+
+                elif eff_cols == 2:
+                    avail = max(8, term_cols - 3)
+                    w_left = max(6, int(avail * 0.25))
+                    w_mid = avail - w_left
+                    w_right = 0
+
+                    top_line = f"╭{'─' * w_left}┬{'─' * w_mid}╮"
+                    bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}╯"
+
+                else:  # 1 Spalte
+                    w_left = 0
+                    w_right = 0
+                    w_mid = max(4, term_cols - 2)
+                    top_line = f"╭{'─' * w_mid}╮"
+                    bot_line = f"╰{'─' * w_mid}╯"
+
+            elif div_style == "außen":
+                inner_w = max(4, term_cols - 2)
+                top_line = f"╭{'─' * inner_w}╮"
+                bot_line = f"╰{'─' * inner_w}╯"
+
+                if eff_cols == 3:
+                    avail = max(10, inner_w - 4)
+                    w_left = max(6, int(avail * 0.16))
+                    w_right = max(10, int(avail * 0.28))
+                    w_mid = avail - w_left - w_right
+                    if w_mid < 12:
+                        w_left = max(4, w_left - (12 - w_mid) // 2)
+                        w_right = max(6, w_right - (12 - w_mid) // 2)
+                        w_mid = avail - w_left - w_right
+                elif eff_cols == 2:
+                    avail = max(8, inner_w - 2)
+                    w_left = max(6, int(avail * 0.25))
+                    w_mid = avail - w_left
+                    w_right = 0
+                else:  # 1 Spalte
+                    w_left = 0
+                    w_right = 0
+                    w_mid = inner_w
+
+            elif div_style == "horizontal":
+                top_line = "─" * term_cols
+                bot_line = "─" * term_cols
+
+                if eff_cols == 3:
+                    avail = max(10, term_cols - 4)
+                    w_left = max(6, int(avail * 0.16))
+                    w_right = max(10, int(avail * 0.28))
+                    w_mid = avail - w_left - w_right
+                    if w_mid < 12:
+                        w_left = max(4, w_left - (12 - w_mid) // 2)
+                        w_right = max(6, w_right - (12 - w_mid) // 2)
+                        w_mid = avail - w_left - w_right
+                elif eff_cols == 2:
+                    avail = max(8, term_cols - 2)
+                    w_left = max(6, int(avail * 0.25))
+                    w_mid = avail - w_left
+                    w_right = 0
+                else:
+                    w_left = 0
+                    w_right = 0
+                    w_mid = term_cols
+
+            else:  # div_style == "keine"
+                top_line = ""
+                bot_line = ""
+
+                if eff_cols == 3:
+                    avail = max(10, term_cols - 4)
+                    w_left = max(6, int(avail * 0.16))
+                    w_right = max(10, int(avail * 0.28))
+                    w_mid = avail - w_left - w_right
+                    if w_mid < 12:
+                        w_left = max(4, w_left - (12 - w_mid) // 2)
+                        w_right = max(6, w_right - (12 - w_mid) // 2)
+                        w_mid = avail - w_left - w_right
+                elif eff_cols == 2:
+                    avail = max(8, term_cols - 2)
+                    w_left = max(6, int(avail * 0.25))
+                    w_mid = avail - w_left
+                    w_right = 0
+                else:
+                    w_left = 0
+                    w_right = 0
+                    w_mid = term_cols
+
+        if active_console and console_pos == "unten" and console_h > 0:
+            if div_style in ("vertikal", "außen"):
+                bot_line = f"╰{'─' * (term_cols - 2)}╯"
+            elif div_style == "horizontal":
+                bot_line = "─" * term_cols
             else:
-                w_left = 0
-                w_right = 0
-                w_mid = term_cols
+                bot_line = ""
 
         # Daten für Elternverzeichnis (Spalte 1)
         parent_items: List[FileEntry] = []
         cur_p_idx = 0
-        if eff_cols >= 2:
+        if eff_cols >= 2 and not (active_console and console_pos == "links"):
             parent_path = os.path.dirname(self.current_dir)
             if parent_path != self.current_dir:
                 try:
@@ -1270,7 +1553,7 @@ class EasyDateienApp:
         # Daten für Kindverzeichnis (Spalte 3)
         child_items: List[FileEntry] = []
         is_cur_dir = bool(cur_item and cur_item.is_dir)
-        if eff_cols == 3 and cur_item and is_cur_dir:
+        if eff_cols == 3 and cur_item and is_cur_dir and not (active_console and console_pos == "rechts"):
             try:
                 c_mtime = os.path.getmtime(cur_item.path)
             except Exception:
@@ -1293,6 +1576,10 @@ class EasyDateienApp:
         self.last_layout = {
             "header_lines": header_lines,
             "avail_rows": avail_rows,
+            "fm_rows": fm_rows,
+            "active_console": active_console,
+            "console_pos": console_pos if active_console else None,
+            "split_row": (header_lines + fm_rows) if (active_console and console_pos == "unten" and console_h > 0) else -1,
             "eff_cols": eff_cols,
             "div_style": div_style,
             "w_left": w_left,
@@ -1306,11 +1593,24 @@ class EasyDateienApp:
             "show_status": has_status_bar,
         }
 
+        # Vorab-Berechnung für seitliche Konsole (rechts oder links)
+        if active_console and console_pos == "rechts":
+            c_right_lines = self.get_console_display_lines(w_right, avail_rows)
+        else:
+            c_right_lines = []
+
+        if active_console and console_pos == "links":
+            c_left_lines = self.get_console_display_lines(w_left, avail_rows)
+        else:
+            c_left_lines = []
+
         # Zeilen rendern
         file_lines: List[str] = []
         for r in range(avail_rows):
-            # 1. Zelle links (Eltern)
-            if eff_cols >= 2:
+            # 1. Zelle links (Eltern oder Konsole)
+            if active_console and console_pos == "links":
+                cell_left = c_left_lines[r]
+            elif eff_cols >= 2:
                 p_idx = p_start + r
                 if p_idx < len(parent_items):
                     p_it = parent_items[p_idx]
@@ -1325,6 +1625,8 @@ class EasyDateienApp:
                     cell_left = pad_visible(txt_left, w_left)
                 else:
                     cell_left = " " * w_left
+            else:
+                cell_left = ""
 
             # 2. Zelle mitte (Aktueller Ordner)
             m_idx = m_start + r
@@ -1384,8 +1686,10 @@ class EasyDateienApp:
                 else:
                     cell_mid = " " * w_mid
 
-            # 3. Zelle rechts (Kindverzeichnis oder Datei-Details)
-            if eff_cols == 3:
+            # 3. Zelle rechts (Kindverzeichnis, Datei-Details oder Konsole)
+            if active_console and console_pos == "rechts":
+                cell_right = c_right_lines[r]
+            elif eff_cols == 3:
                 if cur_item:
                     if is_cur_dir:
                         if r < len(child_items):
@@ -1423,34 +1727,48 @@ class EasyDateienApp:
                             cell_right = " " * w_right
                 else:
                     cell_right = " " * w_right
+            else:
+                cell_right = ""
 
             # Zeile zusammensetzen je nach Trennungslinien-Stil
             if div_style == "vertikal":
                 if eff_cols == 1:
                     row_line = f"│{cell_mid}│"
                 elif eff_cols == 2:
-                    row_line = f"│{cell_left}│{cell_mid}│"
+                    if active_console and console_pos == "rechts":
+                        row_line = f"│{cell_mid}│{cell_right}│"
+                    else:
+                        row_line = f"│{cell_left}│{cell_mid}│"
                 else:
                     row_line = f"│{cell_left}│{cell_mid}│{cell_right}│"
             elif div_style == "außen":
                 if eff_cols == 1:
                     row_line = f"│{cell_mid}│"
                 elif eff_cols == 2:
-                    row_line = f"│{cell_left}  {cell_mid}│"
+                    if active_console and console_pos == "rechts":
+                        row_line = f"│{cell_mid}  {cell_right}│"
+                    else:
+                        row_line = f"│{cell_left}  {cell_mid}│"
                 else:
                     row_line = f"│{cell_left}  {cell_mid}  {cell_right}│"
             elif div_style == "horizontal":
                 if eff_cols == 1:
                     row_line = f" {cell_mid} "
                 elif eff_cols == 2:
-                    row_line = f"{cell_left}  {cell_mid}"
+                    if active_console and console_pos == "rechts":
+                        row_line = f"{cell_mid}  {cell_right}"
+                    else:
+                        row_line = f"{cell_left}  {cell_mid}"
                 else:
                     row_line = f"{cell_left}  {cell_mid}  {cell_right}"
             else:  # keine
                 if eff_cols == 1:
                     row_line = cell_mid
                 elif eff_cols == 2:
-                    row_line = f"{cell_left}  {cell_mid}"
+                    if active_console and console_pos == "rechts":
+                        row_line = f"{cell_mid}  {cell_right}"
+                    else:
+                        row_line = f"{cell_left}  {cell_mid}"
                 else:
                     row_line = f"{cell_left}  {cell_mid}  {cell_right}"
 
@@ -1462,6 +1780,34 @@ class EasyDateienApp:
         if has_top_border and top_line:
             all_lines.append(top_line)
         all_lines.extend(file_lines)
+
+        # Bei unten liegender Konsole: Trenner und Konsolenzeilen einfügen
+        if active_console and console_pos == "unten" and console_h > 0:
+            if div_style == "vertikal":
+                if eff_cols == 3:
+                    mid_sep = f"├{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}┤"
+                elif eff_cols == 2:
+                    mid_sep = f"├{'─' * w_left}┴{'─' * w_mid}┤"
+                else:
+                    mid_sep = f"├{'─' * w_mid}┤"
+            elif div_style == "außen":
+                mid_sep = f"├{'─' * (term_cols - 2)}┤"
+            elif div_style == "horizontal":
+                mid_sep = "─" * term_cols
+            else:
+                mid_sep = pad_visible(f"── Konsole: {self.get_short_dir(self.current_dir)} ──", term_cols)
+
+            mid_sep = pad_visible(mid_sep, term_cols)
+            all_lines.append(mid_sep)
+
+            inside_w = (term_cols - 2) if div_style in ("vertikal", "außen") else term_cols
+            c_lines = self.get_console_display_lines(inside_w, console_h)
+            for cl in c_lines:
+                if div_style in ("vertikal", "außen"):
+                    all_lines.append(pad_visible(f"│{cl}│", term_cols))
+                else:
+                    all_lines.append(pad_visible(cl, term_cols))
+
         if has_bottom_border and bot_line:
             all_lines.append(bot_line)
         if has_status_bar and status_line:
@@ -1481,12 +1827,46 @@ class EasyDateienApp:
         div_style = layout.get("div_style", "vertikal")
         w_left = layout.get("w_left", 0)
         w_mid = layout.get("w_mid", 0)
+        w_right = layout.get("w_right", 0)
         m_start = layout.get("m_start", 0)
+        active_console = layout.get("active_console", False)
+        console_pos = layout.get("console_pos", "unten")
+        split_row = layout.get("split_row", -1)
 
         # Pfadzeile oben (y == 1)
         if y == 1:
             self.interactive_goto()
             return True
+
+        # Klick in Konsole prüfen
+        if active_console:
+            if console_pos == "unten" and split_row > 0:
+                if y > split_row:
+                    self.console_focused = True
+                    return True
+                else:
+                    self.console_focused = False
+            elif console_pos == "rechts":
+                col_x = x - 1
+                if div_style == "vertikal":
+                    in_console = (col_x >= (w_left + w_mid + 3)) if eff_cols == 3 else (col_x >= (w_mid + 2))
+                elif div_style == "außen":
+                    in_console = (col_x >= (w_left + w_mid + 5)) if eff_cols == 3 else (col_x >= (w_mid + 3))
+                else:
+                    in_console = (col_x > (w_left + 2 + w_mid)) if eff_cols == 3 else (col_x > (w_mid + 2))
+                if in_console:
+                    self.console_focused = True
+                    return True
+                else:
+                    self.console_focused = False
+            elif console_pos == "links":
+                col_x = x - 1
+                in_console = (col_x <= w_left)
+                if in_console:
+                    self.console_focused = True
+                    return True
+                else:
+                    self.console_focused = False
 
         file_row = (y - 1) - hdr_count
 
@@ -1506,7 +1886,7 @@ class EasyDateienApp:
                 in_mid = (eff_cols == 1 and col_x <= w_mid) or (eff_cols >= 2 and (w_left + 2) <= col_x <= (w_left + 2 + w_mid))
                 in_right = (eff_cols == 3 and col_x > (w_left + 2 + w_mid))
 
-            if in_left:
+            if in_left and not (active_console and console_pos == "links"):
                 self.go_parent_directory()
                 return True
             elif in_mid:
@@ -1527,7 +1907,7 @@ class EasyDateienApp:
                         self.last_click_time = now
                         self.last_click_idx = target_idx
                     return True
-            elif in_right:
+            elif in_right and not (active_console and console_pos == "rechts"):
                 cur_item = layout.get("cur_item")
                 if cur_item and layout.get("is_cur_dir"):
                     child_items = layout.get("child_items", [])
@@ -1554,6 +1934,12 @@ class EasyDateienApp:
         w_left = layout.get("w_left", 0)
         w_mid = layout.get("w_mid", 0)
         m_start = layout.get("m_start", 0)
+        active_console = layout.get("active_console", False)
+        console_pos = layout.get("console_pos", "unten")
+        split_row = layout.get("split_row", -1)
+
+        if active_console and console_pos == "unten" and split_row > 0 and y > split_row:
+            return False
 
         file_row = (y - 1) - hdr_count
         if 0 <= file_row < avail_rows:
@@ -1624,18 +2010,25 @@ class EasyDateienApp:
                 if not key:
                     continue
 
-                # Statusmeldung bei Cursor-Bewegung leeren
+                # Statusmeldung bei Cursor-Bewegung leeren (nur wenn Konsole nicht fokussiert)
                 if key in ("UP", "DOWN", "k", "j", "PAGE_UP", "PAGE_DOWN", "HOME", "END", "MOUSE_WHEEL_UP", "MOUSE_WHEEL_DOWN"):
-                    self.status_message = ""
+                    if not (self.show_console and self.console_focused):
+                        self.status_message = ""
 
                 # Maus-Ereignisse verarbeiten
                 if key == "MOUSE_WHEEL_UP":
-                    if self.items:
+                    if self.show_console and self.console_focused:
+                        self.console_scroll_offset += 2
+                        needs_redraw = True
+                    elif self.items:
                         self.selected_idx = max(0, self.selected_idx - 1)
                         needs_redraw = True
                     continue
                 elif key == "MOUSE_WHEEL_DOWN":
-                    if self.items:
+                    if self.show_console and self.console_focused:
+                        self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
+                        needs_redraw = True
+                    elif self.items:
                         self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1)
                         needs_redraw = True
                     continue
@@ -1662,6 +2055,147 @@ class EasyDateienApp:
                             pass
                     continue
                 elif key.startswith("MOUSE_EVENT:"):
+                    continue
+
+                # ---------------------------------------------------------
+                # Eingaben bei fokussierter Konsole direkt abfangen
+                # ---------------------------------------------------------
+                if self.show_console and self.console_focused:
+                    if key == "ENTER":
+                        cmd = self.console_input
+                        self.run_console_command(cmd, fd, old_settings)
+                        needs_redraw = True
+                        continue
+                    elif key in ("TAB", "ESC"):
+                        self.console_focused = False
+                        self.status_message = "Fokus auf Dateimanager gewechselt."
+                        needs_redraw = True
+                        continue
+                    elif key == "BACKSPACE":
+                        if self.console_cursor_idx > 0:
+                            self.console_input = (
+                                self.console_input[:self.console_cursor_idx - 1]
+                                + self.console_input[self.console_cursor_idx:]
+                            )
+                            self.console_cursor_idx -= 1
+                            needs_redraw = True
+                        continue
+                    elif key == "DELETE":
+                        if self.console_cursor_idx < len(self.console_input):
+                            self.console_input = (
+                                self.console_input[:self.console_cursor_idx]
+                                + self.console_input[self.console_cursor_idx + 1:]
+                            )
+                            needs_redraw = True
+                        continue
+                    elif key == "LEFT":
+                        if self.console_cursor_idx > 0:
+                            self.console_cursor_idx -= 1
+                            needs_redraw = True
+                        continue
+                    elif key == "RIGHT":
+                        if self.console_cursor_idx < len(self.console_input):
+                            self.console_cursor_idx += 1
+                            needs_redraw = True
+                        continue
+                    elif key in ("HOME", "\x01"):
+                        self.console_cursor_idx = 0
+                        needs_redraw = True
+                        continue
+                    elif key in ("END", "\x05"):
+                        self.console_cursor_idx = len(self.console_input)
+                        needs_redraw = True
+                        continue
+                    elif key == "UP":
+                        if self.console_cmd_history:
+                            if self.console_history_idx > 0:
+                                self.console_history_idx -= 1
+                                self.console_input = self.console_cmd_history[self.console_history_idx]
+                                self.console_cursor_idx = len(self.console_input)
+                                needs_redraw = True
+                        continue
+                    elif key == "DOWN":
+                        if self.console_cmd_history:
+                            if self.console_history_idx < len(self.console_cmd_history) - 1:
+                                self.console_history_idx += 1
+                                self.console_input = self.console_cmd_history[self.console_history_idx]
+                                self.console_cursor_idx = len(self.console_input)
+                                needs_redraw = True
+                            elif self.console_history_idx == len(self.console_cmd_history) - 1:
+                                self.console_history_idx = len(self.console_cmd_history)
+                                self.console_input = ""
+                                self.console_cursor_idx = 0
+                                needs_redraw = True
+                        continue
+                    elif key == "PAGE_UP":
+                        self.console_scroll_offset += 3
+                        needs_redraw = True
+                        continue
+                    elif key == "PAGE_DOWN":
+                        self.console_scroll_offset = max(0, self.console_scroll_offset - 3)
+                        needs_redraw = True
+                        continue
+                    elif key == "SPACE":
+                        self.console_input = (
+                            self.console_input[:self.console_cursor_idx]
+                            + " "
+                            + self.console_input[self.console_cursor_idx:]
+                        )
+                        self.console_cursor_idx += 1
+                        needs_redraw = True
+                        continue
+                    elif key == "\x0c":  # Ctrl+L
+                        self.console_output_lines.clear()
+                        needs_redraw = True
+                        continue
+                    elif key == "\x15":  # Ctrl+U
+                        self.console_input = self.console_input[self.console_cursor_idx:]
+                        self.console_cursor_idx = 0
+                        needs_redraw = True
+                        continue
+                    elif key == "\x0b":  # Ctrl+K
+                        self.console_input = self.console_input[:self.console_cursor_idx]
+                        needs_redraw = True
+                        continue
+                    elif key == "\x17":  # Ctrl+W
+                        idx = self.console_cursor_idx
+                        while idx > 0 and self.console_input[idx - 1] == " ":
+                            idx -= 1
+                        while idx > 0 and self.console_input[idx - 1] != " ":
+                            idx -= 1
+                        self.console_input = self.console_input[:idx] + self.console_input[self.console_cursor_idx:]
+                        self.console_cursor_idx = idx
+                        needs_redraw = True
+                        continue
+                    elif key == "QUIT":
+                        if self.console_input:
+                            self.console_input = ""
+                            self.console_cursor_idx = 0
+                            self.console_history_idx = len(self.console_cmd_history)
+                        else:
+                            self.toggle_console()
+                        needs_redraw = True
+                        continue
+                    elif len(key) == 1 and (key.isprintable() or key == "\t"):
+                        self.console_input = (
+                            self.console_input[:self.console_cursor_idx]
+                            + key
+                            + self.console_input[self.console_cursor_idx:]
+                        )
+                        self.console_cursor_idx += 1
+                        needs_redraw = True
+                        continue
+                    else:
+                        continue
+
+                # Tab wechselt Fokus zur Konsole (bzw. öffnet Konsole)
+                if key == "TAB":
+                    if self.show_console:
+                        self.console_focused = True
+                        self.status_message = "Fokus auf Konsole gewechselt."
+                    else:
+                        self.toggle_console()
+                    needs_redraw = True
                     continue
 
                 if key == "ESC" and self.pending_key_seq:
@@ -1822,6 +2356,10 @@ class EasyDateienApp:
                 # 11. Versteckte Dateien umschalten (./z)
                 elif key in kb.get("toggle_hidden", [".", "z"]):
                     self.toggle_hidden_files()
+                    needs_redraw = True
+                # 11b. Konsole umschalten (t)
+                elif key in kb.get("toggle_console", ["t"]):
+                    self.toggle_console()
                     needs_redraw = True
                 # 12. Konfigurationsmenü öffnen (m/C)
                 elif key in kb.get("config_menu", ["m", "C"]):

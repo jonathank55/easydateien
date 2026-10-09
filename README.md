@@ -78,6 +78,16 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
   - `e`: Datei in TextEdit öffnen  
   - `r`: Datei im Finder anzeigen (`reveal`)  
 
+- **Integrierte Konsole & Terminal (Taste `t`):**  
+  EasyDateien besitzt ein vollständig integriertes Terminal-Panel:
+  - **Umschalten mit `t`:** Blendet die Konsole blitzschnell ein oder aus.
+  - **Konfigurierbare Position:** `[Unten]`, `[Rechts]` oder `[Links]` — über das Menü (`m`) anpassbar.
+  - **Zwei-Wege-Verzeichnissynchronisation:** Das Terminal operiert immer im aktuellen Verzeichnis des Dateimanagers. Navigiert man im Dateimanager, folgt das Terminal automatisch. Wechselt man im Terminal mit `cd ..` das Verzeichnis, folgt der Dateimanager sofort!
+  - **Automatische Dateilisten-Aktualisierung:** Sobald im Terminal Befehle wie `touch datei.txt`, `mkdir ordner`, `git checkout` oder `rm bild.png` ausgeführt werden, aktualisiert der Dateimanager die Ansicht unverzüglich.
+  - **Fokus-Umschaltung:** Mit `Tab` oder `ESC` wechselt man bequem zwischen Dateimanager und Konsole hin und her. Ein Klick mit der Maus in den Konsolenbereich setzt den Fokus ebenfalls direkt auf die Konsole.
+  - **Voller Terminalkomfort:** Befehlsverlauf (`↑`/`↓`), Zeilennavigation (`Pos1`/`Ende`, `Ctrl+A`/`Ctrl+E`, `Ctrl+W`, `Ctrl+U`, `Ctrl+K`), Bildschirm leeren (`clear` / `Ctrl+L`) und Schließen per `exit`, `quit` oder `Ctrl+D`.
+  - **Interaktive Programme:** Vollbildanwendungen wie `nano`, `vim`, `htop` oder `zsh` werden sauber im Vollbild ausgeführt und kehren ohne Bildartefakte zurück.
+
 - **Interaktives Konfigurationsmenü (Taste `m`):**  
   Wie bei SCHNELLSTART verfügt EasyDateien über einen vollwertigen interaktiven Konfigurator mit direktem In-Place-Toggeln ohne störende Untermenüs:
   - **Tastenbelegungen bearbeiten:** Jede Aktion kann interaktiv auf eine neue Taste umbelegt oder mit Alternativtasten belegt werden.
@@ -226,6 +236,8 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
 | `g h` / `~` | Gehe zu `~` (Home) |
 | `g i` | Pfad manuell über Tastatur eingeben |
 | `g p` | Zu Pfad aus Zwischenablage springen |
+| `t` | Integrierte Konsole / Terminal anzeigen / ausblenden |
+| `Tab` | Fokus zwischen Dateimanager und Konsole wechseln |
 | `m` | Konfigurationsmenü öffnen |
 | `o` | Datei mit macOS-Standard-App öffnen |
 | `e` | Datei mit TextEdit öffnen |

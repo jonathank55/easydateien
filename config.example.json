@@ -7,6 +7,8 @@
   "columns_enabled": true,
   "divider_style": "vertikal",
   "show_controls": true,
+  "show_console": false,
+  "console_position": "unten",
   "esc_to_quit": false,
   "mouse_support": true,
   "text_editor": "nano %s",
@@ -33,6 +35,7 @@
     "goto_interactive": ["gi"],
     "goto_clipboard": ["gp"],
     "zip": ["cz"],
+    "toggle_console": ["t"],
     "quit": ["q"]
   }
 }
