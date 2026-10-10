@@ -488,7 +488,12 @@ def run_konfigurator(standalone: bool = True, new_zip: str = None):
         else:
             sys.stdout.write(ENABLE_AUTOWRAP)
             sys.stdout.flush()
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+            # Nach dem Schließen des Konfigurators die neue Zip-Datei auswählen
+            if new_zip:
+                from easydateien import EasyDateienApp
+                app = EasyDateienApp()
+                app.change_directory(os.getcwd())
+                app.select_filename(new_zip)
 
 class SingleLineHelpFormatter(argparse.HelpFormatter):
     def _split_lines(self, text, width):
