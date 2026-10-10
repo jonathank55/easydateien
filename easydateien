@@ -482,21 +482,9 @@ def get_file_type_desc(item: FileEntry) -> str:
 
 
 def get_file_colored_name(item: FileEntry) -> str:
-    """Formatiert den Dateinamen mit dezenten typbezogenen Farbakzenten."""
+    """Liefert den Dateinamen neutral ohne typbezogene Farbakzente."""
     suffix = "/" if (item.is_dir and not item.name.endswith("/")) else ("@" if (item.is_symlink and not item.name.endswith("@")) else "")
-    name_disp = f"{item.name}{suffix}"
-    if item.is_dir:
-        return name_disp
-    if item.is_symlink:
-        return f"{C_CYAN}{name_disp}{C_RESET}"
-    if item.is_exec:
-        return f"{C_BOLD_GREEN}{name_disp}{C_RESET}"
-    ext = item.ext.lower()
-    if ext in (".zip", ".tar", ".gz", ".bz2", ".xz", ".dmg", ".pkg", ".7z", ".rar"):
-        return f"{C_YELLOW}{name_disp}{C_RESET}"
-    if ext in (".py", ".sh", ".zsh", ".bash", ".js", ".ts", ".html", ".css", ".json", ".yaml", ".yml", ".toml", ".typ"):
-        return f"{C_CYAN}{name_disp}{C_RESET}"
-    return name_disp
+    return f"{item.name}{suffix}"
 
 
 def scan_directory(
@@ -2648,7 +2636,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.5", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.6", help="Programmversion anzeigen")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
 
