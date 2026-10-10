@@ -1523,7 +1523,7 @@ class EasyDateienApp:
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
                     left_str = f" {badge} {disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
-                    opts_full = ["[Eingabe] Bestätigen", "[ESC] Abbrechen"]
+                    opts_full = ["[Eingabe] Bestätigen", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
                     opts_mini = ["[ESC]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
@@ -1542,7 +1542,7 @@ class EasyDateienApp:
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
                     left_str = f" {badge} {disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
-                    opts_full = ["[Eingabe] Erstellen", "[ESC] Abbrechen"]
+                    opts_full = ["[Eingabe] Erstellen", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
                     opts_mini = ["[ESC]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
@@ -1561,7 +1561,7 @@ class EasyDateienApp:
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
                     left_str = f" {badge} {disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
-                    opts_full = ["[Eingabe] Filtern", "[ESC] Abbrechen"]
+                    opts_full = ["[Eingabe] Filtern", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
                     opts_mini = ["[ESC]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
@@ -1580,7 +1580,7 @@ class EasyDateienApp:
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
                     left_str = f" {badge} {disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
-                    opts_full = ["[Eingabe] Wechseln", "[ESC] Abbrechen"]
+                    opts_full = ["[Eingabe] Wechseln", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
                     opts_mini = ["[ESC]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
@@ -1596,7 +1596,7 @@ class EasyDateienApp:
                     targets_c = len(self.selected_paths) if self.selected_paths else 1
                     t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
                     badge = f"{C_BOLD_RED}[PAPIERKORB]{C_RESET}" if term_cols >= 40 else f"{C_BOLD_RED}[LÖSCHEN]{C_RESET}"
-                    opts_full = ["[j] Löschen", "[n / ESC] Abbrechen"]
+                    opts_full = ["[j] Löschen", "[n / ESC] Zurück"]
                     opts_short = ["[j] Ja", "[n] Nein"]
                     opts_mini = ["[j/n]"]
                     min_q_w = str_width(f" {badge} ") + 8
@@ -1622,8 +1622,8 @@ class EasyDateienApp:
                 elif self.active_dialog == "goto_menu":
                     badge = f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET} "
                     avail_r = max(1, term_cols - str_width(badge) - 1)
-                    opts_full = ["Taste im Menü wählen", "[ESC / q] Abbrechen"]
-                    opts_short = ["[ESC / q] Abbrechen"]
+                    opts_full = ["Taste im Menü wählen", "[ESC / q] Zurück"]
+                    opts_short = ["[ESC / q] Zurück"]
                     opts_mini = ["[ESC]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_r:
                         hints = distribute_options(opts_full, avail_r)
@@ -1637,8 +1637,8 @@ class EasyDateienApp:
                 elif self.active_dialog == "help_menu":
                     badge = f" {C_BOLD_BLUE}[HILFE]{C_RESET} "
                     avail_r = max(1, term_cols - str_width(badge) - 1)
-                    opts_full = ["[↑↓] Scrollen", "[ESC / q] Schließen"]
-                    opts_short = ["[ESC / q] Schließen"]
+                    opts_full = ["[↑↓] Scrollen", "[ESC / q] Zurück"]
+                    opts_short = ["[ESC / q] Zurück"]
                     opts_mini = ["[ESC]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_r:
                         hints = distribute_options(opts_full, avail_r)
@@ -1657,10 +1657,10 @@ class EasyDateienApp:
                     left_b = f" {mode_lbl}  " if mode_lbl else " "
                     avail_ctrl = max(1, term_cols - str_width(left_b) - 1)
 
-                    opt_full = ["[←↑↓→] Navigieren", "[ESC] Beenden"]
-                    opt_short = ["[←↑↓→] Nav", "[ESC] Beenden"]
+                    opt_full = ["[←↑↓→] Navigieren", "[ESC] Zurück"]
+                    opt_short = ["[←↑↓→] Nav", "[ESC] Zurück"]
                     opt_mini = ["[←↑↓→] Nav", "[ESC]"]
-                    opt_esc_only = ["[ESC] Beenden"]
+                    opt_esc_only = ["[ESC] Zurück"]
                     opt_esc_mini = ["[ESC]"]
 
                     w_full = sum(str_width(it) for it in opt_full)
@@ -1710,7 +1710,7 @@ class EasyDateienApp:
                 f"{C_BOLD_CYAN}[i]{C_RESET}  Pfad manuell eingeben",
                 f"{C_BOLD_CYAN}[p]{C_RESET}  Pfad aus Zwischenablage",
                 "",
-                f"{C_GRAY}[ESC / q] Abbrechen{C_RESET}",
+                f"{C_GRAY}[ESC / q] Zurück{C_RESET}",
             ]
             target_w = min(term_cols - 4, 46)
             if target_w >= 24 and term_rows >= 8:
@@ -1754,7 +1754,7 @@ class EasyDateienApp:
                 f"  {C_BOLD_CYAN}[m]{C_RESET}           Einstellungen und Farbschema öffnen",
                 f"  {C_BOLD_CYAN}[q]{C_RESET}           EasyDateien beenden",
                 "",
-                f"{C_GRAY}[ESC / q] Schließen{C_RESET}",
+                f"{C_GRAY}[ESC / q] Zurück{C_RESET}",
             ]
             border_overhead = (1 if has_top_border else 0) + (1 if has_bottom_border else 0) + (1 if has_status_bar else 0) + 1
             max_box_h = max(6, term_rows - border_overhead - 2)
@@ -2257,8 +2257,6 @@ class EasyDateienApp:
                         self.set_status("Zwischenspeicher geleert")
                         needs_redraw = True
                         continue
-                    elif self.config.get("esc_to_quit", False):
-                        break
                     continue
 
                 if self.show_console and self.console_focused:

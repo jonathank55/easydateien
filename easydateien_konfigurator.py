@@ -84,6 +84,7 @@ KEYBINDING_ITEMS = [
     ("goto", "Gehe-zu-Menü öffnen", "[g]"),
     ("home", "Direkt zum Benutzerordner wechseln", "[~]"),
     ("toggle_console", "Integrierte Konsole umschalten", "[t]"),
+    ("esc", "Aktion abbrechen oder zurück", "[ESC]"),
     ("quit", "EasyDateien beenden", "[q]"),
     ("reset", "Auf Standardwerte zurücksetzen", "[Standard]"),
 ]
@@ -348,7 +349,7 @@ def keybindings_menu(fd: int):
             "Übersicht aller Tastenkombinationen und Befehle",
             KEYBINDING_ITEMS,
             idx,
-            "[←↑↓→] Navigieren  [ESC / q] Schließen"
+            "[←↑↓→] Navigieren  [ESC / q] Zurück"
         )
         k = read_key(fd)
         if not k:
@@ -402,7 +403,7 @@ def main_menu(fd: int):
                 val = ""
             rows.append((key, lbl, val))
 
-        footer_text = status_hint if status_hint else "[←↑↓→] Navigieren  [Eingabe] Ändern  [ESC / q] Beenden"
+        footer_text = status_hint if status_hint else "[←↑↓→] Navigieren  [Eingabe] Ändern  [ESC] Zurück  [q] Beenden"
         start, count = render_box(
             "EASYDATEIEN KONFIGURATION",
             "Einstellungen verwalten und anpassen",
