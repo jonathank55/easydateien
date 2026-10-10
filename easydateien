@@ -1112,7 +1112,6 @@ class EasyDateienApp:
                 self.undo_stack.append(UndoAction("create_zip", f"ZIP {os.path.basename(dest)}", {"path": dest}))
                 self.set_status(f"ZIP erstellt: {os.path.basename(dest)}", "success")
                 return dest
-                run_konfigurator(False, new_zip=dest)
             except Exception as e:
                 self.set_status(f"Fehler beim Erstellen des ZIP-Archivs: {e}", "error")
         finally:
@@ -2983,7 +2982,10 @@ class EasyDateienApp:
                         needs_redraw = True
                     continue
                 elif key in ("z",):
-                    self.create_zip_archive()
+                    zip_path = self.create_zip_archive()
+                    if zip_path:
+                        # Stelle sicher, dass die neu erstellte Zip-Datei ausgewählt wird
+                        self.select_filename(os.path.basename(zip_path))
                     needs_redraw = True
                     continue
                 elif key == "c":
