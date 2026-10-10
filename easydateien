@@ -1545,22 +1545,48 @@ class EasyDateienApp:
             else:
                 if self.show_console and self.console_focused:
                     mode_lbl = f"{C_BOLD_GREEN}[KONSOLE]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_GREEN}[KONS]{C_RESET}"
-                elif self.selected_paths:
-                    c = len(self.selected_paths)
-                    mode_lbl = f"{C_YELLOW}[AUSWAHL {c}]{C_RESET}" if term_cols >= 45 else f"{C_YELLOW}[{c}]{C_RESET}"
-                elif self.clipboard_mode == "cut":
-                    c = len(self.clipboard_paths)
-                    mode_lbl = f"{C_BOLD_RED}[AUSSCHNEIDEN {c}]{C_RESET}" if term_cols >= 50 else f"{C_BOLD_RED}[×{c}]{C_RESET}"
-                elif self.clipboard_mode == "copy":
-                    c = len(self.clipboard_paths)
-                    mode_lbl = f"{C_BOLD_GREEN}[KOPIEREN {c}]{C_RESET}" if term_cols >= 50 else f"{C_BOLD_GREEN}[+{c}]{C_RESET}"
-                else:
-                    mode_lbl = ""
+                    left_b = f" {mode_lbl}  " if mode_lbl else " "
+                    avail_ctrl = max(1, term_cols - str_width(left_b))
 
-                left_b = f" {mode_lbl}  " if mode_lbl else " "
-                avail_ctrl = max(1, term_cols - str_width(left_b))
-                ctrl = self.build_dynamic_controls(avail_ctrl)
-                st_line = pad_to_width(f"{left_b}{ctrl}", term_cols)
+                    opt_full = "[←↑↓→] Navigieren  [ESC] Beenden"
+                    opt_compact = "[←↑↓→] Navigieren [ESC] Beenden"
+                    opt_short = "[←↑↓→] Nav  [ESC] Beenden"
+                    opt_short_c = "[←↑↓→] Nav [ESC] Beenden"
+                    opt_esc_only = "[ESC] Beenden"
+                    opt_esc_mini = "[ESC]"
+
+                    if str_width(opt_full) <= avail_ctrl:
+                        ctrl = f"{C_GRAY}{opt_full}{C_RESET}"
+                    elif str_width(opt_compact) <= avail_ctrl:
+                        ctrl = f"{C_GRAY}{opt_compact}{C_RESET}"
+                    elif str_width(opt_short) <= avail_ctrl:
+                        ctrl = f"{C_GRAY}{opt_short}{C_RESET}"
+                    elif str_width(opt_short_c) <= avail_ctrl:
+                        ctrl = f"{C_GRAY}{opt_short_c}{C_RESET}"
+                    elif str_width(opt_esc_only) <= avail_ctrl:
+                        ctrl = f"{C_GRAY}{opt_esc_only}{C_RESET}"
+                    elif str_width(opt_esc_mini) <= avail_ctrl:
+                        ctrl = f"{C_GRAY}{opt_esc_mini}{C_RESET}"
+                    else:
+                        ctrl = ""
+                    st_line = pad_to_width(f"{left_b}{ctrl}", term_cols)
+                else:
+                    if self.selected_paths:
+                        c = len(self.selected_paths)
+                        mode_lbl = f"{C_YELLOW}[AUSWAHL {c}]{C_RESET}" if term_cols >= 45 else f"{C_YELLOW}[{c}]{C_RESET}"
+                    elif self.clipboard_mode == "cut":
+                        c = len(self.clipboard_paths)
+                        mode_lbl = f"{C_BOLD_RED}[AUSSCHNEIDEN {c}]{C_RESET}" if term_cols >= 50 else f"{C_BOLD_RED}[×{c}]{C_RESET}"
+                    elif self.clipboard_mode == "copy":
+                        c = len(self.clipboard_paths)
+                        mode_lbl = f"{C_BOLD_GREEN}[KOPIEREN {c}]{C_RESET}" if term_cols >= 50 else f"{C_BOLD_GREEN}[+{c}]{C_RESET}"
+                    else:
+                        mode_lbl = ""
+
+                    left_b = f" {mode_lbl}  " if mode_lbl else " "
+                    avail_ctrl = max(1, term_cols - str_width(left_b))
+                    ctrl = self.build_dynamic_controls(avail_ctrl)
+                    st_line = pad_to_width(f"{left_b}{ctrl}", term_cols)
 
             all_lines.append(st_line)
 
