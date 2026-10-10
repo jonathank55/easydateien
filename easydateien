@@ -2101,9 +2101,19 @@ class EasyDateienApp:
                 is_over_console = True
 
         if is_over_console or (self.show_console and self.console_focused):
+            # Berechne die Gesamtzahl der Zeilen in der Konsole nach dem Umbruch
+            wrapped_lines: List[str] = []
+            for raw_line in self.console_output_lines:
+                wrapped_lines.extend(wrap_line_to_width(raw_line, max(1, shutil.get_terminal_size((80, 24)).columns - 4)))
+
+            # Maximale Scroll-Position berechnen
+            max_scroll = max(0, len(wrapped_lines) - 1)
+
             if direction == "up":
-                self.console_scroll_offset += 2
+                # Nach oben scrollen (Inhalt nach unten bewegen)
+                self.console_scroll_offset = min(max_scroll, self.console_scroll_offset + 2)
             else:
+                # Nach unten scrollen (Inhalt nach oben bewegen)
                 self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
             return True
         else:
@@ -2515,21 +2525,35 @@ class EasyDateienApp:
                         self.console_scroll_offset = 0
                         needs_redraw = True
                     elif key in ("PAGE_UP", "SHIFT_UP", "CTRL_UP", "ALT_UP", "ALT_SHIFT_UP", "CTRL_SHIFT_UP"):
-                        self.console_scroll_offset += 2
+                        # Nach oben scrollen (Inhalt nach unten bewegen)
+                        wrapped_lines: List[str] = []
+                        for raw_line in self.console_output_lines:
+                            wrapped_lines.extend(wrap_line_to_width(raw_line, max(1, shutil.get_terminal_size((80, 24)).columns - 4)))
+                        max_scroll = max(0, len(wrapped_lines) - 1)
+                        self.console_scroll_offset = min(max_scroll, self.console_scroll_offset + 2)
                         needs_redraw = True
                     elif key in ("PAGE_DOWN", "SHIFT_DOWN", "CTRL_DOWN", "ALT_DOWN", "ALT_SHIFT_DOWN", "CTRL_SHIFT_DOWN"):
+                        # Nach unten scrollen (Inhalt nach oben bewegen)
                         self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
                         needs_redraw = True
                     elif key == "UP":
+                        # Befehlshistorie oder Scrollen
                         if self.console_cmd_history and self.console_history_idx > 0:
                             self.console_history_idx -= 1
                             self.console_input = self.console_cmd_history[self.console_history_idx]
                             self.console_cursor_idx = len(self.console_input)
                         else:
-                            self.console_scroll_offset += 1
+                            # Nach oben scrollen (Inhalt nach unten bewegen)
+                            wrapped_lines: List[str] = []
+                            for raw_line in self.console_output_lines:
+                                wrapped_lines.extend(wrap_line_to_width(raw_line, max(1, shutil.get_terminal_size((80, 24)).columns - 4)))
+                            max_scroll = max(0, len(wrapped_lines) - 1)
+                            self.console_scroll_offset = min(max_scroll, self.console_scroll_offset + 1)
                         needs_redraw = True
                     elif key == "DOWN":
+                        # Befehlshistorie oder Scrollen
                         if self.console_scroll_offset > 0:
+                            # Nach unten scrollen (Inhalt nach oben bewegen)
                             self.console_scroll_offset = max(0, self.console_scroll_offset - 1)
                         elif self.console_cmd_history:
                             if self.console_history_idx < len(self.console_cmd_history) - 1:
