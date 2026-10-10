@@ -90,7 +90,7 @@ KEYBINDING_ITEMS = [
 
 MAIN_MENU_ITEMS = [
     ("divider", "Trennungslinien-Stil", "alle"),
-    ("columns", "3-Spalten-Layout", "Ein"),
+    ("columns", "Spalten-Layout", "Ein"),
     ("mouse", "Mausunterstützung", "Ein"),
     ("console", "Terminal-Konsole", "Aus"),
     ("hidden", "Versteckte Dateien anzeigen", "Aus"),
@@ -362,7 +362,7 @@ def keybindings_menu(fd: int):
             idx = max(0, idx - 8)
         elif k in ("PAGE_DOWN",):
             idx = min(len(KEYBINDING_ITEMS) - 1, idx + 8)
-        elif k in ("ESC", "q"):
+        elif k in ("ESC", "q", "LEFT"):
             break
         elif k.startswith("CLICK:"):
             try:
@@ -433,12 +433,14 @@ def main_menu(fd: int):
                 pass
             continue
 
-        if k in ("ENTER", "SPACE", "RIGHT"):
+        if k in ("ENTER", "SPACE", "RIGHT", "LEFT"):
             act = rows[idx][0]
             if act == "divider":
                 opts = ["alle", "vertikal", "horizontal", "außen", "keine"]
                 cur = cfg.get("divider_style", "alle")
-                cfg["divider_style"] = opts[(opts.index(cur) + 1) % len(opts)] if cur in opts else "alle"
+                cur_i = opts.index(cur) if cur in opts else 0
+                step = -1 if k == "LEFT" else 1
+                cfg["divider_style"] = opts[(cur_i + step) % len(opts)]
                 save_config(cfg)
             elif act == "columns":
                 cfg["columns_enabled"] = not cfg.get("columns_enabled", True)
@@ -453,12 +455,16 @@ def main_menu(fd: int):
                 cfg["show_hidden"] = not cfg.get("show_hidden", False)
                 save_config(cfg)
             elif act == "keybindings":
-                keybindings_menu(fd)
-                cfg = load_config()
+                if k == "LEFT":
+                    break
+                else:
+                    keybindings_menu(fd)
+                    cfg = load_config()
             elif act == "reset":
-                cfg = dict(DEFAULT_CONFIG)
-                save_config(cfg)
-                status_hint = f"{C_BOLD_GREEN}✓ Auf Standardwerte zurückgesetzt{C_RESET}"
+                if k != "LEFT":
+                    cfg = dict(DEFAULT_CONFIG)
+                    save_config(cfg)
+                    status_hint = f"{C_BOLD_GREEN}✓ Auf Standardwerte zurückgesetzt{C_RESET}"
     return cfg
 
 
