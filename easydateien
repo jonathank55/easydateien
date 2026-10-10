@@ -1375,10 +1375,10 @@ class EasyDateienApp:
         if active_console and console_pos in ("rechts", "links") and term_cols < 60:
             console_pos = "unten"
 
-        # Dynamische Berechnung der Konsolenhöhe - jetzt ohne feste Obergrenze
+        # Dynamische Berechnung der Konsolenhöhe - proportional zum verfügbaren Platz
         if active_console and console_pos == "unten" and avail_total >= 4:
-            # Mindestens 2 Zeilen, aber maximal verfügbarer Platz minus 1 für die Trennlinie
-            console_h = max(2, avail_total - 1)
+            # Konsolenhöhe auf etwa 1/3 des verfügbaren Platzes begrenzen, aber mindestens 4 Zeilen
+            console_h = max(4, min(12, avail_total // 3))
             fm_rows = avail_total - console_h - 1
         else:
             console_h = 0
