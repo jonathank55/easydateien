@@ -1480,36 +1480,40 @@ class EasyDateienApp:
         if has_status_bar:
             if self.active_dialog:
                 if self.active_dialog == "rename":
-                    prompt_lbl = f"{C_BOLD_YELLOW}[UMBENENNEN]{C_RESET} Name: "
+                    badge = f"{C_BOLD_YELLOW}[UMBENENNEN]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_YELLOW}[NAME]{C_RESET}"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Eingabe] Bestätigen  [ESC] Abbrechen{C_RESET}", term_cols)
+                    hints = f"  {C_GRAY}[Eingabe] Bestätigen  [ESC] Abbrechen{C_RESET}" if term_cols >= 60 else (f"  {C_GRAY}[ESC]{C_RESET}" if term_cols >= 35 else "")
+                    st_line = pad_to_width(f" {badge} {disp_inp}{hints}", term_cols)
                 elif self.active_dialog == "new":
-                    prompt_lbl = f"{C_BOLD_GREEN}[NEU ERSTELLEN]{C_RESET} Name (Ordner mit / am Ende): "
+                    badge = f"{C_BOLD_GREEN}[NEU ERSTELLEN]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_GREEN}[NEU]{C_RESET}"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Eingabe] Erstellen  [ESC] Abbrechen{C_RESET}", term_cols)
+                    hints = f"  {C_GRAY}[Eingabe] Erstellen  [ESC] Abbrechen{C_RESET}" if term_cols >= 60 else (f"  {C_GRAY}[ESC]{C_RESET}" if term_cols >= 35 else "")
+                    st_line = pad_to_width(f" {badge} {disp_inp}{hints}", term_cols)
                 elif self.active_dialog == "search":
-                    prompt_lbl = f"{C_BOLD_CYAN}[FILTER / SUCHE]{C_RESET} Suchbegriff: "
+                    badge = f"{C_BOLD_CYAN}[FILTER / SUCHE]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_CYAN}[FILTER]{C_RESET}"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Eingabe] Filtern  [ESC] Abbrechen{C_RESET}", term_cols)
+                    hints = f"  {C_GRAY}[Eingabe] Filtern  [ESC] Abbrechen{C_RESET}" if term_cols >= 60 else (f"  {C_GRAY}[ESC]{C_RESET}" if term_cols >= 35 else "")
+                    st_line = pad_to_width(f" {badge} {disp_inp}{hints}", term_cols)
                 elif self.active_dialog == "goto_path":
-                    prompt_lbl = f"{C_BOLD_BLUE}[GEHE ZU PFAD]{C_RESET} Pfad: "
+                    badge = f"{C_BOLD_BLUE}[GEHE ZU PFAD]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_BLUE}[PFAD]{C_RESET}"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    st_line = pad_to_width(f" {prompt_lbl}{disp_inp}  {C_GRAY}[Eingabe] Wechseln  [ESC] Abbrechen{C_RESET}", term_cols)
+                    hints = f"  {C_GRAY}[Eingabe] Wechseln  [ESC] Abbrechen{C_RESET}" if term_cols >= 60 else (f"  {C_GRAY}[ESC]{C_RESET}" if term_cols >= 35 else "")
+                    st_line = pad_to_width(f" {badge} {disp_inp}{hints}", term_cols)
                 elif self.active_dialog == "trash_confirm":
                     targets_c = len(self.selected_paths) if self.selected_paths else 1
                     t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
-                    badge = f"{C_BOLD_RED}[PAPIERKORB]{C_RESET}"
+                    badge = f"{C_BOLD_RED}[PAPIERKORB]{C_RESET}" if term_cols >= 40 else f"{C_BOLD_RED}[LÖSCHEN]{C_RESET}"
                     suffix = f" {C_YELLOW}[j/n]{C_RESET}"
                     suffix_w = str_width(" [j/n]")
-                    badge_w = 1 + str_width("[PAPIERKORB]") + 1
+                    badge_w = 1 + str_width(badge) + 1
                     action_w = str_width(" löschen?")
                     avail_name = term_cols - (badge_w + action_w + suffix_w)
                     if avail_name >= 4:
@@ -1523,20 +1527,33 @@ class EasyDateienApp:
                         content = f" {suffix.strip()}"
                     st_line = pad_to_width(content, term_cols)
                 elif self.active_dialog == "goto_menu":
-                    st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}  {C_GRAY}Taste wählen oder [ESC] Abbrechen{C_RESET}", term_cols)
+                    if term_cols >= 45:
+                        st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}  {C_GRAY}Taste wählen oder [ESC] Abbrechen{C_RESET}", term_cols)
+                    elif term_cols >= 26:
+                        st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}  {C_GRAY}[ESC] Abbrechen{C_RESET}", term_cols)
+                    else:
+                        st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}", term_cols)
                 elif self.active_dialog == "help_menu":
-                    st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}  {C_GRAY}[ESC] Schließen  [↑↓] Scrollen{C_RESET}", term_cols)
+                    if term_cols >= 45:
+                        st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}  {C_GRAY}[ESC] Schließen  [↑↓] Scrollen{C_RESET}", term_cols)
+                    elif term_cols >= 26:
+                        st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}  {C_GRAY}[ESC] Schließen{C_RESET}", term_cols)
+                    else:
+                        st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}", term_cols)
                 else:
                     st_line = " " * term_cols
             else:
                 if self.show_console and self.console_focused:
-                    mode_lbl = f"{C_BOLD_GREEN}[KONSOLE]{C_RESET}"
+                    mode_lbl = f"{C_BOLD_GREEN}[KONSOLE]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_GREEN}[KONS]{C_RESET}"
                 elif self.selected_paths:
-                    mode_lbl = f"{C_YELLOW}[AUSWAHL {len(self.selected_paths)}]{C_RESET}"
+                    c = len(self.selected_paths)
+                    mode_lbl = f"{C_YELLOW}[AUSWAHL {c}]{C_RESET}" if term_cols >= 45 else f"{C_YELLOW}[{c}]{C_RESET}"
                 elif self.clipboard_mode == "cut":
-                    mode_lbl = f"{C_BOLD_RED}[AUSSCHNEIDEN {len(self.clipboard_paths)}]{C_RESET}"
+                    c = len(self.clipboard_paths)
+                    mode_lbl = f"{C_BOLD_RED}[AUSSCHNEIDEN {c}]{C_RESET}" if term_cols >= 50 else f"{C_BOLD_RED}[×{c}]{C_RESET}"
                 elif self.clipboard_mode == "copy":
-                    mode_lbl = f"{C_BOLD_GREEN}[KOPIEREN {len(self.clipboard_paths)}]{C_RESET}"
+                    c = len(self.clipboard_paths)
+                    mode_lbl = f"{C_BOLD_GREEN}[KOPIEREN {c}]{C_RESET}" if term_cols >= 50 else f"{C_BOLD_GREEN}[+{c}]{C_RESET}"
                 else:
                     mode_lbl = ""
 
@@ -1630,7 +1647,43 @@ class EasyDateienApp:
         return all_lines[:term_rows]
 
     def build_dynamic_controls(self, avail_w: int) -> str:
-        return f"{C_GRAY}[←↑↓→] Navigieren  [h] Hilfe{C_RESET}"
+        # Stufe 1: Vollständig mit Konsole und Menü bei ausreichend Platz
+        full_str = "[←↑↓→] Navigieren  [h] Hilfe  [t] Konsole  [m] Menü"
+        if str_width(full_str) <= avail_w:
+            return f"{C_GRAY}{full_str}{C_RESET}"
+
+        full_compact = "[←↑↓→] Navigieren [h] Hilfe [t] Konsole [m] Menü"
+        if str_width(full_compact) <= avail_w:
+            return f"{C_GRAY}{full_compact}{C_RESET}"
+
+        # Stufe 2: Navigieren und Hilfe
+        nav_help = "[←↑↓→] Navigieren  [h] Hilfe"
+        if str_width(nav_help) <= avail_w:
+            return f"{C_GRAY}{nav_help}{C_RESET}"
+
+        nav_help_compact = "[←↑↓→] Navigieren [h] Hilfe"
+        if str_width(nav_help_compact) <= avail_w:
+            return f"{C_GRAY}{nav_help_compact}{C_RESET}"
+
+        # Stufe 3: Bei richtig kleinem Platz: "Nav" statt "Navigieren"
+        short_nav_help = "[←↑↓→] Nav  [h] Hilfe"
+        if str_width(short_nav_help) <= avail_w:
+            return f"{C_GRAY}{short_nav_help}{C_RESET}"
+
+        short_nav_help_c = "[←↑↓→] Nav [h] Hilfe"
+        if str_width(short_nav_help_c) <= avail_w:
+            return f"{C_GRAY}{short_nav_help_c}{C_RESET}"
+
+        # Stufe 4: Extrem eng
+        only_nav = "[←↑↓→] Nav"
+        if str_width(only_nav) <= avail_w:
+            return f"{C_GRAY}{only_nav}{C_RESET}"
+
+        only_arrows = "[←↑↓→]"
+        if str_width(only_arrows) <= avail_w:
+            return f"{C_GRAY}{only_arrows}{C_RESET}"
+
+        return f"{C_GRAY}Nav{C_RESET}"[:max(0, avail_w)]
 
     def handle_mouse_click(self, x: int, y: int) -> bool:
         if not self.last_layout:
