@@ -53,7 +53,6 @@ ENABLE_AUTOWRAP = "\033[?7h"
 
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
-
 def char_width(c: str) -> int:
     """Ermittelt die visuelle Terminal-Spaltenbreite eines einzelnen Zeichens."""
     if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
@@ -66,12 +65,10 @@ def char_width(c: str) -> int:
         return 2
     return 1
 
-
 def str_width(text: str) -> int:
     """Berechnet die tatsächliche sichtbare Spaltenbreite eines Textes ohne ANSI-Codes."""
     clean = ANSI_ESCAPE_RE.sub("", text)
     return sum(char_width(c) for c in clean)
-
 
 def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
     """Kürzt Text deterministisch auf die maximale visuelle Terminalbreite unter Erhalt von ANSI-Codes."""
@@ -106,7 +103,6 @@ def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
         return f"{res_str}{C_RESET}{ellipsis}"
     return f"{res_str}{ellipsis}"
 
-
 def pad_to_width(text: str, width: int, align: str = "left") -> str:
     """Füllt formatierten Text exakt auf die gewünschte visuelle Terminalbreite auf."""
     w = str_width(text)
@@ -115,7 +111,6 @@ def pad_to_width(text: str, width: int, align: str = "left") -> str:
         return truncate_to_width(clean, width)
     pad = " " * (width - w)
     return (pad + text) if align == "right" else (text + pad)
-
 
 def wrap_line_to_width(text: str, max_w: int) -> List[str]:
     """Bricht eine Textzeile unter Beachtung von Wortgrenzen, visuellen Zeichenbreiten und ANSI-Sequenzen deterministisch auf max_w um."""
@@ -205,7 +200,6 @@ def wrap_line_to_width(text: str, max_w: int) -> List[str]:
     res = [l for l in lines if l]
     return res if res else [""]
 
-
 def get_shell_environment() -> Tuple[str, Dict[str, str]]:
     """Ermittelt die Benutzer-Shell und stellt einen vollständigen macOS-Umgebungs- und PATH-Satz bereit."""
     user_shell = os.environ.get("SHELL", "/bin/zsh")
@@ -234,7 +228,6 @@ def get_shell_environment() -> Tuple[str, Dict[str, str]]:
             path_parts.append(sp)
     env["PATH"] = ":".join(path_parts)
     return user_shell, env
-
 
 def replace_ansi_range(base_line: str, start_col: int, replacement: str, repl_width: int, total_width: int) -> str:
     """Ersetzt in base_line den sichtbaren Spaltenbereich [start_col, start_col + repl_width] durch replacement."""
@@ -281,7 +274,6 @@ def replace_ansi_range(base_line: str, start_col: int, replacement: str, repl_wi
 
     return f"{left_pad}{replacement}{C_RESET}{right_pad}"
 
-
 def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tuple[List[str], int]:
     """Baut ein standardisiertes Vordergrund-Modal im Yazi-Stil mit blauem Rahmen."""
     inner_w = max(20, target_w - 6)
@@ -303,7 +295,6 @@ def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tupl
         res.append(f"│  {padded}  │")
     res.append(bot_line)
     return res, box_w
-
 
 def distribute_options(items: List[str], avail_w: int) -> str:
     """Verteilt Steuerungsoptionen gleichmäßig über die gegebene Breite (Space-Between / Justified)."""
@@ -341,7 +332,6 @@ def distribute_options(items: List[str], avail_w: int) -> str:
 
     return "".join(parts)
 
-
 def format_size(size_bytes: int) -> str:
     """Formatiert Byte-Größen nach standardisierten Einheiten."""
     if size_bytes < 1024:
@@ -353,7 +343,6 @@ def format_size(size_bytes: int) -> str:
             return f"{val:.1f} {unit}"
     return f"{val:.1f} PB"
 
-
 def format_mtime(mtime: float) -> str:
     """Formatiert Änderungszeitpunkte lesbar."""
     try:
@@ -362,7 +351,6 @@ def format_mtime(mtime: float) -> str:
         return dt.strftime("%d. %b %H:%M") if dt.year == now.year else dt.strftime("%d.%m.%Y")
     except Exception:
         return "---"
-
 
 def ensure_clip_helper() -> Optional[str]:
     """Stellt sicher, dass das native macOS Clipboard-Helper-Tool kompiliert und bereit ist."""
@@ -480,7 +468,6 @@ int main(int argc, const char * argv[]) {
         pass
     return None
 
-
 def sync_to_macos_clipboard(paths: List[str]):
     """Synchronisiert Dateipfade nativ in die macOS-Zwischenablage für Finder (Cmd+V) und Texteditoren."""
     if not paths:
@@ -504,7 +491,6 @@ def sync_to_macos_clipboard(paths: List[str]):
     except Exception:
         pass
 
-
 def get_macos_clipboard_files() -> List[str]:
     """Liest echte Dateiobjekte und Pfade aus dem macOS-Pasteboard."""
     helper = ensure_clip_helper()
@@ -525,7 +511,6 @@ def get_macos_clipboard_files() -> List[str]:
         pass
     return []
 
-
 def copy_text_to_clipboard(text: str):
     """Kopiert reinen Text in das macOS-Clipboard."""
     try:
@@ -533,7 +518,6 @@ def copy_text_to_clipboard(text: str):
         p.communicate(input=text.encode("utf-8"))
     except Exception:
         pass
-
 
 class UndoAction:
     """Repräsentiert eine umkehrbare Dateiaktion im Undo-Stack."""
@@ -543,7 +527,6 @@ class UndoAction:
         self.action_type = action_type
         self.description = description
         self.data = data
-
 
 class FileEntry:
     __slots__ = ("name", "path", "is_dir", "is_symlink", "is_exec", "size", "mtime", "ext", "mode_str", "symlink_target")
@@ -577,7 +560,6 @@ class FileEntry:
         except Exception:
             pass
 
-
 def get_file_type_desc(item: FileEntry) -> str:
     """Liefert eine präzise deutsche Typbezeichnung."""
     if item.is_dir:
@@ -604,12 +586,10 @@ def get_file_type_desc(item: FileEntry) -> str:
         return "Ausführbare Datei"
     return f"Datei ({ext})" if ext else "Binärdatei"
 
-
 def get_file_colored_name(item: FileEntry) -> str:
     """Liefert den Dateinamen neutral ohne typbezogene Farbakzente."""
     suffix = "/" if (item.is_dir and not item.name.endswith("/")) else ("@" if (item.is_symlink and not item.name.endswith("@")) else "")
     return f"{item.name}{suffix}"
-
 
 def scan_directory(
     path: str,
@@ -645,7 +625,6 @@ def scan_directory(
     if sort_dir_first:
         entries.sort(key=lambda e: not e.is_dir)
     return entries
-
 
 def read_key(fd: int, timeout: float = 0.05) -> str:
     """Liest Tastatur- und Maus-Events zuverlässig über SGR und ANSI-Sequenzen."""
@@ -744,7 +723,6 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
             return ""
     except Exception:
         return ""
-
 
 class EasyDateienApp:
     def __init__(self, initial_path: Optional[str] = None):
@@ -1348,7 +1326,7 @@ class EasyDateienApp:
         disp_path = self.get_short_dir(self.current_dir)
         total_items = len(self.items)
         cur_idx_str = f"{self.selected_idx + 1}/{total_items}" if total_items > 0 else "0/0"
-        
+
         if self.status_message:
             lvl_color = C_BOLD_GREEN if self.status_level == "success" else (C_BOLD_RED if self.status_level == "error" else (C_YELLOW if self.status_level == "warning" else C_CYAN))
             msg_str = f" [{lvl_color}{self.status_message}{C_RESET}]"
@@ -2605,11 +2583,6 @@ class EasyDateienApp:
                         needs_redraw = True
                     continue
 
-                if key in ("UP", "DOWN", "k", "j", "PAGE_UP", "PAGE_DOWN"):
-                    self.status_expiry_moves += 1
-                    if self.status_expiry_moves >= 4:
-                        self.status_message = ""
-
                 if key in ("Z", "u", "UNDO"):
                     self.undo_last_action()
                     needs_redraw = True
@@ -2883,12 +2856,10 @@ class EasyDateienApp:
             sys.stdout.flush()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-
 class SingleLineHelpFormatter(argparse.HelpFormatter):
     """Formatiert CLI-Hilfen streng einzeilig nach txt2pdf-Norm."""
     def _split_lines(self, text, width):
         return [text]
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -2916,7 +2887,6 @@ def main():
         app.run()
     except KeyboardInterrupt:
         pass
-
 
 if __name__ == "__main__":
     main()
