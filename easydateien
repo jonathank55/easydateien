@@ -660,6 +660,7 @@ class EasyDateienApp:
         self.console_cmd_history: List[str] = []
         self.console_history_idx: int = 0
         self.console_scroll_offset: int = 0
+        self._mouse_tracking_active: bool = False
 
         self.cached_parent_dir: Optional[str] = None
         self.cached_parent_items: List[FileEntry] = []
@@ -670,6 +671,26 @@ class EasyDateienApp:
 
         ensure_clip_helper()
         self.refresh_items()
+
+    def set_mouse_tracking(self, enable: bool):
+        """Aktiviert oder deaktiviert das SGR-Maus-Tracking im Terminal deterministisch."""
+        if enable:
+            if self.config.get("mouse_support", True) and not self._mouse_tracking_active:
+                sys.stdout.write("\033[?1000h\033[?1006h")
+                sys.stdout.flush()
+                self._mouse_tracking_active = True
+        else:
+            if self._mouse_tracking_active:
+                sys.stdout.write("\033[?1006l\033[?1000l")
+                sys.stdout.flush()
+                self._mouse_tracking_active = False
+
+    def sync_mouse_state(self):
+        """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Fokus- und Konfigurationsstatus."""
+        # Wenn die Konsole geöffnet und fokussiert ist, wird Maus-Tracking deaktiviert,
+        # damit Text im Terminal nativ mit der Maus markiert und kopiert werden kann.
+        should_enable = bool(self.config.get("mouse_support", True)) and not (self.show_console and self.console_focused)
+        self.set_mouse_tracking(should_enable)
 
     def load_config(self) -> dict:
         cfg = {
@@ -738,10 +759,7 @@ class EasyDateienApp:
 
     def open_in_editor(self, item: FileEntry, fd: Optional[int], old_settings, editor: str = "nano"):
         if fd is not None and old_settings is not None:
-            mouse_on = self.config.get("mouse_support", True)
-            if mouse_on:
-                sys.stdout.write("\033[?1006l\033[?1000l")
-                sys.stdout.flush()
+            self.set_mouse_tracking(False)
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
             sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
@@ -756,8 +774,7 @@ class EasyDateienApp:
             finally:
                 tty.setcbreak(fd, termios.TCSADRAIN)
                 sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
-                if mouse_on:
-                    sys.stdout.write("\033[?1000h\033[?1006h")
+                self.sync_mouse_state()
                 sys.stdout.write("\033[2J\033[H")
                 sys.stdout.flush()
                 self.refresh_items()
@@ -1109,10 +1126,7 @@ class EasyDateienApp:
         }
         is_interactive = (first_prog in interactive_tools) or (cmd.startswith("git ") and any(sub in cmd for sub in ["log", "diff", "commit", "add -p", "rebase"]))
         if is_interactive and fd is not None and old_settings is not None:
-            mouse_on = self.config.get("mouse_support", True)
-            if mouse_on:
-                sys.stdout.write("\033[?1006l\033[?1000l")
-                sys.stdout.flush()
+            self.set_mouse_tracking(False)
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
             sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
@@ -1123,8 +1137,7 @@ class EasyDateienApp:
             finally:
                 tty.setcbreak(fd, termios.TCSADRAIN)
                 sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
-                if mouse_on:
-                    sys.stdout.write("\033[?1000h\033[?1006h")
+                self.sync_mouse_state()
                 sys.stdout.write("\033[2J\033[H")
                 sys.stdout.flush()
                 self.refresh_items()
@@ -2179,9 +2192,7 @@ class EasyDateienApp:
             pass
         tty.setcbreak(fd, termios.TCSADRAIN)
         sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
-        mouse_enabled = self.config.get("mouse_support", True)
-        if mouse_enabled:
-            sys.stdout.write("\033[?1000h\033[?1006h")
+        self.sync_mouse_state()
         sys.stdout.write("\033[2J\033[H")
         sys.stdout.flush()
 
@@ -2189,6 +2200,7 @@ class EasyDateienApp:
         needs_redraw = True
         try:
             while True:
+                self.sync_mouse_state()
                 curr_size = shutil.get_terminal_size((80, 24))
                 term_cols, term_rows = curr_size.columns, curr_size.lines
                 if curr_size != last_size:
@@ -2290,20 +2302,39 @@ class EasyDateienApp:
                     elif key in ("END", "\x05"):
                         self.console_cursor_idx = len(self.console_input)
                         needs_redraw = True
-                    elif key == "\x17":  # Ctrl+W (Wort rückwärts löschen)
+                    elif key == "\x17":  # Ctrl+W (Wort rückwärts löschen & in Zwischenablage)
                         before = self.console_input[:self.console_cursor_idx]
                         after = self.console_input[self.console_cursor_idx:]
                         before_stripped = re.sub(r'\S+\s*$', '', before)
+                        deleted = before[len(before_stripped):]
+                        if deleted:
+                            copy_text_to_clipboard(deleted)
                         self.console_cursor_idx = len(before_stripped)
                         self.console_input = before_stripped + after
                         needs_redraw = True
-                    elif key == "\x15":  # Ctrl+U (Zeile bis Cursor löschen)
+                    elif key == "\x15":  # Ctrl+U (Zeile bis Cursor löschen & in Zwischenablage)
+                        deleted = self.console_input[:self.console_cursor_idx]
+                        if deleted:
+                            copy_text_to_clipboard(deleted)
                         self.console_input = self.console_input[self.console_cursor_idx:]
                         self.console_cursor_idx = 0
                         needs_redraw = True
-                    elif key == "\x0b":  # Ctrl+K (Zeile ab Cursor löschen)
+                    elif key == "\x0b":  # Ctrl+K (Zeile ab Cursor löschen & in Zwischenablage)
+                        deleted = self.console_input[self.console_cursor_idx:]
+                        if deleted:
+                            copy_text_to_clipboard(deleted)
                         self.console_input = self.console_input[:self.console_cursor_idx]
                         needs_redraw = True
+                    elif key == "\x19":  # Ctrl+Y (Yank / Einfügen aus macOS-Zwischenablage)
+                        try:
+                            pasted = subprocess.check_output(["pbpaste"], text=True)
+                            if pasted:
+                                pasted_clean = pasted.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+                                self.console_input = self.console_input[:self.console_cursor_idx] + pasted_clean + self.console_input[self.console_cursor_idx:]
+                                self.console_cursor_idx += len(pasted_clean)
+                                needs_redraw = True
+                        except Exception:
+                            pass
                     elif key == "\x0c":  # Ctrl+L (Terminal-Ausgabe leeren)
                         self.console_output_lines.clear()
                         needs_redraw = True
@@ -2576,13 +2607,9 @@ class EasyDateienApp:
                         self.console_position = self.config.get("console_position", "unten").lower()
                     except Exception as e:
                         self.set_status(f"Fehler Konfigurator: {e}", "error")
-                    mouse_enabled = self.config.get("mouse_support", True)
                     tty.setcbreak(fd, termios.TCSADRAIN)
                     sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
-                    if mouse_enabled:
-                        sys.stdout.write("\033[?1000h\033[?1006h")
-                    else:
-                        sys.stdout.write("\033[?1006l\033[?1000l")
+                    self.sync_mouse_state()
                     sys.stdout.write("\033[2J\033[H")
                     sys.stdout.flush()
                     self.refresh_items()
@@ -2601,8 +2628,7 @@ class EasyDateienApp:
                 elif key in ("QUIT", "q"):
                     break
         finally:
-            if mouse_enabled:
-                sys.stdout.write("\033[?1006l\033[?1000l")
+            self.set_mouse_tracking(False)
             sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -2623,7 +2649,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.0", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.1", help="Programmversion anzeigen")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
 

@@ -16,12 +16,13 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
   EasyDateien besitzt ein vollintegriertes Terminal-Panel mit konfigurierbarer Position (`[Unten]`, `[Rechts]` oder `[Links]`):
   - **Strikte Fokus-Isolation:**  
     - **Konsole im Fokus (`[KONSOLE]`):** Sämtliche Tastenbelegungen des Dateimanagers sind strikt inaktiv. Alle Buchstaben und Zeichen (`u`, `z`, `d`, `q`, `r`, `y`, `x`, `p`, `e`, `o`, `m`, `s`, etc.) fließen ohne Kollision direkt in die Befehlszeile.
+    - **Native Textauswahl & Kopieren:** Sobald die Konsole fokussiert ist, wird das Maus-Tracking automatisch freigegeben. Textausgaben, Pfade und Befehle können direkt mit der Maus markiert und per `Cmd+C` (oder Kontextmenü) in die Zwischenablage kopiert werden.
     - **`ESC`:** Schließt die Konsole deterministisch.
     - **`Tab` / `Shift+Tab`:** Wechselt den Fokus zurück zum Dateimanager.
     - **Konsole geöffnet, aber nicht im Fokus:** Sämtliche Tastenkürzel des Dateimanagers sind aktiv; es wird nichts versehentlich in die Konsole eingetippt. `Tab` setzt den Fokus zurück in die Konsole.
   - **Zwei-Wege-Verzeichnissynchronisation:** Das Terminal operiert immer im aktuellen Verzeichnis des Dateimanagers. Navigiert man im Dateimanager, folgt das Terminal automatisch. Wechselt man im Terminal mit `cd ..` das Verzeichnis, folgt der Dateimanager sofort!
   - **Automatische Dateilisten-Aktualisierung:** Sobald im Terminal Befehle wie `touch datei.txt`, `mkdir ordner`, `git checkout` oder `rm bild.png` ausgeführt werden, aktualisiert der Dateimanager die Ansicht unverzüglich.
-  - **Voller Terminalkomfort:** Befehlsverlauf (`↑`/`↓`), Zeilennavigation (`Pos1`/`Ende`, `Ctrl+A`/`Ctrl+E`, `Ctrl+W` zum Wortlöschen, `Ctrl+U`/`Ctrl+K` zum Zeilenlöschen, `Ctrl+L` zum Leeren), Bildlauf (`BildAuf`/`BildAb` oder Mausrad) und Schließen per `exit`, `quit` oder `Ctrl+D`.
+  - **Voller Terminalkomfort:** Befehlsverlauf (`↑`/`↓`), Zeilennavigation (`Pos1`/`Ende`, `Ctrl+A`/`Ctrl+E`, `Ctrl+W` zum Wortlöschen, `Ctrl+U`/`Ctrl+K` zum Zeilenlöschen mit Zwischenablage, `Ctrl+Y` zum Einfügen, `Ctrl+L` zum Leeren), Bildlauf (`BildAuf`/`BildAb` oder Mausrad) und Schließen per `exit`, `quit` oder `Ctrl+D`.
   - **Interaktive Vollbild-Programme:** Anwendungen wie `nano`, `vim`, `htop` oder `zsh` werden sauber im Vollbild ausgeführt und kehren ohne Bildartefakte zurück.
 
 - **Elegantes Kasten-Design & vollständige Fensterfüllung:**  
@@ -42,7 +43,7 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
   - **Linksklick:** Element auswählen; Doppelklick öffnet die Datei bzw. betritt den Ordner  
   - **Klick auf linke Spalte:** Sofortiges Zurückwechseln in den übergeordneten Ordner  
   - **Klick auf rechte Spalte:** Kindordner betreten bzw. Datei-Details ansehen  
-  - **Klick in Konsolenbereich:** Setzt den Fokus direkt auf die Konsole  
+  - **Klick in Konsolenbereich:** Setzt den Fokus direkt auf die Konsole (Mausauswahl sofort aktiv)  
   - **Rechtsklick:** Element markieren bzw. Markierung umschalten (`*`)  
   - Im Konfigurationsmenü über `Mausunterstützung: [Ein / Aus]` jederzeit anpassbar.
 
