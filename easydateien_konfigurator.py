@@ -117,31 +117,37 @@ def str_width(text: str) -> int:
 
 
 def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
+    """Kürzt Text deterministisch auf die maximale visuelle Terminalbreite unter Erhalt von ANSI-Codes."""
     if max_w <= 0:
         return ""
     if str_width(text) <= max_w:
         return text
     e_w = str_width(ellipsis)
-    if max_w <= e_w:
-        res = ""
-        w = 0
-        for c in text:
-            cw = char_width(c)
-            if w + cw > max_w:
-                break
-            res += c
-            w += cw
-        return res
-    target_w = max_w - e_w
-    res = ""
+    target_w = max(0, max_w - e_w)
+    res = []
     w = 0
-    for c in text:
+    i = 0
+    n = len(text)
+    has_ansi = False
+    while i < n:
+        if text[i] == "\x1b":
+            m = ANSI_ESCAPE_RE.match(text, i)
+            if m:
+                res.append(m.group(0))
+                has_ansi = True
+                i = m.end()
+                continue
+        c = text[i]
         cw = char_width(c)
         if w + cw > target_w:
             break
-        res += c
+        res.append(c)
         w += cw
-    return res + ellipsis
+        i += 1
+    res_str = "".join(res)
+    if has_ansi:
+        return f"{res_str}{C_RESET}{ellipsis}"
+    return f"{res_str}{ellipsis}"
 
 
 def pad_to_width(text: str, width: int, align: str = "left") -> str:

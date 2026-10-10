@@ -74,32 +74,37 @@ def str_width(text: str) -> int:
 
 
 def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
-    """Kürzt Text deterministisch auf die maximale visuelle Terminalbreite."""
+    """Kürzt Text deterministisch auf die maximale visuelle Terminalbreite unter Erhalt von ANSI-Codes."""
     if max_w <= 0:
         return ""
     if str_width(text) <= max_w:
         return text
     e_w = str_width(ellipsis)
-    if max_w <= e_w:
-        res = ""
-        w = 0
-        for c in text:
-            cw = char_width(c)
-            if w + cw > max_w:
-                break
-            res += c
-            w += cw
-        return res
-    target_w = max_w - e_w
-    res = ""
+    target_w = max(0, max_w - e_w)
+    res = []
     w = 0
-    for c in text:
+    i = 0
+    n = len(text)
+    has_ansi = False
+    while i < n:
+        if text[i] == "\x1b":
+            m = ANSI_ESCAPE_RE.match(text, i)
+            if m:
+                res.append(m.group(0))
+                has_ansi = True
+                i = m.end()
+                continue
+        c = text[i]
         cw = char_width(c)
         if w + cw > target_w:
             break
-        res += c
+        res.append(c)
         w += cw
-    return res + ellipsis
+        i += 1
+    res_str = "".join(res)
+    if has_ansi:
+        return f"{res_str}{C_RESET}{ellipsis}"
+    return f"{res_str}{ellipsis}"
 
 
 def pad_to_width(text: str, width: int, align: str = "left") -> str:
@@ -110,6 +115,36 @@ def pad_to_width(text: str, width: int, align: str = "left") -> str:
         return truncate_to_width(clean, width)
     pad = " " * (width - w)
     return (pad + text) if align == "right" else (text + pad)
+
+
+def get_shell_environment() -> Tuple[str, Dict[str, str]]:
+    """Ermittelt die Benutzer-Shell und stellt einen vollständigen macOS-Umgebungs- und PATH-Satz bereit."""
+    user_shell = os.environ.get("SHELL", "/bin/zsh")
+    if not os.path.exists(user_shell):
+        user_shell = "/bin/zsh" if os.path.exists("/bin/zsh") else "/bin/bash"
+
+    env = os.environ.copy()
+    env["SHELL_SESSIONS_DISABLE"] = "1"
+
+    # Standard- und Homebrew-Pfade sicherstellen
+    current_path = env.get("PATH", "")
+    standard_paths = [
+        os.path.expanduser("~/.local/bin"),
+        os.path.expanduser("~/.antigravity-ide/antigravity-ide/bin"),
+        "/opt/homebrew/bin",
+        "/opt/homebrew/sbin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+    ]
+    path_parts = [p for p in current_path.split(":") if p]
+    for sp in standard_paths:
+        if sp not in path_parts and os.path.exists(sp):
+            path_parts.append(sp)
+    env["PATH"] = ":".join(path_parts)
+    return user_shell, env
 
 
 def replace_ansi_range(base_line: str, start_col: int, replacement: str, repl_width: int, total_width: int) -> str:
@@ -739,8 +774,9 @@ class EasyDateienApp:
     def open_with_system(self, item: FileEntry):
         opener = self.config.get("opener", "open %s")
         cmd = opener.replace("%s", f'"{item.path}"')
+        user_shell, env = get_shell_environment()
         try:
-            subprocess.Popen(cmd, shell=True, start_new_session=True)
+            subprocess.Popen([user_shell, "-l", "-c", cmd], start_new_session=True, env=env)
             self.set_status(f"Geöffnet: {item.name}", "success")
         except Exception as e:
             self.set_status(f"Fehler: {e}", "error")
@@ -757,8 +793,11 @@ class EasyDateienApp:
                 editor_cmd = f'nano "{item.path}"'
             else:
                 editor_cmd = self.config.get("text_editor", "nano %s").replace("%s", f'"{item.path}"')
+            user_shell, env = get_shell_environment()
             try:
-                subprocess.run(editor_cmd, shell=True)
+                subprocess.run([user_shell, "-l", "-c", editor_cmd], env=env)
+            except Exception:
+                pass
             finally:
                 tty.setcbreak(fd, termios.TCSADRAIN)
                 sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
@@ -1107,21 +1146,35 @@ class EasyDateienApp:
         tokens = cmd.split()
         first_prog = os.path.basename(tokens[0]) if tokens else ""
         interactive_tools = {
-            "start", "aider", "goose", "agy", "nano", "vim", "vi", "emacs",
-            "top", "htop", "less", "more", "man", "python", "python3", "ipython",
-            "node", "ruby", "perl", "bash", "zsh", "sh", "fish", "ssh", "fzf",
-            "tmux", "screen", "cmatrix", "lazygit", "tig"
+            "start", "aider", "goose", "agy", "nano", "vim", "vi", "emacs", "micro",
+            "nvim", "helix", "hx", "kak", "ed", "joe", "ne",
+            "top", "htop", "btop", "glances", "bottom", "nvtop", "gtop",
+            "less", "more", "bat", "most", "man", "info", "pydoc",
+            "python", "python3", "ipython", "node", "ruby", "irb", "php", "lua", "julia", "gh",
+            "bash", "zsh", "sh", "fish", "ksh", "csh", "tcsh",
+            "ssh", "sftp", "telnet", "nc", "netcat",
+            "fzf", "fzy", "peco", "skim", "sk",
+            "tmux", "screen", "zellij", "cmatrix", "lazygit", "lazydocker", "tig",
+            "mac_control", "settings", "sudo", "su", "passwd", "nmtui",
+            "sqlite3", "psql", "mysql", "redis-cli", "mongosh"
         }
-        is_interactive = (first_prog in interactive_tools) or (cmd.startswith("git ") and any(sub in cmd for sub in ["log", "diff", "commit", "add -p", "rebase"]))
+        has_interactive_pipe = any(p in cmd for p in ["| less", "| more", "| bat", "| most", "| fzf"])
+        is_git_interactive = cmd.startswith("git ") and any(sub in cmd for sub in ["log", "diff", "commit", "add -p", "add -i", "rebase", "branch", "show", "stash", "blame"])
+        is_standalone_stdin_tool = (first_prog in ("cat", "grep", "sed", "awk", "head", "tail", "cut", "sort", "uniq", "wc")) and (len(tokens) == 1 and not any(ch in cmd for ch in ("<", ">", "|", "-")))
+
+        is_interactive = (first_prog in interactive_tools) or has_interactive_pipe or is_git_interactive or is_standalone_stdin_tool
+
+        user_shell, env = get_shell_environment()
+
         if is_interactive and fd is not None and old_settings is not None:
             self.set_mouse_tracking(False)
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
             sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
             try:
-                subprocess.run(cmd, shell=True, cwd=self.current_dir)
-            except Exception:
-                pass
+                subprocess.run([user_shell, "-l", "-c", cmd], cwd=self.current_dir, env=env)
+            except Exception as e:
+                self.console_output_lines.append(f"Fehler: {e}")
             finally:
                 tty.setcbreak(fd, termios.TCSADRAIN)
                 sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
@@ -1131,21 +1184,41 @@ class EasyDateienApp:
                 self.refresh_items()
             return
         try:
-            res = subprocess.run(cmd, shell=True, cwd=self.current_dir, stdin=subprocess.DEVNULL, capture_output=True, timeout=10.0)
+            res = subprocess.run(
+                [user_shell, "-l", "-c", cmd],
+                cwd=self.current_dir,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                env=env,
+                timeout=60.0
+            )
             out_text = res.stdout.decode("utf-8", errors="replace")
             err_text = res.stderr.decode("utf-8", errors="replace")
+            has_output = False
             if out_text:
                 for l in out_text.splitlines():
                     clean_l = ANSI_ESCAPE_RE.sub("", l)
                     clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
                     self.console_output_lines.append(clean_l)
+                    has_output = True
             if err_text:
                 for l in err_text.splitlines():
                     clean_l = ANSI_ESCAPE_RE.sub("", l)
                     clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
                     self.console_output_lines.append(clean_l)
+                    has_output = True
+            if not has_output:
+                if res.returncode == 0:
+                    pass
+                elif first_prog in ("grep", "egrep", "fgrep", "rg", "ag", "ack") or "grep" in tokens:
+                    if res.returncode == 1:
+                        self.console_output_lines.append("[Keine Treffer]")
+                    else:
+                        self.console_output_lines.append(f"[grep Fehlercode {res.returncode}]")
+                elif res.returncode != 0:
+                    self.console_output_lines.append(f"[Beendet mit Statuscode {res.returncode}]")
         except subprocess.TimeoutExpired:
-            self.console_output_lines.append("[Befehl nach 10s abgebrochen]")
+            self.console_output_lines.append("[Befehl nach 60s abgebrochen]")
         except Exception as e:
             self.console_output_lines.append(f"Fehler: {e}")
         self.refresh_items()
@@ -2501,7 +2574,8 @@ class EasyDateienApp:
                         self.open_with_system(item)
                     else:
                         try:
-                            subprocess.Popen(f'open "{self.current_dir}"', shell=True, start_new_session=True)
+                            user_shell, env = get_shell_environment()
+                            subprocess.Popen(["open", self.current_dir], start_new_session=True, env=env)
                             self.set_status(f"Im Finder geöffnet: {self.get_short_dir(self.current_dir)}", "success")
                         except Exception as e:
                             self.set_status(f"Fehler: {e}", "error")
