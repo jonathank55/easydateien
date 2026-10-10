@@ -117,6 +117,52 @@ def pad_to_width(text: str, width: int, align: str = "left") -> str:
     return (pad + text) if align == "right" else (text + pad)
 
 
+def wrap_line_to_width(text: str, max_w: int) -> List[str]:
+    """Bricht eine Textzeile unter Beachtung visueller Zeichenbreiten und ANSI-Sequenzen deterministisch auf max_w um."""
+    if max_w <= 0:
+        return [""]
+    if not text:
+        return [""]
+    if str_width(text) <= max_w:
+        return [text]
+
+    lines = []
+    cur_chars = []
+    cur_w = 0
+    i = 0
+    n = len(text)
+    active_ansi = []
+
+    while i < n:
+        if text[i] == "\x1b":
+            m = ANSI_ESCAPE_RE.match(text, i)
+            if m:
+                esc = m.group(0)
+                cur_chars.append(esc)
+                if esc in ("\033[0m", "\033[m", C_RESET):
+                    active_ansi.clear()
+                else:
+                    active_ansi.append(esc)
+                i = m.end()
+                continue
+        c = text[i]
+        cw = char_width(c)
+        if cur_w + cw > max_w and cur_chars:
+            line_str = "".join(cur_chars)
+            if active_ansi:
+                line_str += C_RESET
+            lines.append(line_str)
+            cur_chars = list(active_ansi)
+            cur_w = sum(char_width(x) for x in ANSI_ESCAPE_RE.sub("", "".join(cur_chars)))
+        cur_chars.append(c)
+        cur_w += cw
+        i += 1
+
+    if cur_chars:
+        lines.append("".join(cur_chars))
+    return lines or [""]
+
+
 def get_shell_environment() -> Tuple[str, Dict[str, str]]:
     """Ermittelt die Benutzer-Shell und stellt einen vollständigen macOS-Umgebungs- und PATH-Satz bereit."""
     user_shell = os.environ.get("SHELL", "/bin/zsh")
@@ -1111,12 +1157,15 @@ class EasyDateienApp:
         out = []
         needed = height - 1
         if needed > 0:
-            max_off = max(0, len(self.console_output_lines) - needed)
+            wrapped_lines: List[str] = []
+            for raw_line in self.console_output_lines:
+                wrapped_lines.extend(wrap_line_to_width(raw_line, width))
+            max_off = max(0, len(wrapped_lines) - needed)
             self.console_scroll_offset = max(0, min(max_off, self.console_scroll_offset))
-            start = max(0, len(self.console_output_lines) - needed - self.console_scroll_offset)
-            chunk = self.console_output_lines[start: start + needed]
+            start = max(0, len(wrapped_lines) - needed - self.console_scroll_offset)
+            chunk = wrapped_lines[start: start + needed]
             for l in chunk:
-                out.append(pad_to_width(truncate_to_width(l, width), width))
+                out.append(pad_to_width(l, width))
             while len(out) < needed:
                 out.insert(0, " " * width)
         out.append(prompt_line)
@@ -1131,12 +1180,14 @@ class EasyDateienApp:
         self.console_cmd_history.append(cmd)
         self.console_history_idx = len(self.console_cmd_history)
         self.console_output_lines.append(f"$ {cmd}")
+        self.console_scroll_offset = 0
         if cmd in ("exit", "quit"):
             self.show_console = False
             self.console_focused = False
             return
         if cmd == "clear":
             self.console_output_lines.clear()
+            self.console_scroll_offset = 0
             return
         if cmd.startswith("cd ") or cmd == "cd":
             target = cmd[3:].strip() if len(cmd) > 3 else HOME_DIR
@@ -2393,6 +2444,7 @@ class EasyDateienApp:
                             pass
                     elif key == "\x0c":  # Ctrl+L (Terminal-Ausgabe leeren)
                         self.console_output_lines.clear()
+                        self.console_scroll_offset = 0
                         needs_redraw = True
                     elif key == "PAGE_UP":
                         self.console_scroll_offset += 3
