@@ -1037,9 +1037,29 @@ class EasyDateienApp:
             prompt = "$ "
         avail = max(1, width - str_width(prompt))
         inp = self.console_input
-        inp_show = inp[-avail:] if len(inp) > avail else inp
-        cursor_char = " " if not self.console_focused else f"{C_INVERT} {C_RESET}"
-        prompt_line = pad_to_width(f"{prompt}{inp_show}{cursor_char}", width)
+        c_pos = self.console_cursor_idx
+
+        if len(inp) + 1 > avail:
+            start = max(0, min(c_pos - avail + 5, len(inp) - avail + 1))
+            disp_slice = inp[start:start + avail]
+            rel_c = c_pos - start
+            if self.console_focused:
+                if 0 <= rel_c < len(disp_slice):
+                    disp_inp = disp_slice[:rel_c] + f"{C_INVERT}{disp_slice[rel_c]}{C_RESET}" + disp_slice[rel_c+1:]
+                else:
+                    disp_inp = disp_slice + f"{C_INVERT} {C_RESET}"
+            else:
+                disp_inp = disp_slice
+        else:
+            if self.console_focused:
+                if c_pos < len(inp):
+                    disp_inp = inp[:c_pos] + f"{C_INVERT}{inp[c_pos]}{C_RESET}" + inp[c_pos+1:]
+                else:
+                    disp_inp = inp + f"{C_INVERT} {C_RESET}"
+            else:
+                disp_inp = inp
+
+        prompt_line = pad_to_width(f"{prompt}{disp_inp}", width)
         out = []
         needed = height - 1
         if needed > 0:
@@ -1657,19 +1677,19 @@ class EasyDateienApp:
                     left_b = f" {mode_lbl}  " if mode_lbl else " "
                     avail_ctrl = max(1, term_cols - str_width(left_b) - 1)
 
-                    opt_full = ["[←↑↓→] Navigieren", "[ESC] Zurück"]
-                    opt_short = ["[←↑↓→] Nav", "[ESC] Zurück"]
-                    opt_mini = ["[←↑↓→] Nav", "[ESC]"]
-                    opt_esc_only = ["[ESC] Zurück"]
+                    opt_full = ["[Eingabe] Ausführen", "[TAB] Dateimanager", "[ESC] Schließen"]
+                    opt_short = ["[Eingabe]", "[TAB] Fokus", "[ESC] Schließen"]
+                    opt_mini = ["[TAB]", "[ESC]"]
+                    opt_esc_only = ["[ESC] Schließen"]
                     opt_esc_mini = ["[ESC]"]
 
                     w_full = sum(str_width(it) for it in opt_full)
                     w_short = sum(str_width(it) for it in opt_short)
                     w_mini = sum(str_width(it) for it in opt_mini)
 
-                    if w_full + 1 <= avail_ctrl:
+                    if w_full + 2 <= avail_ctrl:
                         ctrl = distribute_options(opt_full, avail_ctrl)
-                    elif w_short + 1 <= avail_ctrl:
+                    elif w_short + 2 <= avail_ctrl:
                         ctrl = distribute_options(opt_short, avail_ctrl)
                     elif w_mini + 1 <= avail_ctrl:
                         ctrl = distribute_options(opt_mini, avail_ctrl)
@@ -2228,6 +2248,108 @@ class EasyDateienApp:
                             needs_redraw = True
                     continue
 
+                # 1. KONSOLE IM FOKUS:
+                # Sämtliche Tastenbelegungen des restlichen Dateimanagers sind strikt inaktiv.
+                # Tasteneingaben (u, z, d, q, r, y, x, p, e, etc.) werden ausschließlich in die Konsole geschrieben.
+                # ESC schließt die Konsole, TAB wechselt den Fokus zum Dateimanager.
+                if self.show_console and self.console_focused:
+                    if key == "ESC":
+                        self.show_console = False
+                        self.console_focused = False
+                        self.set_status("Konsole geschlossen")
+                        needs_redraw = True
+                    elif key in ("TAB", "SHIFT_TAB"):
+                        self.console_focused = False
+                        self.set_status("Fokus: Dateimanager")
+                        needs_redraw = True
+                    elif key == "ENTER":
+                        self.run_console_command(self.console_input, fd, old_settings)
+                        needs_redraw = True
+                    elif key in (" ", "SPACE"):
+                        self.console_input = self.console_input[:self.console_cursor_idx] + " " + self.console_input[self.console_cursor_idx:]
+                        self.console_cursor_idx += 1
+                        needs_redraw = True
+                    elif key == "BACKSPACE":
+                        if self.console_cursor_idx > 0:
+                            self.console_input = self.console_input[:self.console_cursor_idx - 1] + self.console_input[self.console_cursor_idx:]
+                            self.console_cursor_idx -= 1
+                            needs_redraw = True
+                    elif key == "DELETE":
+                        if self.console_cursor_idx < len(self.console_input):
+                            self.console_input = self.console_input[:self.console_cursor_idx] + self.console_input[self.console_cursor_idx + 1:]
+                            needs_redraw = True
+                    elif key == "LEFT":
+                        self.console_cursor_idx = max(0, self.console_cursor_idx - 1)
+                        needs_redraw = True
+                    elif key == "RIGHT":
+                        self.console_cursor_idx = min(len(self.console_input), self.console_cursor_idx + 1)
+                        needs_redraw = True
+                    elif key in ("HOME", "\x01"):
+                        self.console_cursor_idx = 0
+                        needs_redraw = True
+                    elif key in ("END", "\x05"):
+                        self.console_cursor_idx = len(self.console_input)
+                        needs_redraw = True
+                    elif key == "\x17":  # Ctrl+W (Wort rückwärts löschen)
+                        before = self.console_input[:self.console_cursor_idx]
+                        after = self.console_input[self.console_cursor_idx:]
+                        before_stripped = re.sub(r'\S+\s*$', '', before)
+                        self.console_cursor_idx = len(before_stripped)
+                        self.console_input = before_stripped + after
+                        needs_redraw = True
+                    elif key == "\x15":  # Ctrl+U (Zeile bis Cursor löschen)
+                        self.console_input = self.console_input[self.console_cursor_idx:]
+                        self.console_cursor_idx = 0
+                        needs_redraw = True
+                    elif key == "\x0b":  # Ctrl+K (Zeile ab Cursor löschen)
+                        self.console_input = self.console_input[:self.console_cursor_idx]
+                        needs_redraw = True
+                    elif key == "\x0c":  # Ctrl+L (Terminal-Ausgabe leeren)
+                        self.console_output_lines.clear()
+                        needs_redraw = True
+                    elif key == "PAGE_UP":
+                        self.console_scroll_offset += 3
+                        needs_redraw = True
+                    elif key == "PAGE_DOWN":
+                        self.console_scroll_offset = max(0, self.console_scroll_offset - 3)
+                        needs_redraw = True
+                    elif key == "UP":
+                        if self.console_cmd_history:
+                            if self.console_history_idx > 0:
+                                self.console_history_idx -= 1
+                            self.console_input = self.console_cmd_history[self.console_history_idx]
+                            self.console_cursor_idx = len(self.console_input)
+                            needs_redraw = True
+                    elif key == "DOWN":
+                        if self.console_cmd_history:
+                            if self.console_history_idx < len(self.console_cmd_history) - 1:
+                                self.console_history_idx += 1
+                                self.console_input = self.console_cmd_history[self.console_history_idx]
+                            else:
+                                self.console_history_idx = len(self.console_cmd_history)
+                                self.console_input = ""
+                            self.console_cursor_idx = len(self.console_input)
+                            needs_redraw = True
+                    elif key == "QUIT":
+                        self.console_input = ""
+                        self.console_cursor_idx = 0
+                        needs_redraw = True
+                    elif key == "UNDO":
+                        pass
+                    elif len(key) >= 1 and all(c.isprintable() for c in key):
+                        self.console_input = self.console_input[:self.console_cursor_idx] + key + self.console_input[self.console_cursor_idx:]
+                        self.console_cursor_idx += len(key)
+                        needs_redraw = True
+                    continue
+
+                # 2. DATEIMANAGER-MODUS (Konsole geschlossen ODER Konsole geöffnet aber nicht im Fokus):
+                # Sämtliche Tastenkürzel für Dateiverwaltung sind voll aktiv.
+                # Keine Zeichen fließen in die Konsole.
+                if key in ("UP", "DOWN", "k", "j", "PAGE_UP", "PAGE_DOWN"):
+                    self.status_expiry_moves += 1
+                    if self.status_expiry_moves >= 4:
+                        self.status_message = ""
+
                 if key in ("Z", "u", "UNDO"):
                     self.undo_last_action()
                     needs_redraw = True
@@ -2259,69 +2381,10 @@ class EasyDateienApp:
                         continue
                     continue
 
-                if self.show_console and self.console_focused:
-                    if key == "ENTER":
-                        self.run_console_command(self.console_input, fd, old_settings)
-                        needs_redraw = True
-                    elif key == "TAB":
-                        self.console_focused = False
-                        self.set_status("Fokus: Dateimanager")
-                        needs_redraw = True
-                    elif key in (" ", "SPACE"):
-                        self.console_input = self.console_input[:self.console_cursor_idx] + " " + self.console_input[self.console_cursor_idx:]
-                        self.console_cursor_idx += 1
-                        needs_redraw = True
-                    elif key == "BACKSPACE":
-                        if self.console_cursor_idx > 0:
-                            self.console_input = self.console_input[:self.console_cursor_idx - 1] + self.console_input[self.console_cursor_idx:]
-                            self.console_cursor_idx -= 1
-                            needs_redraw = True
-                    elif key == "DELETE":
-                        if self.console_cursor_idx < len(self.console_input):
-                            self.console_input = self.console_input[:self.console_cursor_idx] + self.console_input[self.console_cursor_idx + 1:]
-                            needs_redraw = True
-                    elif key == "LEFT":
-                        self.console_cursor_idx = max(0, self.console_cursor_idx - 1)
-                        needs_redraw = True
-                    elif key == "RIGHT":
-                        self.console_cursor_idx = min(len(self.console_input), self.console_cursor_idx + 1)
-                        needs_redraw = True
-                    elif key in ("HOME", "\x01"):
-                        self.console_cursor_idx = 0
-                        needs_redraw = True
-                    elif key in ("END", "\x05"):
-                        self.console_cursor_idx = len(self.console_input)
-                        needs_redraw = True
-                    elif key == "UP":
-                        if self.console_cmd_history:
-                            if self.console_history_idx > 0:
-                                self.console_history_idx -= 1
-                            self.console_input = self.console_cmd_history[self.console_history_idx]
-                            self.console_cursor_idx = len(self.console_input)
-                            needs_redraw = True
-                    elif key == "DOWN":
-                        if self.console_cmd_history:
-                            if self.console_history_idx < len(self.console_cmd_history) - 1:
-                                self.console_history_idx += 1
-                                self.console_input = self.console_cmd_history[self.console_history_idx]
-                            else:
-                                self.console_history_idx = len(self.console_cmd_history)
-                                self.console_input = ""
-                            self.console_cursor_idx = len(self.console_input)
-                            needs_redraw = True
-                    elif key == "QUIT":
-                        self.console_input = ""
-                        self.console_cursor_idx = 0
-                        needs_redraw = True
-                    elif len(key) == 1 and key.isprintable():
-                        self.console_input = self.console_input[:self.console_cursor_idx] + key + self.console_input[self.console_cursor_idx:]
-                        self.console_cursor_idx += 1
-                        needs_redraw = True
-                    continue
-
-                if key == "TAB":
+                if key in ("TAB", "SHIFT_TAB"):
                     if self.show_console:
                         self.console_focused = True
+                        self.set_status("Fokus: Konsole")
                         needs_redraw = True
                     else:
                         self.toggle_console()
