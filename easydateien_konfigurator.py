@@ -92,7 +92,6 @@ MAIN_MENU_ITEMS = [
     ("divider", "Trennungslinien-Stil", "alle"),
     ("columns", "Spalten-Layout", "Ein"),
     ("mouse", "Mausunterstützung", "Ein"),
-    ("console", "Terminal-Konsole", "Aus"),
     ("hidden", "Versteckte Dateien anzeigen", "Aus"),
     ("keybindings", "Tastenbelegungen ansehen", "Öffnen"),
     ("reset", "Auf Standardwerte zurücksetzen", "Standard"),
@@ -393,8 +392,6 @@ def main_menu(fd: int):
                 val = f"[{'Ein' if cfg.get('columns_enabled', True) else 'Aus'}]"
             elif key == "mouse":
                 val = f"[{'Ein' if cfg.get('mouse_support', True) else 'Aus'}]"
-            elif key == "console":
-                val = f"[{'Ein' if cfg.get('show_console', False) else 'Aus'}]"
             elif key == "hidden":
                 val = f"[{'Ein' if cfg.get('show_hidden', False) else 'Aus'}]"
             elif key == "keybindings":
@@ -447,9 +444,6 @@ def main_menu(fd: int):
                 save_config(cfg)
             elif act == "mouse":
                 cfg["mouse_support"] = not cfg.get("mouse_support", True)
-                save_config(cfg)
-            elif act == "console":
-                cfg["show_console"] = not cfg.get("show_console", False)
                 save_config(cfg)
             elif act == "hidden":
                 cfg["show_hidden"] = not cfg.get("show_hidden", False)
