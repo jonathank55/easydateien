@@ -337,7 +337,7 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     sys.stdout.flush()
     return start, len(view_rows)
 
-def keybindings_menu(fd: int):
+def keybindings_menu(fd: int, new_zip: str = None):
     idx = 0
     while True:
         start, count = render_box(
@@ -468,7 +468,7 @@ def main_menu(fd: int):
                         status_hint = "Zurücksetzen abgebrochen"
     return cfg
 
-def run_konfigurator(standalone: bool = True):
+def run_konfigurator(standalone: bool = True, new_zip: str = None):
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     tty.setcbreak(fd, termios.TCSADRAIN)
