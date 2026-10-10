@@ -1275,7 +1275,7 @@ class EasyDateienApp:
             sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
             try:
-                subprocess.run([user_shell, "-l", "-c", cmd], cwd=self.current_dir, env=env)
+                subprocess.run([user_shell, "-l", "-i", "-c", cmd], cwd=self.current_dir, env=env)
             except KeyboardInterrupt:
                 pass
             except Exception as e:
@@ -1290,7 +1290,7 @@ class EasyDateienApp:
             return
         try:
             res = subprocess.run(
-                [user_shell, "-l", "-c", cmd],
+                [user_shell, "-l", "-i", "-c", cmd],
                 cwd=self.current_dir,
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
@@ -1299,13 +1299,21 @@ class EasyDateienApp:
             )
             out_text = res.stdout.decode("utf-8", errors="replace")
             err_text = res.stderr.decode("utf-8", errors="replace")
+            ignored_prefixes = (
+                "Restored session:", "Saving session...", "...saving history...",
+                "...completed.", "bash: no job control in this shell"
+            )
             if out_text:
                 for l in out_text.splitlines():
+                    if any(l.startswith(p) for p in ignored_prefixes):
+                        continue
                     clean_l = ANSI_ESCAPE_RE.sub("", l)
                     clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
                     self.console_output_lines.append(clean_l)
             if err_text:
                 for l in err_text.splitlines():
+                    if any(l.startswith(p) for p in ignored_prefixes):
+                        continue
                     clean_l = ANSI_ESCAPE_RE.sub("", l)
                     clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
                     self.console_output_lines.append(clean_l)
@@ -2567,7 +2575,7 @@ class EasyDateienApp:
                             needs_redraw = True
                     elif key == "UNDO":
                         pass
-                    elif len(key) >= 1 and all(c.isprintable() for c in key):
+                    elif len(key) >= 1 and not key.startswith("MOUSE_") and all(c.isprintable() for c in key):
                         self.console_input = self.console_input[:self.console_cursor_idx] + key + self.console_input[self.console_cursor_idx:]
                         self.console_cursor_idx += len(key)
                         needs_redraw = True
