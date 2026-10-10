@@ -1837,7 +1837,7 @@ class EasyDateienApp:
                     avail_ctrl = max(1, term_cols - str_width(left_b) - 1)
 
                     # Dynamische Optionen für die Hilfeleiste in der Konsole
-                    opt_full = ["[PG_UP/PG_DWN] Scrollen", "[TAB] Dateimanager", "[ESC] Schließen"]
+                    opt_full = ["[PG_UP/PG_DWN] Scrollen", "[TAB] Fokus", "[ESC] Schließen"]
                     opt_short = ["[PG_UP/DWN] Scrollen", "[TAB] Fokus", "[ESC] Schließen"]
                     opt_mini = ["[PG_UP/DWN]", "[TAB]", "[ESC]"]
                     opt_esc_only = ["[ESC] Schließen"]
