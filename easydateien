@@ -737,6 +737,7 @@ class EasyDateienApp:
         self.status_level: str = "info"
         self.status_expiry_moves: int = 0
         self.filter_query: str = ""
+        self.last_refresh_time: float = 0.0
 
         self.undo_stack: List[UndoAction] = []
 
@@ -811,6 +812,13 @@ class EasyDateienApp:
         self.status_expiry_moves = 0
 
     def refresh_items(self):
+        """Aktualisiert die Dateiliste und prüft auf Änderungen im Dateisystem."""
+        current_time = time.time()
+        # Nur alle 0.5 Sekunden aktualisieren, um Performance zu schonen
+        if current_time - self.last_refresh_time < 0.5:
+            return
+        self.last_refresh_time = current_time
+
         self.cached_parent_dir = None
         self.cached_child_path = None
         self.cached_file_preview_path = None
@@ -945,6 +953,31 @@ class EasyDateienApp:
         if not sources:
             self.set_status("Zwischenablage leer", "warning")
             return
+
+        # Prüfe auf Konflikte und frage nach Ersetzung
+        conflicts = []
+        for src in sources:
+            if not os.path.exists(src):
+                continue
+            name = os.path.basename(src)
+            dest = os.path.join(self.current_dir, name)
+            if os.path.exists(dest):
+                conflicts.append((src, dest))
+
+        if conflicts:
+            self.active_dialog = "overwrite_confirm"
+            self.dialog_input = ""
+            self.dialog_cursor = 0
+            self.dialog_target_item = None
+            self.conflicts_to_resolve = conflicts
+            self.conflict_resolution = {}
+            return
+
+        # Keine Konflikte - direkt einfügen
+        self._perform_paste(sources)
+
+    def _perform_paste(self, sources: List[str]):
+        """Führt das eigentliche Einfügen durch, nachdem Konflikte aufgelöst wurden."""
         success = 0
         last_name = ""
         pasted_records = []
@@ -955,14 +988,19 @@ class EasyDateienApp:
                 continue
             name = os.path.basename(src)
             dest = os.path.join(self.current_dir, name)
-            if os.path.abspath(src) == os.path.abspath(dest):
-                if is_cut:
-                    continue
+
+            # Überspringe, wenn Quelle und Ziel identisch sind (bei Ausschneiden)
+            if os.path.abspath(src) == os.path.abspath(dest) and is_cut:
+                continue
+
+            # Bei Kopieren: Füge Nummerierung hinzu, wenn Datei bereits existiert
+            if not is_cut and os.path.exists(dest):
                 base, ext = os.path.splitext(name)
                 c = 1
                 while os.path.exists(dest):
                     dest = os.path.join(self.current_dir, f"{base} ({c}){ext}")
                     c += 1
+
             try:
                 if is_cut:
                     shutil.move(src, dest)
@@ -975,8 +1013,9 @@ class EasyDateienApp:
                     pasted_records.append((None, dest))
                 success += 1
                 last_name = os.path.basename(dest)
-            except Exception:
-                pass
+            except Exception as e:
+                self.set_status(f"Fehler beim Einfügen: {e}", "error")
+                return
 
         if pasted_records:
             desc = f"Einfügen von {len(pasted_records)} Element(en)"
@@ -1357,6 +1396,9 @@ class EasyDateienApp:
 
     def build_screen(self, term_cols: int, term_rows: int) -> List[str]:
         """Baut den vollständigen Terminal-Bildschirm pixelgenau und flickerfrei auf."""
+        # Automatische Aktualisierung der Dateiliste
+        self.refresh_items()
+
         disp_path = self.get_short_dir(self.current_dir)
         total_items = len(self.items)
         cur_idx_str = f"{self.selected_idx + 1}/{total_items}" if total_items > 0 else "0/0"
@@ -1809,9 +1851,9 @@ class EasyDateienApp:
                     targets_c = len(self.selected_paths) if self.selected_paths else 1
                     t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
                     badge = f"{C_BOLD_RED}[PAPIERKORB]{C_RESET}" if term_cols >= 40 else f"{C_BOLD_RED}[LÖSCHEN]{C_RESET}"
-                    opts_full = ["[j] Löschen", "[n / ESC] Zurück"]
-                    opts_short = ["[j] Ja", "[n] Nein"]
-                    opts_mini = ["[j/n]"]
+                    opts_full = ["[y] Ersetzen", "[n / ESC] Zurück"]
+                    opts_short = ["[y] Ja", "[n] Nein"]
+                    opts_mini = ["[y/n]"]
                     min_q_w = str_width(f" {badge} ") + 8
                     avail_for_opts = max(0, term_cols - min_q_w)
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_for_opts:
@@ -1832,6 +1874,36 @@ class EasyDateienApp:
                         st_line = pad_to_width(f"{left_str} {C_YELLOW}{hints}{C_RESET}", term_cols)
                     else:
                         st_line = pad_to_width(left_str, term_cols)
+                elif self.active_dialog == "overwrite_confirm":
+                    if self.conflicts_to_resolve:
+                        src, dest = self.conflicts_to_resolve[0]
+                        file_name = os.path.basename(dest)
+                        badge = f"{C_BOLD_RED}[ERSETZEN]{C_RESET}" if term_cols >= 40 else f"{C_BOLD_RED}[ÜBERSCHREIBEN]{C_RESET}"
+                        opts_full = ["[y] Ersetzen", "[n] Überspringen", "[a] Alle ersetzen", "[ESC] Abbrechen"]
+                        opts_short = ["[y] Ja", "[n] Nein", "[a] Alle"]
+                        opts_mini = ["[y/n/a]"]
+                        min_q_w = str_width(f" {badge} ") + 8
+                        avail_for_opts = max(0, term_cols - min_q_w)
+                        if sum(str_width(x) for x in opts_full) + 2 <= avail_for_opts:
+                            chosen_opts = opts_full
+                        elif sum(str_width(x) for x in opts_short) + 1 <= avail_for_opts:
+                            chosen_opts = opts_short
+                        elif str_width(opts_mini[0]) <= avail_for_opts:
+                            chosen_opts = opts_mini
+                        else:
+                            chosen_opts = []
+                        opts_w = sum(str_width(x) for x in chosen_opts) + max(0, len(chosen_opts) - 1) if chosen_opts else 0
+                        avail_name = max(1, term_cols - str_width(badge) - 12 - opts_w)
+                        t_trunc = truncate_to_width(file_name, avail_name)
+                        left_str = f" {badge} „{t_trunc}“ ersetzen?"
+                        avail_right = max(1, term_cols - str_width(left_str) - 1)
+                        if chosen_opts:
+                            hints = distribute_options(chosen_opts, avail_right)
+                            st_line = pad_to_width(f"{left_str} {C_YELLOW}{hints}{C_RESET}", term_cols)
+                        else:
+                            st_line = pad_to_width(left_str, term_cols)
+                    else:
+                        st_line = " " * term_cols
                 elif self.active_dialog == "goto_menu":
                     badge = f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET} "
                     avail_r = max(1, term_cols - str_width(badge) - 1)
@@ -2167,12 +2239,19 @@ class EasyDateienApp:
             return False
 
         if key in ("ESC", "CTRL_C"):
-            self.active_dialog = None
-            self.dialog_input = ""
-            self.dialog_cursor = 0
-            self.dialog_target_item = None
-            self.help_scroll_offset = 0
-            self.set_status("Aktion abgebrochen")
+            if self.active_dialog == "overwrite_confirm":
+                # Abbrechen des gesamten Einfügevorgangs
+                self.active_dialog = None
+                self.conflicts_to_resolve = []
+                self.conflict_resolution = {}
+                self.set_status("Einfügen abgebrochen", "warning")
+            else:
+                self.active_dialog = None
+                self.dialog_input = ""
+                self.dialog_cursor = 0
+                self.dialog_target_item = None
+                self.help_scroll_offset = 0
+                self.set_status("Aktion abgebrochen")
             return True
 
         if self.active_dialog == "help_menu":
@@ -2198,7 +2277,7 @@ class EasyDateienApp:
             return True
 
         if self.active_dialog == "trash_confirm":
-            if key in ("y", "Y", "j", "J", "ENTER"):
+            if key in ("y", "Y", "ENTER"):
                 targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
                 trash_dir = os.path.expanduser("~/.Trash")
                 os.makedirs(trash_dir, exist_ok=True)
@@ -2234,6 +2313,69 @@ class EasyDateienApp:
                 self.set_status("Löschen abgebrochen")
             self.active_dialog = None
             return True
+
+        if self.active_dialog == "overwrite_confirm":
+            if not self.conflicts_to_resolve:
+                self.active_dialog = None
+                return True
+
+            src, dest = self.conflicts_to_resolve[0]
+
+            if key in ("y", "Y"):
+                # Aktuelle Datei ersetzen
+                self.conflict_resolution[dest] = "replace"
+                self.conflicts_to_resolve.pop(0)
+                if not self.conflicts_to_resolve:
+                    # Alle Konflikte aufgelöst - Einfügen durchführen
+                    sources = list(self.clipboard_paths) if self.clipboard_paths else get_macos_clipboard_files()
+                    filtered_sources = []
+                    for s in sources:
+                        if not os.path.exists(s):
+                            continue
+                        name = os.path.basename(s)
+                        d = os.path.join(self.current_dir, name)
+                        if d in self.conflict_resolution:
+                            if self.conflict_resolution[d] == "replace":
+                                filtered_sources.append(s)
+                        else:
+                            filtered_sources.append(s)
+                    self._perform_paste(filtered_sources)
+                return True
+            elif key in ("a", "A"):
+                # Alle Dateien ersetzen
+                for _, d in self.conflicts_to_resolve:
+                    self.conflict_resolution[d] = "replace"
+                self.conflicts_to_resolve = []
+                sources = list(self.clipboard_paths) if self.clipboard_paths else get_macos_clipboard_files()
+                self._perform_paste(sources)
+                return True
+            elif key in ("n", "N"):
+                # Aktuelle Datei überspringen
+                self.conflict_resolution[dest] = "skip"
+                self.conflicts_to_resolve.pop(0)
+                if not self.conflicts_to_resolve:
+                    # Alle Konflikte aufgelöst - Einfügen durchführen
+                    sources = list(self.clipboard_paths) if self.clipboard_paths else get_macos_clipboard_files()
+                    filtered_sources = []
+                    for s in sources:
+                        if not os.path.exists(s):
+                            continue
+                        name = os.path.basename(s)
+                        d = os.path.join(self.current_dir, name)
+                        if d in self.conflict_resolution:
+                            if self.conflict_resolution[d] == "replace":
+                                filtered_sources.append(s)
+                        else:
+                            filtered_sources.append(s)
+                    self._perform_paste(filtered_sources)
+                return True
+            else:
+                # Abbrechen
+                self.active_dialog = None
+                self.conflicts_to_resolve = []
+                self.conflict_resolution = {}
+                self.set_status("Einfügen abgebrochen", "warning")
+                return True
 
         if self.active_dialog == "goto_menu":
             c = key.lower()

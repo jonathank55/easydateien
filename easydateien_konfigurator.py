@@ -99,7 +99,6 @@ MAIN_MENU_ITEMS = [
     ("reset", "Auf Standardwerte zurücksetzen", "Standard"),
 ]
 
-
 def char_width(c: str) -> int:
     if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
         return 0
@@ -111,11 +110,9 @@ def char_width(c: str) -> int:
         return 2
     return 1
 
-
 def str_width(text: str) -> int:
     clean = ANSI_ESCAPE_RE.sub("", text)
     return sum(char_width(c) for c in clean)
-
 
 def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
     """Kürzt Text deterministisch auf die maximale visuelle Terminalbreite unter Erhalt von ANSI-Codes."""
@@ -150,7 +147,6 @@ def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
         return f"{res_str}{C_RESET}{ellipsis}"
     return f"{res_str}{ellipsis}"
 
-
 def pad_to_width(text: str, width: int, align: str = "left") -> str:
     w = str_width(text)
     if w > width:
@@ -158,7 +154,6 @@ def pad_to_width(text: str, width: int, align: str = "left") -> str:
         return truncate_to_width(clean, width)
     pad = " " * (width - w)
     return (pad + text) if align == "right" else (text + pad)
-
 
 def distribute_options(items: list, avail_w: int) -> str:
     """Verteilt Optionen gleichmäßig über die gegebene Spaltenbreite."""
@@ -196,7 +191,6 @@ def distribute_options(items: list, avail_w: int) -> str:
 
     return "".join(parts)
 
-
 def load_config() -> dict:
     cfg = dict(DEFAULT_CONFIG)
     if os.path.exists(CONFIG_FILE):
@@ -207,13 +201,11 @@ def load_config() -> dict:
             pass
     return cfg
 
-
 def save_config(cfg: dict):
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
         f.write("\n")
-
 
 def read_key(fd: int, timeout: float = 0.05) -> str:
     try:
@@ -277,7 +269,6 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
             return ""
     except Exception:
         return ""
-
 
 def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str):
     term_cols, term_rows = shutil.get_terminal_size((80, 24))
@@ -346,7 +337,6 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     sys.stdout.flush()
     return start, len(view_rows)
 
-
 def keybindings_menu(fd: int):
     idx = 0
     while True:
@@ -384,7 +374,6 @@ def keybindings_menu(fd: int):
             if act == "reset":
                 save_config(dict(DEFAULT_CONFIG))
                 break
-
 
 def main_menu(fd: int):
     cfg = load_config()
@@ -463,11 +452,21 @@ def main_menu(fd: int):
                     cfg = load_config()
             elif act == "reset":
                 if k != "LEFT":
-                    cfg = dict(DEFAULT_CONFIG)
-                    save_config(cfg)
-                    status_hint = f"{C_BOLD_GREEN}✓ Auf Standardwerte zurückgesetzt{C_RESET}"
+                    confirm = render_box(
+                        "ZURÜCKSETZEN BESTÄTIGEN",
+                        "Möchten Sie wirklich alle Einstellungen auf Standard zurücksetzen?",
+                        [],
+                        0,
+                        ["[y] Ja, zurücksetzen", "[n] Nein, abbrechen"]
+                    )
+                    k2 = read_key(fd)
+                    if k2 in ("y", "Y"):
+                        cfg = dict(DEFAULT_CONFIG)
+                        save_config(cfg)
+                        status_hint = f"{C_BOLD_GREEN}✓ Auf Standardwerte zurückgesetzt{C_RESET}"
+                    else:
+                        status_hint = "Zurücksetzen abgebrochen"
     return cfg
-
 
 def run_konfigurator(standalone: bool = True):
     fd = sys.stdin.fileno()
@@ -491,11 +490,9 @@ def run_konfigurator(standalone: bool = True):
             sys.stdout.flush()
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
-
 class SingleLineHelpFormatter(argparse.HelpFormatter):
     def _split_lines(self, text, width):
         return [text]
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -507,7 +504,6 @@ def main():
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.parse_args()
     run_konfigurator(standalone=True)
-
 
 if __name__ == "__main__":
     main()
