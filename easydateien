@@ -494,8 +494,6 @@ def get_file_colored_name(item: FileEntry) -> str:
     ext = item.ext.lower()
     if ext in (".zip", ".tar", ".gz", ".bz2", ".xz", ".dmg", ".pkg", ".7z", ".rar"):
         return f"{C_YELLOW}{name_disp}{C_RESET}"
-    if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".mp4", ".mov", ".mp3", ".wav"):
-        return f"{C_MAGENTA}{name_disp}{C_RESET}"
     if ext in (".py", ".sh", ".zsh", ".bash", ".js", ".ts", ".html", ".css", ".json", ".yaml", ".yml", ".toml", ".typ"):
         return f"{C_CYAN}{name_disp}{C_RESET}"
     return name_disp
@@ -2651,7 +2649,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.3", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.4", help="Programmversion anzeigen")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
 
