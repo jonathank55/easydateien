@@ -686,10 +686,8 @@ class EasyDateienApp:
                 self._mouse_tracking_active = False
 
     def sync_mouse_state(self):
-        """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Fokus- und Konfigurationsstatus."""
-        # Wenn die Konsole geöffnet und fokussiert ist, wird Maus-Tracking deaktiviert,
-        # damit Text im Terminal nativ mit der Maus markiert und kopiert werden kann.
-        should_enable = bool(self.config.get("mouse_support", True)) and not (self.show_console and self.console_focused)
+        """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Konfigurationsstatus."""
+        should_enable = bool(self.config.get("mouse_support", True))
         self.set_mouse_tracking(should_enable)
 
     def load_config(self) -> dict:
@@ -775,7 +773,7 @@ class EasyDateienApp:
                 tty.setcbreak(fd, termios.TCSADRAIN)
                 sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
                 self.sync_mouse_state()
-                sys.stdout.write("\033[2J\033[H")
+                sys.stdout.write("\033[2J\033[3J\033[H")
                 sys.stdout.flush()
                 self.refresh_items()
 
@@ -1138,7 +1136,7 @@ class EasyDateienApp:
                 tty.setcbreak(fd, termios.TCSADRAIN)
                 sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
                 self.sync_mouse_state()
-                sys.stdout.write("\033[2J\033[H")
+                sys.stdout.write("\033[2J\033[3J\033[H")
                 sys.stdout.flush()
                 self.refresh_items()
             return
@@ -2193,7 +2191,7 @@ class EasyDateienApp:
         tty.setcbreak(fd, termios.TCSADRAIN)
         sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
         self.sync_mouse_state()
-        sys.stdout.write("\033[2J\033[H")
+        sys.stdout.write("\033[2J\033[3J\033[H")
         sys.stdout.flush()
 
         last_size = None
@@ -2610,7 +2608,7 @@ class EasyDateienApp:
                     tty.setcbreak(fd, termios.TCSADRAIN)
                     sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
                     self.sync_mouse_state()
-                    sys.stdout.write("\033[2J\033[H")
+                    sys.stdout.write("\033[2J\033[3J\033[H")
                     sys.stdout.flush()
                     self.refresh_items()
                     self.set_status("Einstellungen übernommen", "success")
@@ -2649,7 +2647,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.1", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.2", help="Programmversion anzeigen")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
 
