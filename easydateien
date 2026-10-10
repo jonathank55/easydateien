@@ -636,7 +636,7 @@ class EasyDateienApp:
 
     def load_config(self) -> dict:
         cfg = {
-            "divider_style": "alle", "columns_enabled": True, "show_controls": True,
+            "divider_style": "alle", "columns_enabled": True,
             "esc_to_quit": False, "mouse_support": True, "show_console": False,
             "console_position": "unten", "text_editor": "nano %s", "opener": "open %s",
             "sort_by": "mtime", "sort_reverse": True, "sort_dir_first": True,
@@ -1132,9 +1132,8 @@ class EasyDateienApp:
 
         cur_item = self.items[self.selected_idx] if (self.items and 0 <= self.selected_idx < total_items) else None
 
-        show_controls = self.config.get("show_controls", True)
         has_dialog = bool(self.active_dialog)
-        has_status_bar = (show_controls or has_dialog) and (term_rows >= 5)
+        has_status_bar = (term_rows >= 4)
 
         div_style = self.config.get("divider_style", "alle").lower()
         if div_style not in ("alle", "vertikal", "außen", "horizontal", "keine"):
@@ -1610,16 +1609,14 @@ class EasyDateienApp:
 
             if len(help_items) + 2 <= max_box_h:
                 visible_items = help_items
-                title_extra = ""
             else:
                 avail_content_h = max_box_h - 2
                 max_scroll = max(0, len(help_items) - avail_content_h)
                 self.help_scroll_offset = max(0, min(max_scroll, self.help_scroll_offset))
                 visible_items = help_items[self.help_scroll_offset : self.help_scroll_offset + avail_content_h]
-                title_extra = f" ({self.help_scroll_offset + 1}-{min(len(help_items), self.help_scroll_offset + avail_content_h)}/{len(help_items)})"
 
             if target_box_w >= 28 and term_rows >= 6:
-                box_lines, box_w = build_modal_box(f"Navigationshilfe [h]{title_extra}", visible_items, target_box_w)
+                box_lines, box_w = build_modal_box("Navigationshilfe [h]", visible_items, target_box_w)
                 box_h = len(box_lines)
                 start_x = max(0, (term_cols - box_w) // 2)
                 min_y = 2 if has_top_border else 1
@@ -1633,79 +1630,7 @@ class EasyDateienApp:
         return all_lines[:term_rows]
 
     def build_dynamic_controls(self, avail_w: int) -> str:
-        cur_item = self.items[self.selected_idx] if (self.items and 0 <= self.selected_idx < len(self.items)) else None
-        is_cur_dir = bool(cur_item and cur_item.is_dir)
-        has_sel = bool(self.selected_paths)
-        has_clip = bool(self.clipboard_paths)
-
-        core: List[Tuple[str, str]] = [("[←↑↓→]", "Nav"), ("[h]", "Hilfe"), ("[g]", "Gehe zu")]
-
-        if has_clip:
-            core.append(("[p]", "Einfügen"))
-
-        if has_sel:
-            core.append(("[x]", "Ausschneiden"))
-            core.append(("[y]", "Kopieren"))
-            core.append(("[d]", "Löschen"))
-            core.append(("[z]", "ZIP"))
-            core.append(("[Leertaste]", "Auswahl"))
-            core.append(("[u]", "Undo"))
-        elif cur_item:
-            if is_cur_dir:
-                core.append(("[Eingabe]", "Öffnen"))
-            else:
-                core.append(("[Eingabe]", "Öffnen"))
-                core.append(("[e]", "Nano"))
-                core.append(("[o]", "Vim"))
-            core.append(("[n]", "Neu"))
-            core.append(("[r]", "Umbenennen"))
-            core.append(("[u]", "Undo"))
-            core.append(("[d]", "Löschen"))
-            core.append(("[y]", "Kopieren"))
-            core.append(("[x]", "Ausschneiden"))
-            if not has_clip:
-                core.append(("[p]", "Einfügen"))
-        else:
-            core.append(("[n]", "Neu"))
-            core.append(("[u]", "Undo"))
-            if has_clip:
-                core.append(("[p]", "Einfügen"))
-
-        ext: List[Tuple[str, str]] = [
-            ("[/]", "Filter"),
-            ("[s]", "Sortieren"),
-            ("[.]", "Versteckt"),
-            ("[t]", "Konsole"),
-            ("[z]", "ZIP"),
-            ("[m]", "Menü"),
-            ("[q]", "Beenden"),
-        ]
-
-        seen = {k for k, _ in core}
-        all_candidates = list(core)
-        for k, l in ext:
-            if k not in seen:
-                all_candidates.append((k, l))
-                seen.add(k)
-
-        items_str = [f"{k} {l}" for k, l in all_candidates]
-
-        joined_wide = "  ".join(items_str)
-        if str_width(joined_wide) <= avail_w:
-            return f"{C_GRAY}{joined_wide}{C_RESET}"
-
-        sep = "  " if avail_w >= 110 else " "
-        fitted: List[str] = []
-        cur_len = 0
-        for it in items_str:
-            needed = (str_width(sep) if fitted else 0) + str_width(it)
-            if cur_len + needed <= avail_w:
-                fitted.append(it)
-                cur_len += needed
-            else:
-                break
-
-        return f"{C_GRAY}{sep.join(fitted)}{C_RESET}"
+        return f"{C_GRAY}[←↑↓→] Nav  [h] Hilfe{C_RESET}"
 
     def handle_mouse_click(self, x: int, y: int) -> bool:
         if not self.last_layout:

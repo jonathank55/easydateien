@@ -44,7 +44,6 @@ ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 DEFAULT_CONFIG = {
     "divider_style": "alle",
     "columns_enabled": True,
-    "show_controls": True,
     "esc_to_quit": False,
     "mouse_support": True,
     "show_console": False,
@@ -92,7 +91,6 @@ KEYBINDING_ITEMS = [
 MAIN_MENU_ITEMS = [
     ("divider", "Trennungslinien-Stil", "alle"),
     ("columns", "3-Spalten-Layout", "Ein"),
-    ("controls", "Steuerungshilfe unten", "Ein"),
     ("mouse", "Mausunterstützung", "Ein"),
     ("console", "Terminal-Konsole", "Aus"),
     ("hidden", "Versteckte Dateien anzeigen", "Aus"),
@@ -347,8 +345,6 @@ def main_menu(fd: int):
                 val = f"[{cfg.get('divider_style', 'alle')}]"
             elif key == "columns":
                 val = f"[{'Ein' if cfg.get('columns_enabled', True) else 'Aus'}]"
-            elif key == "controls":
-                val = f"[{'Ein' if cfg.get('show_controls', True) else 'Aus'}]"
             elif key == "mouse":
                 val = f"[{'Ein' if cfg.get('mouse_support', True) else 'Aus'}]"
             elif key == "console":
@@ -400,9 +396,6 @@ def main_menu(fd: int):
                 save_config(cfg)
             elif act == "columns":
                 cfg["columns_enabled"] = not cfg.get("columns_enabled", True)
-                save_config(cfg)
-            elif act == "controls":
-                cfg["show_controls"] = not cfg.get("show_controls", True)
                 save_config(cfg)
             elif act == "mouse":
                 cfg["mouse_support"] = not cfg.get("mouse_support", True)
