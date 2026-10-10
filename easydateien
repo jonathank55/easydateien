@@ -1160,7 +1160,7 @@ class EasyDateienApp:
         }
         has_interactive_pipe = any(p in cmd for p in ["| less", "| more", "| bat", "| most", "| fzf"])
         is_git_interactive = cmd.startswith("git ") and any(sub in cmd for sub in ["log", "diff", "commit", "add -p", "add -i", "rebase", "branch", "show", "stash", "blame"])
-        is_standalone_stdin_tool = (first_prog in ("cat", "grep", "sed", "awk", "head", "tail", "cut", "sort", "uniq", "wc")) and (len(tokens) == 1 and not any(ch in cmd for ch in ("<", ">", "|", "-")))
+        is_standalone_stdin_tool = (first_prog in ("cat", "grep", "egrep", "fgrep", "sed", "awk", "head", "tail", "cut", "sort", "uniq", "wc")) and (len(tokens) <= 2 and not any(ch in cmd for ch in ("<", ">", "|", "/", ".")))
 
         is_interactive = (first_prog in interactive_tools) or has_interactive_pipe or is_git_interactive or is_standalone_stdin_tool
 
@@ -1194,29 +1194,16 @@ class EasyDateienApp:
             )
             out_text = res.stdout.decode("utf-8", errors="replace")
             err_text = res.stderr.decode("utf-8", errors="replace")
-            has_output = False
             if out_text:
                 for l in out_text.splitlines():
                     clean_l = ANSI_ESCAPE_RE.sub("", l)
                     clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
                     self.console_output_lines.append(clean_l)
-                    has_output = True
             if err_text:
                 for l in err_text.splitlines():
                     clean_l = ANSI_ESCAPE_RE.sub("", l)
                     clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
                     self.console_output_lines.append(clean_l)
-                    has_output = True
-            if not has_output:
-                if res.returncode == 0:
-                    pass
-                elif first_prog in ("grep", "egrep", "fgrep", "rg", "ag", "ack") or "grep" in tokens:
-                    if res.returncode == 1:
-                        self.console_output_lines.append("[Keine Treffer]")
-                    else:
-                        self.console_output_lines.append(f"[grep Fehlercode {res.returncode}]")
-                elif res.returncode != 0:
-                    self.console_output_lines.append(f"[Beendet mit Statuscode {res.returncode}]")
         except subprocess.TimeoutExpired:
             self.console_output_lines.append("[Befehl nach 60s abgebrochen]")
         except Exception as e:
@@ -1828,6 +1815,7 @@ class EasyDateienApp:
                 f"  {C_BOLD_CYAN}[.]{C_RESET}           Versteckte Dateien ein- und ausblenden",
                 f"  {C_BOLD_CYAN}[s]{C_RESET}           Sortierung wechseln",
                 f"  {C_BOLD_CYAN}[t]{C_RESET}           Integrierte Terminal-Konsole öffnen",
+                f"  {C_BOLD_CYAN}[!]{C_RESET}           Interaktive Shell im Ordner öffnen",
                 "",
                 f"{C_BOLD_BLUE}Dateioperationen{C_RESET}",
                 f"  {C_BOLD_CYAN}[Leertaste]{C_RESET}   Datei auswählen oder Markierung aufheben",
@@ -2490,6 +2478,26 @@ class EasyDateienApp:
 
                 if key == "t":
                     self.toggle_console()
+                    needs_redraw = True
+                    continue
+
+                if key in ("!", "$"):
+                    user_shell, env = get_shell_environment()
+                    self.set_mouse_tracking(False)
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                    sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
+                    sys.stdout.flush()
+                    try:
+                        subprocess.run([user_shell, "-l"], cwd=self.current_dir, env=env)
+                    except Exception:
+                        pass
+                    finally:
+                        tty.setcbreak(fd, termios.TCSADRAIN)
+                        sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
+                        self.sync_mouse_state()
+                        sys.stdout.write("\033[2J\033[3J\033[H")
+                        sys.stdout.flush()
+                        self.refresh_items()
                     needs_redraw = True
                     continue
 

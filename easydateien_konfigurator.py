@@ -84,6 +84,7 @@ KEYBINDING_ITEMS = [
     ("goto", "Gehe-zu-Menü öffnen", "[g]"),
     ("home", "Direkt zum Benutzerordner wechseln", "[~]"),
     ("toggle_console", "Integrierte Konsole umschalten", "[t]"),
+    ("shell", "Interaktive Shell im Ordner öffnen", "[!]"),
     ("esc", "Aktion abbrechen oder zurück", "[ESC]"),
     ("quit", "EasyDateien beenden", "[q]"),
     ("reset", "Auf Standardwerte zurücksetzen", "[Standard]"),
