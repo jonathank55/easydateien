@@ -296,7 +296,7 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     for i, (key, label, tag) in enumerate(view_rows):
         actual_idx = start + i
         is_sel = (actual_idx == cur_idx)
-        pfx = f"{C_BOLD_BLUE}▸{C_RESET} " if is_sel else "  "
+        pfx = f"{C_BOLD}▸{C_RESET} " if is_sel else "  "
 
         if tag in ("[Ein]", "Ein"):
             tag_colored = f"{C_BOLD_GREEN}{tag}{C_RESET}"

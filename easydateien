@@ -1363,10 +1363,10 @@ class EasyDateienApp:
                     p_it = parent_items[p_idx]
                     is_act = (os.path.abspath(p_it.path) == os.path.abspath(self.current_dir))
                     p_name = p_it.name + ("/" if p_it.is_dir else "")
-                    prefix = "▸ " if is_act else "  "
+                    prefix = f"{C_BOLD}▸{C_RESET} " if is_act else "  "
                     p_trunc = truncate_to_width(p_name, max(2, w_left - 3))
                     if is_act:
-                        txt_l = f" {prefix}{p_trunc}"
+                        txt_l = f" {prefix}{C_BOLD}{p_trunc}{C_RESET}"
                     else:
                         txt_l = f" {C_GRAY}{prefix}{p_trunc}{C_RESET}"
                     cell_left = pad_to_width(txt_l, w_left)
@@ -1383,7 +1383,7 @@ class EasyDateienApp:
                 in_cut = (self.clipboard_mode == "cut" and it.path in self.clipboard_paths)
                 in_copy = (self.clipboard_mode == "copy" and it.path in self.clipboard_paths)
 
-                c_char = f"{C_BOLD_BLUE}▸{C_RESET}" if is_cur else " "
+                c_char = f"{C_BOLD}▸{C_RESET}" if is_cur else " "
                 if in_cut:
                     b_char = f"{C_BOLD_RED}×{C_RESET}"
                 elif in_copy:
@@ -1406,10 +1406,10 @@ class EasyDateienApp:
                     it_fake.is_exec = it.is_exec
                     it_fake.ext = it.ext
                     n_styled = get_file_colored_name(it_fake)
+                    if is_cur:
+                        n_styled = f"{C_BOLD}{n_styled}{C_RESET}"
                     s_part = f"  {C_GRAY}{s_str:>8}{C_RESET}" if s_str else " " * 10
                     l_part = f"{prefix_str}{n_styled}"
-                    if is_cur:
-                        l_part = f"{C_BOLD}{l_part}"
                     cell_mid = pad_to_width(l_part, w_mid - 10) + s_part
                 else:
                     avail_n = max(2, w_mid - prefix_len)
@@ -1420,9 +1420,9 @@ class EasyDateienApp:
                     it_fake.is_exec = it.is_exec
                     it_fake.ext = it.ext
                     n_styled = get_file_colored_name(it_fake)
-                    l_part = f"{prefix_str}{n_styled}"
                     if is_cur:
-                        l_part = f"{C_BOLD}{l_part}"
+                        n_styled = f"{C_BOLD}{n_styled}{C_RESET}"
+                    l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid)
             elif len(self.items) == 0 and r == 0:
                 cell_mid = pad_to_width(f"  {C_ITALIC}(leer){C_RESET}", w_mid)
@@ -2636,7 +2636,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.6", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.7", help="Programmversion anzeigen")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
 
