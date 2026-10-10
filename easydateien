@@ -796,7 +796,7 @@ class EasyDateienApp:
     def set_mouse_tracking(self, enable: bool):
         """Aktiviert oder deaktiviert das SGR-Maus-Tracking im Terminal deterministisch."""
         if enable:
-            if self.config.get("mouse_support", True) and not self._mouse_tracking_active:
+            if not self._mouse_tracking_active:
                 sys.stdout.write("\033[?1000h\033[?1006h")
                 sys.stdout.flush()
                 self._mouse_tracking_active = True
@@ -808,7 +808,7 @@ class EasyDateienApp:
 
     def sync_mouse_state(self):
         """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Konfigurationsstatus."""
-        should_enable = bool(self.config.get("mouse_support", True))
+        should_enable = bool(self.config.get("mouse_support", True)) and not (self.show_console and self.console_focused)
         self.set_mouse_tracking(should_enable)
 
     def load_config(self) -> dict:
@@ -1299,20 +1299,24 @@ class EasyDateienApp:
             )
             out_text = res.stdout.decode("utf-8", errors="replace")
             err_text = res.stderr.decode("utf-8", errors="replace")
-            ignored_prefixes = (
-                "Restored session:", "Saving session...", "...saving history...",
-                "...completed.", "bash: no job control in this shell"
+            ignored_patterns = (
+                "restored session", "saving session", "saving history",
+                "copying shared history", "copying history",
+                "completed.", "no job control in this shell",
+                "session contents restored", "session saved"
             )
             if out_text:
                 for l in out_text.splitlines():
-                    if any(l.startswith(p) for p in ignored_prefixes):
+                    l_lower = l.lower()
+                    if any(p in l_lower for p in ignored_patterns):
                         continue
                     clean_l = ANSI_ESCAPE_RE.sub("", l)
                     clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
                     self.console_output_lines.append(clean_l)
             if err_text:
                 for l in err_text.splitlines():
-                    if any(l.startswith(p) for p in ignored_prefixes):
+                    l_lower = l.lower()
+                    if any(p in l_lower for p in ignored_patterns):
                         continue
                     clean_l = ANSI_ESCAPE_RE.sub("", l)
                     clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
