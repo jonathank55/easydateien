@@ -1577,7 +1577,7 @@ class EasyDateienApp:
             help_items = [
                 f"{C_BOLD_BLUE}Navigation & Ansicht{C_RESET}",
                 f"  {C_BOLD_CYAN}[←↑↓→]{C_RESET}        In Ordnern und Listen navigieren",
-                f"  {C_BOLD_CYAN}[Eingabe]{C_RESET}     Datei öffnen oder Verzeichnis betreten",
+                f"  {C_BOLD_CYAN}[Eingabe]{C_RESET}     Im Finder oder System öffnen",
                 f"  {C_BOLD_CYAN}[g]{C_RESET}           Gehe zu (Schnellzugriff auf Verzeichnisse)",
                 f"  {C_BOLD_CYAN}[/]{C_RESET}           Dateien nach Suchbegriff filtern",
                 f"  {C_BOLD_CYAN}[.]{C_RESET}           Versteckte Dateien ein- und ausblenden",
@@ -2305,13 +2305,16 @@ class EasyDateienApp:
                             needs_redraw = True
                     continue
                 elif key == "ENTER":
-                    if self.items:
+                    if self.items and 0 <= self.selected_idx < len(self.items):
                         item = self.items[self.selected_idx]
-                        if item.is_dir:
-                            self.change_directory(item.path)
-                        else:
-                            self.open_with_system(item)
-                        needs_redraw = True
+                        self.open_with_system(item)
+                    else:
+                        try:
+                            subprocess.Popen(f'open "{self.current_dir}"', shell=True, start_new_session=True)
+                            self.set_status(f"Im Finder geöffnet: {self.get_short_dir(self.current_dir)}", "success")
+                        except Exception as e:
+                            self.set_status(f"Fehler: {e}", "error")
+                    needs_redraw = True
                     continue
                 elif key == "r":
                     if self.items:
