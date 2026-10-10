@@ -1,8 +1,8 @@
 # EasyDateien
 
-**Minimalistischer, monochromer Terminal-Dateimanager für macOS mit flüssiger Pfeiltastennavigation.**
+**Minimalistischer, hocheffizienter Terminal-Dateimanager für macOS mit integrierter Konsole und flüssiger Tastaturnavigation.**
 
-EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autonomer Terminal-Dateimanager ohne externe Abhängigkeiten. Er wurde entwickelt für Anwender, die blitzschnell im Terminal durch Verzeichnisse navigieren, Dateien auswählen, verschieben, kopieren oder in `nano` bearbeiten möchten — ohne visuelle Reizüberflutung, ohne farbige ANSI-Escape-Verwirrung und ohne ressourcenhungrige Hintergrundprozesse.
+EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-Dateimanager ohne externe Python-Abhängigkeiten. Er wurde entwickelt für Anwender, die blitzschnell im Terminal durch Verzeichnisse navigieren, Dateien auswählen, verschieben, kopieren, suchen, komprimieren oder in Editoren bearbeiten möchten — kombiniert mit einem vollintegrierten Terminal-Panel für maximale Produktivität.
 
 > [!NOTE]
 > **Transparenzhinweis zur Inspiration:**  
@@ -12,105 +12,86 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
 
 ## Kernmerkmale
 
-- **Monochrome Typografie (ohne ANSI-Farben):**  
-  Verzichtet bewusst auf bunte ANSI-Farbcodes und setzt ausschließlich auf standardisierte typografische Auszeichnungen (Fettdruck und Kursivschrift) des jeweiligen Terminal-Farbschemas. Garantiert makellose Lesbarkeit auf sowohl hellen als auch dunklen Hintergründen.
+- **Integrierte Konsole & Terminal mit strikter Fokus-Isolation (`t`, `Tab`, `ESC`):**  
+  EasyDateien besitzt ein vollintegriertes Terminal-Panel mit konfigurierbarer Position (`[Unten]`, `[Rechts]` oder `[Links]`):
+  - **Strikte Fokus-Isolation:**  
+    - **Konsole im Fokus (`[KONSOLE]`):** Sämtliche Tastenbelegungen des Dateimanagers sind strikt inaktiv. Alle Buchstaben und Zeichen (`u`, `z`, `d`, `q`, `r`, `y`, `x`, `p`, `e`, `o`, `m`, `s`, etc.) fließen ohne Kollision direkt in die Befehlszeile.
+    - **`ESC`:** Schließt die Konsole deterministisch.
+    - **`Tab` / `Shift+Tab`:** Wechselt den Fokus zurück zum Dateimanager.
+    - **Konsole geöffnet, aber nicht im Fokus:** Sämtliche Tastenkürzel des Dateimanagers sind aktiv; es wird nichts versehentlich in die Konsole eingetippt. `Tab` setzt den Fokus zurück in die Konsole.
+  - **Zwei-Wege-Verzeichnissynchronisation:** Das Terminal operiert immer im aktuellen Verzeichnis des Dateimanagers. Navigiert man im Dateimanager, folgt das Terminal automatisch. Wechselt man im Terminal mit `cd ..` das Verzeichnis, folgt der Dateimanager sofort!
+  - **Automatische Dateilisten-Aktualisierung:** Sobald im Terminal Befehle wie `touch datei.txt`, `mkdir ordner`, `git checkout` oder `rm bild.png` ausgeführt werden, aktualisiert der Dateimanager die Ansicht unverzüglich.
+  - **Voller Terminalkomfort:** Befehlsverlauf (`↑`/`↓`), Zeilennavigation (`Pos1`/`Ende`, `Ctrl+A`/`Ctrl+E`, `Ctrl+W` zum Wortlöschen, `Ctrl+U`/`Ctrl+K` zum Zeilenlöschen, `Ctrl+L` zum Leeren), Bildlauf (`BildAuf`/`BildAb` oder Mausrad) und Schließen per `exit`, `quit` oder `Ctrl+D`.
+  - **Interaktive Vollbild-Programme:** Anwendungen wie `nano`, `vim`, `htop` oder `zsh` werden sauber im Vollbild ausgeführt und kehren ohne Bildartefakte zurück.
 
-- **Benutzeroberfläche im Yazi-Kasten-Design & vollständige Fensterfüllung:**  
-  Präziser, randloser Kastenaufbau mit echten abgerundeten Ecken (`╭`, `╮`, `╰`, `╯`) und Spaltentrennlinien (`┬`, `┴`, `│`), der sich nahtlos über die gesamte Terminalbreite und -höhe erstreckt. Durch die Nutzung des Alternate-Screen-Buffers (`\033[?1049h`) und strikte Zeilenbudgetierung ist ein Verrutschen oder Scrollen des Terminalfensters technisch ausgeschlossen.
+- **Elegantes Kasten-Design & vollständige Fensterfüllung:**  
+  Präziser Kastenaufbau mit echten abgerundeten Ecken (`╭`, `╮`, `╰`, `╯`) und Spaltentrennlinien (`┬`, `┴`, `│`), der sich nahtlos über die gesamte Terminalbreite und -höhe erstreckt. Durch die Nutzung des Alternate-Screen-Buffers (`\033[?1049h`) und strikte Zeilenbudgetierung ist ein Verrutschen oder Scrollen des Terminalfensters technisch ausgeschlossen.
+  - Trennlinienstile: `[Alle]`, `[Vertikal]`, `[Außen]`, `[Horizontal]` oder `[Keine]`.
 
 - **Volladaptive Größenanpassung (Window-Resize in Echtzeit):**  
-  Reagiert unverzüglich auf jede Veränderung der Terminalfenstergröße (`SIGWINCH`). Sämtliche Spaltenbreiten, Kastenränder und Statusangaben werden in Echtzeit berechnet. Zu lange Datei- und Ordnernamen werden dynamisch berechnet und am Ende sauber mit `...` abgeschnitten — kein Zeilenumbruch, kein Bildschirmflackern, selbst auf kleinsten Fenstern (< 40 Zeichen Breite oder < 6 Zeilen Höhe).
+  Reagiert unverzüglich auf jede Veränderung der Terminalfenstergröße (`SIGWINCH`). Sämtliche Spaltenbreiten, Kastenränder und Statusangaben werden in Echtzeit berechnet. Zu lange Datei- und Ordnernamen werden dynamisch berechnet und am Ende sauber mit `…` abgeschnitten — kein Zeilenumbruch, kein Bildschirmflackern.
 
 - **Dynamische Spaltenanzahl (Miller-Columns nach Yazi-Vorbild):**  
-  Die Spaltenansicht bleibt erhalten, bis das Fenster wirklich zu schmal wird:  
-  - **Breite Fenster (>= 68 Zeichen):** 3 Spalten (Eltern-Ordner links + Aktueller Ordner mittig + Kindordner bzw. Datei-Details rechts)  
-  - **Mittlere Fenster (38–67 Zeichen):** 2 Spalten (Eltern-Ordner links zur Orientierung + Aktueller Ordner rechts)  
-  - **Kompakte Fenster (< 38 Zeichen):** 1 Spalte (Fokus auf aktuellen Ordner)  
-  - Über das Konfigurationsmenü kann die Spaltendarstellung bei Bedarf ein- oder ausgeschaltet werden.
+  - **Breite Fenster (>= 70 Zeichen):** 3 Spalten (Eltern-Ordner links + Aktueller Ordner mittig + Kindordner bzw. Datei-Details & Vorschau rechts)  
+  - **Mittlere Fenster (40–69 Zeichen):** 2 Spalten (Eltern-Ordner links + Aktueller Ordner rechts)  
+  - **Kompakte Fenster (< 40 Zeichen):** 1 Spalte (Fokus auf aktuellen Ordner)  
+  - Die Spaltendarstellung kann über das Menü (`m`) jederzeit ein- oder ausgeschaltet werden.
 
 - **Vollständige Mausnavigation & Scrollen:**  
-  Durch das gesamte Programm kann flüssig mit der Maus navigiert werden:  
-  - **Mausrad nach oben / unten:** Flüssiges Scrollen durch die Dateiliste  
+  - **Mausrad nach oben / unten:** Flüssiges Scrollen durch die Dateiliste (bzw. Konsolenausgabe im Konsolenfokus)  
   - **Linksklick:** Element auswählen; Doppelklick öffnet die Datei bzw. betritt den Ordner  
   - **Klick auf linke Spalte:** Sofortiges Zurückwechseln in den übergeordneten Ordner  
   - **Klick auf rechte Spalte:** Kindordner betreten bzw. Datei-Details ansehen  
+  - **Klick in Konsolenbereich:** Setzt den Fokus direkt auf die Konsole  
   - **Rechtsklick:** Element markieren bzw. Markierung umschalten (`*`)  
-  - Im Konfigurationsmenü über `Maussteuerung: [Ein / Aus]` jederzeit anpassbar.
+  - Im Konfigurationsmenü über `Mausunterstützung: [Ein / Aus]` jederzeit anpassbar.
 
-- **Tastaturnavigation wie bei Yazi:**  
-  Flüssige Steuerung über Standard-Pfeiltasten (`↑`, `↓`, `←`, `→`) oder klassische Vim-Keys (`h`, `j`, `k`, `l`).  
-  - `↑` / `k`: Nach oben navigieren  
-  - `↓` / `j`: Nach unten navigieren  
-  - `Enter`: Datei oder Ordner mit macOS-Standardbefehl (`open`) öffnen (bei Ordnern öffnet sich der Finder)  
-  - `→` / `l`: In Ordner hineingehen (Navigation innerhalb von EasyDateien)  
-  - `e`: Datei direkt im Terminal-Editor `nano` bearbeiten  
-  - `o`: Datei direkt im Terminal-Editor `vim` bearbeiten  
-  - `←` / `h`: Zum übergeordneten Ordner zurückkehren  
-  - `g d`: Direkt zu `~/Downloads` springen  
-  - `g f`: Direkt zu `~/Documents` springen  
-  - `g h` / `~`: Direkt zum Benutzerordner (`~`) springen  
-  - `g i`: Interaktive Pfadeingabe mit Eingabezeile  
-  - `g p`: Zu im Zwischenspeicher liegendem Pfad navigieren  
-
-- **Editor-Integration (`nano` mit `e`, `vim` mit `o`):**  
-  Dateien können blitzschnell im gewünschten Editor geöffnet werden: Drücken der Taste `e` öffnet die markierte Datei sofort in `nano`, Taste `o` öffnet sie in `vim`. Nach Beenden des Editors kehrt man nahtlos ohne Flackern zurück.
-
-- **Vorschau bewusst deaktiviert:**  
-  Für maximale Darstellungsgeschwindigkeit und minimale Ablenkung ist die Dateivorschau dauerhaft deaktiviert; bei markierten Dateien werden in der rechten Spalte übersichtliche Metadaten (Größe, Datum, Zugriffsrechte) angezeigt.
+- **Umfassende Dateioperationen & Undo-System:**  
+  - **Suchen & Schnellfilter (`/`):** Interaktiver Live-Filter für die Dateiliste.  
+  - **Neu erstellen (`n`):** Neue Dateien oder Verzeichnisse anlegen (Ordner mit `/` am Ende).  
+  - **Umbenennen (`r`):** Inline-Umbenennen mit Sofort-Feedback.  
+  - **Papierkorb (`d`):** Sicheres Verschieben in den macOS-Papierkorb (`~/.Trash`) mit Sicherheitsabfrage.  
+  - **Rückgängig (`u`):** Mehrstufiges Undo-System für Erstellen, Umbenennen und Löschen.  
+  - **ZIP-Komprimierung (`z`):** Ausgewählte Dateien direkt als ZIP-Archiv komprimieren.  
+  - **Editor-Integration (`e` für Nano, `o` für Vim):** Dateien blitzschnell im gewünschten Editor bearbeiten.  
+  - **Systemweites Öffnen (`Enter`):** Öffnet Dateien mit der macOS-Standard-App oder Ordner direkt im Finder.
 
 - **Auswahldarstellung & macOS-Systemzwischenablage:**  
   - Auswahl: `*` (z. B. `▸ * datei.txt`)  
   - Ausschneiden (Cut): `×` (z. B. `  × datei.txt`)  
   - Kopieren: `+` (z. B. `  + datei.txt`)  
-  - `Space` / `v`: Datei oder Ordner markieren / abwählen (`*`) und Cursor eine Zeile weiterrücken  
+  - `Space` / `v`: Datei oder Ordner markieren / abwählen (`*`)  
   - `V` / `a`: Alle sichtbaren Dateien auf einmal markieren oder abwählen  
-  - `x`: Markierte Dateien (oder aktuelle Datei) zum **Ausschneiden** vormerken (`×`)  
-  - `y` / `c y`: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Die Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notes eingesetzt werden!  
-  - `p`: Vormerkung im aktuellen Verzeichnis **einsetzen / einfügen** (erkennt nahtlos auch zuvor im macOS Finder mit Cmd+C kopierte Dateien und verhindert Namenskollisionen automatisch)  
-  - `Y` / `X`: Zwischenspeicher leeren / Unyank (wie in Yazi)  
-  - `c z`: Ausgewählte Dateien direkt als ZIP-Archiv komprimieren (wie in Yazi via Zip-Plugin)  
-  - `c c`: Absoluten Pfad des Elements in die Zwischenablage kopieren  
+  - `x`: Markierte Dateien zum **Ausschneiden** vormerken (`×`)  
+  - `y` / `c`: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notizen eingefügt werden!  
+  - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien und verhindert Namenskollisionen automatisch)  
+  - `Y` / `X`: Zwischenspeicher leeren  
+  - `c c`: Absoluten Dateipfad in die Zwischenablage kopieren  
   - `c f`: Dateinamen in die Zwischenablage kopieren  
   - `c d`: Ordnerpfad in die Zwischenablage kopieren  
-  - `d`: Datei(en) mit Sicherheitsabfrage `(y/N)` in den **macOS-Papierkorb** verschieben (`trash`)  
-  - `g g` / `G`: Blitzschnell an den Anfang (`g g`) oder ans Ende (`G`) der Liste springen  
-  - `.` / `z`: Versteckte Dateien ein- oder ausblenden  
-  - `e`: Datei direkt in nano öffnen / bearbeiten  
-  - `o`: Datei direkt in vim öffnen / bearbeiten  
-  - `r`: Datei / Ordner umbenennen  
 
-- **Integrierte Konsole & Terminal (Taste `t`):**  
-  EasyDateien besitzt ein vollständig integriertes Terminal-Panel:
-  - **Umschalten mit `t`:** Blendet die Konsole blitzschnell ein oder aus.
-  - **Konfigurierbare Position:** `[Unten]`, `[Rechts]` oder `[Links]` — über das Menü (`m`) anpassbar.
-  - **Zwei-Wege-Verzeichnissynchronisation:** Das Terminal operiert immer im aktuellen Verzeichnis des Dateimanagers. Navigiert man im Dateimanager, folgt das Terminal automatisch. Wechselt man im Terminal mit `cd ..` das Verzeichnis, folgt der Dateimanager sofort!
-  - **Automatische Dateilisten-Aktualisierung:** Sobald im Terminal Befehle wie `touch datei.txt`, `mkdir ordner`, `git checkout` oder `rm bild.png` ausgeführt werden, aktualisiert der Dateimanager die Ansicht unverzüglich.
-  - **Fokus-Umschaltung:** Mit `Tab` oder `ESC` wechselt man bequem zwischen Dateimanager und Konsole hin und her. Ein Klick mit der Maus in den Konsolenbereich setzt den Fokus ebenfalls direkt auf die Konsole.
-  - **Voller Terminalkomfort:** Befehlsverlauf (`↑`/`↓`), Zeilennavigation (`Pos1`/`Ende`, `Ctrl+A`/`Ctrl+E`, `Ctrl+W`, `Ctrl+U`, `Ctrl+K`), Bildschirm leeren (`clear` / `Ctrl+L`) und Schließen per `exit`, `quit` oder `Ctrl+D`.
-  - **Interaktive Programme:** Vollbildanwendungen wie `nano`, `vim`, `htop` oder `zsh` werden sauber im Vollbild ausgeführt und kehren ohne Bildartefakte zurück.
+- **Gehe-zu-Schnellnavigation (`g`):**  
+  - `g d`: Downloads (`~/Downloads`)  
+  - `g f`: Dokumente (`~/Documents`)  
+  - `g h` / `~`: Benutzerordner (`~`)  
+  - `g t`: Papierkorb (`~/.Trash`)  
+  - `g i`: Pfad manuell eingeben  
+  - `g p`: Zu Pfad aus Zwischenablage springen  
 
-- **Interaktives Konfigurationsmenü (Taste `m`):**  
-  Wie bei SCHNELLSTART verfügt EasyDateien über einen vollwertigen interaktiven Konfigurator mit direktem In-Place-Toggeln ohne störende Untermenüs:
-  - **Tastenbelegungen bearbeiten:** Jede Aktion kann interaktiv auf eine neue Taste umbelegt oder mit Alternativtasten belegt werden.
-  - **Steuerung in Statusleiste:** `[Ein]` / `[Aus]` (zeigt die Tastensteuerung im Yazi-Badge-Design oder klassische Dateimetadaten).
-  - **Spaltendarstellung:** `[Ein]` / `[Aus]` (Ein = mehrspaltiges Miller-Layout, Aus = klassische 1-Spalten-Ansicht).
-  - **Maussteuerung:** `[Ein]` / `[Aus]` umschalten.
-  - **Trennungslinien:** `[Vertikal]`, `[Horizontal]`, `[Außen]` oder `[Keine]` direkt durchschalten.
-  - **Mit ESC beenden:** `[Ein]` / `[Aus]` (standardmäßig deaktiviert; ESC hebt stattdessen Auswahlen/Zwischenspeicher auf).
-  - **Versteckte Dateien anzeigen:** `[Ein]` / `[Aus]` umschalten.
-  - **Text- & Code-Editor festlegen:** z. B. `nano %s`, `vim %s`, `micro %s` oder `code %s`.
-  - **Standard-Öffner anpassen:** z. B. `open %s`.
-  - **Sortierkriterium & Sortierrichtung:** Direktes Durchschalten der Kriterien und Sortierreihenfolge.
-  - **Sortierkriterien anpassen:** Sortieren nach Änderungsdatum (`mtime`), Dateiname (`name`), Dateigröße (`size`) oder Dateiendung (`ext`).
-  - **Sortierrichtung:** `[Neueste/Z-A zuerst]` oder `[Älteste/A-Z zuerst]`.
-  - **Ordner immer zuerst anzeigen:** `[Ein]` / `[Aus]`.
-  - **Zurücksetzen auf Standardwerte:** Stellt die exakte Yazi-Referenzkonfiguration mit einem Klick wieder her.
+- **Interaktives Konfigurationsmenü (`m`):**  
+  Vollwertiger interaktiver Konfigurator mit direktem In-Place-Toggeln ohne störende Untermenüs:
+  - Trennungslinien-Stil (`alle`, `vertikal`, `außen`, `horizontal`, `keine`)
+  - Spalten-Layout (`Ein` / `Aus`)
+  - Mausunterstützung (`Ein` / `Aus`)
+  - Versteckte Dateien anzeigen (`Ein` / `Aus`)
+  - Tastenbelegungen ansehen und anpassen
+  - Auf Standardwerte zurücksetzen
 
 ---
 
 ## Installation
 
-### Manuelle Installation
+### Automatische Installation
 
 1. **Repository klonen:**
    ```bash
@@ -124,7 +105,7 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und vollständig autono
    ./install.sh
    ```
 
-Das Skript richtet das Konfigurationsverzeichnis unter `~/.config/easydateien/` ein und erstellt die Symlinks `easydateien` und `ed` in `~/.local/bin/`.
+Das Skript richtet das Konfigurationsverzeichnis unter `~/.config/easydateien/` ein, kompiliert das native macOS-Clipboard-Modul und erstellt die Symlinks `easydateien` und `ed` in `~/.local/bin/`.
 
 ---
 
@@ -156,54 +137,26 @@ Innerhalb des Programms genügt das Drücken der Taste `m`. Alternativ kann der 
 easydateien --config
 ```
 
-CLI-Optionen des Konfigurators:
-- `easydateien --config` : Interaktives Menü starten
-- `python3 ~/.config/easydateien/easydateien_konfigurator.py --list` : Aktuelle Konfiguration als JSON anzeigen
-- `python3 ~/.config/easydateien/easydateien_konfigurator.py --toggle-hidden` : Versteckte Dateien umschalten
-- `python3 ~/.config/easydateien/easydateien_konfigurator.py --reset` : Auf Werkseinstellungen zurücksetzen
-
 ---
 
 ## Konfigurationsdatei (`~/.config/easydateien/config.json`)
 
-Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
+Die Konfiguration wird im standardisierten JSON-Format gespeichert:
 
 ```json
 {
+  "divider_style": "alle",
+  "columns_enabled": true,
+  "esc_to_quit": false,
+  "mouse_support": true,
+  "show_console": false,
+  "console_position": "unten",
+  "text_editor": "nano %s",
+  "opener": "open %s",
   "sort_by": "mtime",
   "sort_reverse": true,
   "sort_dir_first": true,
-  "show_hidden": false,
-  "preview": false,
-  "columns_enabled": true,
-  "divider_style": "horizontal",
-  "esc_to_quit": false,
-  "text_editor": "nano %s",
-  "opener": "open %s",
-  "edit_opener": "open -e %s",
-  "finder_opener": "open -R %s",
-  "keybindings": {
-    "up": ["UP", "k"],
-    "down": ["DOWN", "j"],
-    "left": ["LEFT", "h"],
-    "right": ["RIGHT", "l"],
-    "open": ["ENTER"],
-    "select": ["SPACE", "v"],
-    "select_all": ["V", "a"],
-    "cut": ["x"],
-    "copy": ["y", "c"],
-    "paste": ["p"],
-    "trash": ["d"],
-    "toggle_hidden": [".", "z"],
-    "config_menu": ["m", "C"],
-    "goto_downloads": ["gd"],
-    "goto_documents": ["gf"],
-    "goto_home": ["gh", "~"],
-    "goto_interactive": ["gi"],
-    "goto_clipboard": ["gp"],
-    "zip": ["cz"],
-    "quit": ["q"]
-  }
+  "show_hidden": false
 }
 ```
 
@@ -211,39 +164,65 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
 
 ## Tastatur-Referenz
 
+### Dateimanager-Modus
+
 | Taste | Aktion |
 | :--- | :--- |
 | `↑` / `k` | Cursor nach oben bewegen |
 | `↓` / `j` | Cursor nach unten bewegen |
 | `→` / `l` | In Verzeichnis wechseln |
-| `←` / `h` | In übergeordneten Ordner wechseln |
+| `←` | In übergeordneten Ordner wechseln |
 | `Enter` | Element systemweit öffnen via `open` (Ordner öffnen im Finder) |
 | `Space` / `v` | Aktuelle Datei markieren / Markierung aufheben (`*`) |
 | `V` / `a` | Alle Dateien markieren bzw. Auswahl aufheben |
-| `y` / `c y` | Auswahl kopieren / yank (synchronisiert mit macOS-Clipboard für Finder/Mail/WhatsApp) |
-| `x` | Auswahl ausschneiden / cut (`×`) |
-| `p` | Zwischenspeicher im aktuellen Ordner einfügen (auch im Finder kopierte Dateien) |
-| `Y` / `X` | Zwischenspeicher leeren / Unyank |
-| `c z` | ZIP-Archiv aus markierten Dateien erstellen |
+| `n` | Neue Datei oder neuen Ordner erstellen (Ordner mit `/` am Ende) |
+| `r` | Datei / Ordner umbenennen |
+| `/` | Such- und Schnellfilter aktivieren |
+| `s` | Sortierkriterium umschalten (Datum, Name, Größe, Typ) |
+| `u` | Letzte Dateiaktion rückgängig machen (Undo für Erstellen, Umbenennen, Papierkorb) |
+| `z` | ZIP-Archiv aus Auswahl erstellen |
+| `y` / `c` | Auswahl in macOS-Zwischenablage kopieren (Finder-kompatibel) |
+| `x` | Auswahl ausschneiden (`×`) |
+| `p` | Zwischenablage im aktuellen Ordner einfügen |
+| `Y` / `X` | Zwischenspeicher leeren |
 | `c c` | Absoluten Dateipfad in die Zwischenablage kopieren |
 | `c f` | Dateinamen in die Zwischenablage kopieren |
 | `c d` | Ordnerpfad in die Zwischenablage kopieren |
-| `d` | In macOS-Papierkorb verschieben mit Bestätigung `(y/N)` |
-| `g g` / `Home` | An den Anfang der Dateiliste springen |
-| `G` / `End` | An das Ende der Dateiliste springen |
-| `.` / `z` | Versteckte Dateien ein- oder ausblenden |
-| `g d` | Gehe zu `~/Downloads` |
-| `g f` | Gehe zu `~/Documents` |
-| `g h` / `~` | Gehe zu `~` (Home) |
-| `g i` | Pfad manuell über Tastatur eingeben |
-| `g p` | Zu Pfad aus Zwischenablage springen |
-| `t` | Integrierte Konsole / Terminal anzeigen / ausblenden |
-| `Tab` | Fokus zwischen Dateimanager und Konsole wechseln |
+| `d` | In macOS-Papierkorb verschieben (mit Bestätigung) |
+| `e` | Datei in `nano` bearbeiten |
+| `o` | Datei in `vim` bearbeiten |
+| `.` | Versteckte Dateien ein- oder ausblenden |
+| `g` | Gehe-zu-Menü öffnen (`d` Downloads, `f` Dokumente, `h`/`~` Home, `t` Papierkorb, `i` Pfadeingabe, `p` Zwischenablage) |
+| `~` | Direkt zum Benutzerordner (`~`) springen |
+| `Home` | An den Anfang der Dateiliste springen |
+| `End` / `G` | An das Ende der Dateiliste springen |
+| `BildAuf` / `BildAb` | 10 Einträge nach oben / unten blättern |
+| `t` | Integrierte Konsole öffnen / schließen |
+| `Tab` | Fokus auf integrierte Konsole setzen (oder Konsole öffnen) |
 | `m` | Konfigurationsmenü öffnen |
-| `e` | Datei in nano bearbeiten |
-| `o` | Datei in vim bearbeiten |
-| `r` | Datei / Ordner umbenennen |
-| `q` / `ESC` | Programm beenden (bzw. Auswahl aufheben) |
+| `ESC` | Konsole schließen, Filter aufheben oder Auswahl/Zwischenspeicher leeren |
+| `q` | EasyDateien beenden |
+
+### Konsolen-Modus (Konsole im Fokus)
+
+| Taste | Aktion |
+| :--- | :--- |
+| **Alle Zeichen** | Direkte Befehlseingabe (alle Dateimanager-Kürzel sind isoliert deaktiviert) |
+| `Enter` | Eingegebenen Befehl im aktuellen Verzeichnis ausführen |
+| `Tab` / `Shift+Tab` | Fokus zurück auf Dateimanager wechseln |
+| `ESC` | Konsole schließen und Fokus auf Dateimanager setzen |
+| `↑` / `↓` | Befehlsverlauf durchblättern |
+| `←` / `→` | Cursor in der Befehlszeile nach links / rechts bewegen |
+| `Pos1` / `Ctrl+A` | Cursor an den Anfang der Zeile setzen |
+| `Ende` / `Ctrl+E` | Cursor an das Ende der Zeile setzen |
+| `Backspace` | Zeichen vor dem Cursor löschen |
+| `Delete` | Zeichen unter dem Cursor löschen |
+| `Ctrl+W` | Vorheriges Wort löschen |
+| `Ctrl+U` | Zeile bis zum Cursor löschen |
+| `Ctrl+K` | Zeile ab Cursor bis zum Ende löschen |
+| `Ctrl+L` | Terminal-Ausgabepuffer leeren (`clear`) |
+| `BildAuf` / `BildAb` | Konsolenausgabe nach oben / unten scrollen |
+| `Ctrl+C` / `Ctrl+D` | Aktuelle Eingabezeile verwerfen |
 
 ---
 
@@ -251,12 +230,12 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
 
 | Maus-Aktion | Funktion |
 | :--- | :--- |
-| **Mausrad nach oben / unten** | Cursor in der aktuellen Spalte nach oben / unten bewegen |
+| **Mausrad nach oben / unten** | Cursor in der Dateiliste bewegen bzw. Konsolenausgabe scrollen |
 | **Linksklick auf Eintrag** | Element auswählen |
-| **Linksklick auf ausgewähltes Element / Doppelklick** | Datei öffnen (Text/Code in `nano`, Medien via `open`) bzw. Ordner betreten |
+| **Doppelklick auf Eintrag** | Datei öffnen bzw. Ordner betreten |
 | **Linksklick auf linke Spalte** | Zum übergeordneten Ordner zurückkehren |
 | **Linksklick auf rechte Spalte** | Kindordner betreten bzw. Datei-Details öffnen |
-| **Linksklick auf Pfadzeile (oben)** | Interaktive Pfadeingabe (`goto`) starten |
+| **Linksklick in Konsole** | Fokus direkt auf die Konsole setzen |
 | **Rechtsklick auf Eintrag** | Element-Auswahl umschalten (`*`) |
 
 ---
@@ -266,12 +245,11 @@ Die Konfiguration wird in einem transparenten, sauberen JSON-Format gespeichert:
 Veröffentlicht unter der [MIT-Lizenz](LICENSE).  
 Copyright (c) 2026 Jonathan Klatchko.
 
-
 ---
 
 ## Note / Danksagung
 
-Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt ist stark von Yazi inspiriert, soll jedoch eine wesentlich simplere, minimalistische und monochrome Alternative bieten (und hat technisch nichts direkt mit Yazi zu tun).
+Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt ist stark von Yazi inspiriert, soll jedoch eine eigenständige, minimalistische und fokussierte Alternative bieten (und hat technisch nichts direkt mit Yazi zu tun).
 
 - Offizielle Website von Yazi: [https://yazi-rs.github.io](https://yazi-rs.github.io)
 - Yazi GitHub Repository: [https://github.com/sxyazi/yazi](https://github.com/sxyazi/yazi)
