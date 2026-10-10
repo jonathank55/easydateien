@@ -285,14 +285,13 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         start = 0
         view_rows = rows
 
-    b_c = C_BLUE
     lines = []
-    lines.append(f"{b_c}╭{'─' * inner}╮{C_RESET}")
+    lines.append(f"╭{'─' * inner}╮")
     t_styled = f"{C_BOLD_BLUE}{truncate_to_width(title, inner - 4)}{C_RESET}"
-    lines.append(f"{b_c}│{C_RESET}  {pad_to_width(t_styled, inner - 2)}{b_c}│{C_RESET}")
+    lines.append(f"│  {pad_to_width(t_styled, inner - 2)}│")
     s_styled = f"{C_GRAY}{truncate_to_width(subtitle, inner - 4)}{C_RESET}"
-    lines.append(f"{b_c}│{C_RESET}  {pad_to_width(s_styled, inner - 2)}{b_c}│{C_RESET}")
-    lines.append(f"{b_c}├{'─' * inner}┤{C_RESET}")
+    lines.append(f"│  {pad_to_width(s_styled, inner - 2)}│")
+    lines.append(f"├{'─' * inner}┤")
 
     for i, (key, label, tag) in enumerate(view_rows):
         actual_idx = start + i
@@ -313,13 +312,13 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         lbl_styled = f"{C_BOLD}{lbl_trunc}{C_RESET}" if is_sel else lbl_trunc
         pad_len = max(1, inner - 2 - str_width(pfx) - str_width(lbl_trunc) - str_width(tag))
         content_row = f" {pfx}{lbl_styled}{' ' * pad_len}{tag_colored} "
-        lines.append(f"{b_c}│{C_RESET}{pad_to_width(content_row, inner)}{b_c}│{C_RESET}")
+        lines.append(f"│{pad_to_width(content_row, inner)}│")
 
     empty_needed = avail_rows - len(view_rows)
     for _ in range(empty_needed):
-        lines.append(f"{b_c}│{C_RESET}{' ' * inner}{b_c}│{C_RESET}")
+        lines.append(f"│{' ' * inner}│")
 
-    lines.append(f"{b_c}├{'─' * inner}┤{C_RESET}")
+    lines.append(f"├{'─' * inner}┤")
     if isinstance(footer, (list, tuple)):
         f_items = list(footer)
     else:
@@ -330,8 +329,8 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         f_styled = f"{C_GRAY}{f_distributed}{C_RESET}"
     else:
         f_styled = ""
-    lines.append(f"{b_c}│{C_RESET}  {pad_to_width(f_styled, inner - 2)}{b_c}│{C_RESET}")
-    lines.append(f"{b_c}╰{'─' * inner}╯{C_RESET}")
+    lines.append(f"│  {pad_to_width(f_styled, inner - 2)}│")
+    lines.append(f"╰{'─' * inner}╯")
 
     out = []
     for r_i, l in enumerate(lines[:term_rows]):
