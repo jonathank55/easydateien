@@ -585,6 +585,8 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
             mapping = {
                 b"[A": "UP", b"[B": "DOWN", b"[C": "RIGHT", b"[D": "LEFT",
                 b"OA": "UP", b"OB": "DOWN", b"OC": "RIGHT", b"OD": "LEFT",
+                b"[1;2A": "PAGE_UP", b"[1;2B": "PAGE_DOWN",
+                b"[1;5A": "PAGE_UP", b"[1;5B": "PAGE_DOWN",
                 b"[H": "HOME", b"[F": "END", b"OH": "HOME", b"OF": "END",
                 b"[1~": "HOME", b"[4~": "END", b"[7~": "HOME", b"[8~": "END",
                 b"[5~": "PAGE_UP", b"[6~": "PAGE_DOWN", b"[3~": "DELETE",
@@ -686,8 +688,10 @@ class EasyDateienApp:
                 self._mouse_tracking_active = False
 
     def sync_mouse_state(self):
-        """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Konfigurationsstatus."""
-        should_enable = bool(self.config.get("mouse_support", True))
+        """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Fokus- und Konfigurationsstatus."""
+        # Wenn die Konsole geöffnet und fokussiert ist, wird Maus-Tracking freigegeben,
+        # damit Text im Terminal nativ mit der Maus markiert und kopiert werden kann.
+        should_enable = bool(self.config.get("mouse_support", True)) and not (self.show_console and self.console_focused)
         self.set_mouse_tracking(should_enable)
 
     def load_config(self) -> dict:
@@ -771,7 +775,7 @@ class EasyDateienApp:
                 subprocess.run(editor_cmd, shell=True)
             finally:
                 tty.setcbreak(fd, termios.TCSADRAIN)
-                sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
+                sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
                 self.sync_mouse_state()
                 sys.stdout.write("\033[2J\033[3J\033[H")
                 sys.stdout.flush()
@@ -1134,7 +1138,7 @@ class EasyDateienApp:
                 pass
             finally:
                 tty.setcbreak(fd, termios.TCSADRAIN)
-                sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
+                sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
                 self.sync_mouse_state()
                 sys.stdout.write("\033[2J\033[3J\033[H")
                 sys.stdout.flush()
@@ -2189,7 +2193,7 @@ class EasyDateienApp:
         except Exception:
             pass
         tty.setcbreak(fd, termios.TCSADRAIN)
-        sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
+        sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
         self.sync_mouse_state()
         sys.stdout.write("\033[2J\033[3J\033[H")
         sys.stdout.flush()
@@ -2207,7 +2211,7 @@ class EasyDateienApp:
 
                 if needs_redraw:
                     lines = self.build_screen(term_cols, term_rows)
-                    out_buf = []
+                    out_buf = [f"\033[1;{term_rows}r"]
                     for r_idx, l in enumerate(lines[:term_rows]):
                         out_buf.append(f"\033[{r_idx+1};1H\033[2K{l}")
                     sys.stdout.write("".join(out_buf))
@@ -2606,7 +2610,7 @@ class EasyDateienApp:
                     except Exception as e:
                         self.set_status(f"Fehler Konfigurator: {e}", "error")
                     tty.setcbreak(fd, termios.TCSADRAIN)
-                    sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP)
+                    sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
                     self.sync_mouse_state()
                     sys.stdout.write("\033[2J\033[3J\033[H")
                     sys.stdout.flush()
@@ -2627,7 +2631,7 @@ class EasyDateienApp:
                     break
         finally:
             self.set_mouse_tracking(False)
-            sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
+            sys.stdout.write("\033[?1007l\033[r" + ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
@@ -2647,7 +2651,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.2", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.3", help="Programmversion anzeigen")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
 
