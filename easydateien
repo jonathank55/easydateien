@@ -1375,8 +1375,10 @@ class EasyDateienApp:
         if active_console and console_pos in ("rechts", "links") and term_cols < 60:
             console_pos = "unten"
 
+        # Dynamische Berechnung der Konsolenhöhe - jetzt ohne feste Obergrenze
         if active_console and console_pos == "unten" and avail_total >= 4:
-            console_h = max(2, min(8, avail_total // 3))
+            # Mindestens 2 Zeilen, aber maximal verfügbarer Platz minus 1 für die Trennlinie
+            console_h = max(2, avail_total - 1)
             fm_rows = avail_total - console_h - 1
         else:
             console_h = 0
@@ -1834,9 +1836,10 @@ class EasyDateienApp:
                     left_b = f" {mode_lbl}  " if mode_lbl else " "
                     avail_ctrl = max(1, term_cols - str_width(left_b) - 1)
 
-                    opt_full = ["[Eingabe] Ausführen", "[TAB] Dateimanager", "[ESC] Schließen"]
-                    opt_short = ["[Eingabe]", "[TAB] Fokus", "[ESC] Schließen"]
-                    opt_mini = ["[TAB]", "[ESC]"]
+                    # Dynamische Optionen für die Hilfeleiste in der Konsole
+                    opt_full = ["[PG_UP/PG_DWN] Scrollen", "[TAB] Dateimanager", "[ESC] Schließen"]
+                    opt_short = ["[PG_UP/DWN] Scrollen", "[TAB] Fokus", "[ESC] Schließen"]
+                    opt_mini = ["[PG_UP/DWN]", "[TAB]", "[ESC]"]
                     opt_esc_only = ["[ESC] Schließen"]
                     opt_esc_mini = ["[ESC]"]
 
