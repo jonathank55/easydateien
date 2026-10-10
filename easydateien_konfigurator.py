@@ -153,6 +153,43 @@ def pad_to_width(text: str, width: int, align: str = "left") -> str:
     return (pad + text) if align == "right" else (text + pad)
 
 
+def distribute_options(items: list, avail_w: int) -> str:
+    """Verteilt Optionen gleichmäßig über die gegebene Spaltenbreite."""
+    if not items or avail_w <= 0:
+        return ""
+    clean_items = [it.strip() for it in items if it and it.strip()]
+    if not clean_items:
+        return ""
+    if len(clean_items) == 1:
+        it = clean_items[0]
+        it_w = str_width(it)
+        if it_w > avail_w:
+            return truncate_to_width(it, avail_w)
+        return it
+
+    total_items_w = sum(str_width(it) for it in clean_items)
+    num_gaps = len(clean_items) - 1
+
+    if total_items_w + num_gaps > avail_w:
+        combined = " ".join(clean_items)
+        if str_width(combined) <= avail_w:
+            return combined
+        return truncate_to_width(combined, avail_w)
+
+    remaining_spaces = avail_w - total_items_w
+    base_gap = remaining_spaces // num_gaps
+    extra = remaining_spaces % num_gaps
+
+    parts = []
+    for i, it in enumerate(clean_items):
+        parts.append(it)
+        if i < num_gaps:
+            gap_len = base_gap + (1 if i < extra else 0)
+            parts.append(" " * gap_len)
+
+    return "".join(parts)
+
+
 def load_config() -> dict:
     cfg = dict(DEFAULT_CONFIG)
     if os.path.exists(CONFIG_FILE):
@@ -283,7 +320,16 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         lines.append(f"{b_c}│{C_RESET}{' ' * inner}{b_c}│{C_RESET}")
 
     lines.append(f"{b_c}├{'─' * inner}┤{C_RESET}")
-    f_styled = f"{C_GRAY}{truncate_to_width(footer, inner - 4)}{C_RESET}"
+    if isinstance(footer, (list, tuple)):
+        f_items = list(footer)
+    else:
+        f_items = [x.strip() for x in re.split(r'\s{2,}', footer) if x.strip()] if footer else []
+    avail_f_w = max(1, inner - 4)
+    if f_items:
+        f_distributed = distribute_options(f_items, avail_f_w)
+        f_styled = f"{C_GRAY}{f_distributed}{C_RESET}"
+    else:
+        f_styled = ""
     lines.append(f"{b_c}│{C_RESET}  {pad_to_width(f_styled, inner - 2)}{b_c}│{C_RESET}")
     lines.append(f"{b_c}╰{'─' * inner}╯{C_RESET}")
 

@@ -181,6 +181,43 @@ def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tupl
     return res, box_w
 
 
+def distribute_options(items: List[str], avail_w: int) -> str:
+    """Verteilt Steuerungsoptionen gleichmäßig über die gegebene Breite (Space-Between / Justified)."""
+    if not items or avail_w <= 0:
+        return ""
+    clean_items = [it.strip() for it in items if it and it.strip()]
+    if not clean_items:
+        return ""
+    if len(clean_items) == 1:
+        it = clean_items[0]
+        it_w = str_width(it)
+        if it_w > avail_w:
+            return truncate_to_width(it, avail_w)
+        return it
+
+    total_items_w = sum(str_width(it) for it in clean_items)
+    num_gaps = len(clean_items) - 1
+
+    if total_items_w + num_gaps > avail_w:
+        combined = " ".join(clean_items)
+        if str_width(combined) <= avail_w:
+            return combined
+        return truncate_to_width(combined, avail_w)
+
+    remaining_spaces = avail_w - total_items_w
+    base_gap = remaining_spaces // num_gaps
+    extra = remaining_spaces % num_gaps
+
+    parts = []
+    for i, it in enumerate(clean_items):
+        parts.append(it)
+        if i < num_gaps:
+            gap_len = base_gap + (1 if i < extra else 0)
+            parts.append(" " * gap_len)
+
+    return "".join(parts)
+
+
 def format_size(size_bytes: int) -> str:
     """Formatiert Byte-Größen nach standardisierten Einheiten."""
     if size_bytes < 1024:
@@ -1480,96 +1517,169 @@ class EasyDateienApp:
         if has_status_bar:
             if self.active_dialog:
                 if self.active_dialog == "rename":
-                    badge = f"{C_BOLD_YELLOW}[UMBENENNEN]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_YELLOW}[NAME]{C_RESET}"
+                    badge = f"{C_YELLOW}[UMBENENNEN]{C_RESET}" if term_cols >= 45 else f"{C_YELLOW}[NAME]{C_RESET}"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    hints = f"  {C_GRAY}[Eingabe] Bestätigen  [ESC] Abbrechen{C_RESET}" if term_cols >= 60 else (f"  {C_GRAY}[ESC]{C_RESET}" if term_cols >= 35 else "")
-                    st_line = pad_to_width(f" {badge} {disp_inp}{hints}", term_cols)
+                    left_str = f" {badge} {disp_inp}"
+                    avail_h = max(1, term_cols - str_width(left_str) - 2)
+                    opts_full = ["[Eingabe] Bestätigen", "[ESC] Abbrechen"]
+                    opts_short = ["[Eingabe]", "[ESC]"]
+                    opts_mini = ["[ESC]"]
+                    if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
+                        hints = distribute_options(opts_full, avail_h)
+                    elif sum(str_width(x) for x in opts_short) + 1 <= avail_h:
+                        hints = distribute_options(opts_short, avail_h)
+                    elif str_width(opts_mini[0]) <= avail_h:
+                        hints = distribute_options(opts_mini, avail_h)
+                    else:
+                        hints = ""
+                    st_line = pad_to_width(f"{left_str}  {C_GRAY}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "new":
                     badge = f"{C_BOLD_GREEN}[NEU ERSTELLEN]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_GREEN}[NEU]{C_RESET}"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    hints = f"  {C_GRAY}[Eingabe] Erstellen  [ESC] Abbrechen{C_RESET}" if term_cols >= 60 else (f"  {C_GRAY}[ESC]{C_RESET}" if term_cols >= 35 else "")
-                    st_line = pad_to_width(f" {badge} {disp_inp}{hints}", term_cols)
+                    left_str = f" {badge} {disp_inp}"
+                    avail_h = max(1, term_cols - str_width(left_str) - 2)
+                    opts_full = ["[Eingabe] Erstellen", "[ESC] Abbrechen"]
+                    opts_short = ["[Eingabe]", "[ESC]"]
+                    opts_mini = ["[ESC]"]
+                    if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
+                        hints = distribute_options(opts_full, avail_h)
+                    elif sum(str_width(x) for x in opts_short) + 1 <= avail_h:
+                        hints = distribute_options(opts_short, avail_h)
+                    elif str_width(opts_mini[0]) <= avail_h:
+                        hints = distribute_options(opts_mini, avail_h)
+                    else:
+                        hints = ""
+                    st_line = pad_to_width(f"{left_str}  {C_GRAY}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "search":
                     badge = f"{C_BOLD_CYAN}[FILTER / SUCHE]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_CYAN}[FILTER]{C_RESET}"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    hints = f"  {C_GRAY}[Eingabe] Filtern  [ESC] Abbrechen{C_RESET}" if term_cols >= 60 else (f"  {C_GRAY}[ESC]{C_RESET}" if term_cols >= 35 else "")
-                    st_line = pad_to_width(f" {badge} {disp_inp}{hints}", term_cols)
+                    left_str = f" {badge} {disp_inp}"
+                    avail_h = max(1, term_cols - str_width(left_str) - 2)
+                    opts_full = ["[Eingabe] Filtern", "[ESC] Abbrechen"]
+                    opts_short = ["[Eingabe]", "[ESC]"]
+                    opts_mini = ["[ESC]"]
+                    if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
+                        hints = distribute_options(opts_full, avail_h)
+                    elif sum(str_width(x) for x in opts_short) + 1 <= avail_h:
+                        hints = distribute_options(opts_short, avail_h)
+                    elif str_width(opts_mini[0]) <= avail_h:
+                        hints = distribute_options(opts_mini, avail_h)
+                    else:
+                        hints = ""
+                    st_line = pad_to_width(f"{left_str}  {C_GRAY}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "goto_path":
                     badge = f"{C_BOLD_BLUE}[GEHE ZU PFAD]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_BLUE}[PFAD]{C_RESET}"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    hints = f"  {C_GRAY}[Eingabe] Wechseln  [ESC] Abbrechen{C_RESET}" if term_cols >= 60 else (f"  {C_GRAY}[ESC]{C_RESET}" if term_cols >= 35 else "")
-                    st_line = pad_to_width(f" {badge} {disp_inp}{hints}", term_cols)
+                    left_str = f" {badge} {disp_inp}"
+                    avail_h = max(1, term_cols - str_width(left_str) - 2)
+                    opts_full = ["[Eingabe] Wechseln", "[ESC] Abbrechen"]
+                    opts_short = ["[Eingabe]", "[ESC]"]
+                    opts_mini = ["[ESC]"]
+                    if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
+                        hints = distribute_options(opts_full, avail_h)
+                    elif sum(str_width(x) for x in opts_short) + 1 <= avail_h:
+                        hints = distribute_options(opts_short, avail_h)
+                    elif str_width(opts_mini[0]) <= avail_h:
+                        hints = distribute_options(opts_mini, avail_h)
+                    else:
+                        hints = ""
+                    st_line = pad_to_width(f"{left_str}  {C_GRAY}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "trash_confirm":
                     targets_c = len(self.selected_paths) if self.selected_paths else 1
                     t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
                     badge = f"{C_BOLD_RED}[PAPIERKORB]{C_RESET}" if term_cols >= 40 else f"{C_BOLD_RED}[LÖSCHEN]{C_RESET}"
-                    suffix = f" {C_YELLOW}[j/n]{C_RESET}"
-                    suffix_w = str_width(" [j/n]")
-                    badge_w = 1 + str_width(badge) + 1
-                    action_w = str_width(" löschen?")
-                    avail_name = term_cols - (badge_w + action_w + suffix_w)
-                    if avail_name >= 4:
-                        t_trunc = truncate_to_width(t_name, avail_name)
-                        content = f" {badge} {t_trunc} löschen?{suffix}"
-                    elif term_cols >= (badge_w + action_w + suffix_w):
-                        content = f" {badge} löschen?{suffix}"
-                    elif term_cols >= (badge_w + suffix_w):
-                        content = f" {badge}{suffix}"
+                    opts_full = ["[j] Löschen", "[n / ESC] Abbrechen"]
+                    opts_short = ["[j] Ja", "[n] Nein"]
+                    opts_mini = ["[j/n]"]
+                    min_q_w = str_width(f" {badge} ") + 8
+                    avail_for_opts = max(0, term_cols - min_q_w)
+                    if sum(str_width(x) for x in opts_full) + 2 <= avail_for_opts:
+                        chosen_opts = opts_full
+                    elif sum(str_width(x) for x in opts_short) + 1 <= avail_for_opts:
+                        chosen_opts = opts_short
+                    elif str_width(opts_mini[0]) <= avail_for_opts:
+                        chosen_opts = opts_mini
                     else:
-                        content = f" {suffix.strip()}"
-                    st_line = pad_to_width(content, term_cols)
+                        chosen_opts = []
+                    opts_w = sum(str_width(x) for x in chosen_opts) + max(0, len(chosen_opts) - 1) if chosen_opts else 0
+                    avail_name = max(1, term_cols - str_width(badge) - 12 - opts_w)
+                    t_trunc = truncate_to_width(t_name, avail_name)
+                    left_str = f" {badge} {t_trunc} löschen?"
+                    avail_right = max(1, term_cols - str_width(left_str) - 1)
+                    if chosen_opts:
+                        hints = distribute_options(chosen_opts, avail_right)
+                        st_line = pad_to_width(f"{left_str} {C_YELLOW}{hints}{C_RESET}", term_cols)
+                    else:
+                        st_line = pad_to_width(left_str, term_cols)
                 elif self.active_dialog == "goto_menu":
-                    if term_cols >= 48:
-                        st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}  {C_GRAY}Taste wählen oder [ESC / q] Abbrechen{C_RESET}", term_cols)
-                    elif term_cols >= 26:
-                        st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}  {C_GRAY}[ESC / q] Abbrechen{C_RESET}", term_cols)
+                    badge = f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET} "
+                    avail_r = max(1, term_cols - str_width(badge) - 1)
+                    opts_full = ["Taste im Menü wählen", "[ESC / q] Abbrechen"]
+                    opts_short = ["[ESC / q] Abbrechen"]
+                    opts_mini = ["[ESC]"]
+                    if sum(str_width(x) for x in opts_full) + 2 <= avail_r:
+                        hints = distribute_options(opts_full, avail_r)
+                    elif str_width(opts_short[0]) <= avail_r:
+                        hints = distribute_options(opts_short, avail_r)
+                    elif str_width(opts_mini[0]) <= avail_r:
+                        hints = distribute_options(opts_mini, avail_r)
                     else:
-                        st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}", term_cols)
+                        hints = ""
+                    st_line = pad_to_width(f"{badge}{C_GRAY}{hints}{C_RESET}" if hints else badge, term_cols)
                 elif self.active_dialog == "help_menu":
-                    if term_cols >= 48:
-                        st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}  {C_GRAY}[ESC / q] Schließen  [↑↓] Scrollen{C_RESET}", term_cols)
-                    elif term_cols >= 26:
-                        st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}  {C_GRAY}[ESC / q] Schließen{C_RESET}", term_cols)
+                    badge = f" {C_BOLD_BLUE}[HILFE]{C_RESET} "
+                    avail_r = max(1, term_cols - str_width(badge) - 1)
+                    opts_full = ["[↑↓] Scrollen", "[ESC / q] Schließen"]
+                    opts_short = ["[ESC / q] Schließen"]
+                    opts_mini = ["[ESC]"]
+                    if sum(str_width(x) for x in opts_full) + 2 <= avail_r:
+                        hints = distribute_options(opts_full, avail_r)
+                    elif str_width(opts_short[0]) <= avail_r:
+                        hints = distribute_options(opts_short, avail_r)
+                    elif str_width(opts_mini[0]) <= avail_r:
+                        hints = distribute_options(opts_mini, avail_r)
                     else:
-                        st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}", term_cols)
+                        hints = ""
+                    st_line = pad_to_width(f"{badge}{C_GRAY}{hints}{C_RESET}" if hints else badge, term_cols)
                 else:
                     st_line = " " * term_cols
             else:
                 if self.show_console and self.console_focused:
                     mode_lbl = f"{C_BOLD_GREEN}[KONSOLE]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_GREEN}[KONS]{C_RESET}"
                     left_b = f" {mode_lbl}  " if mode_lbl else " "
-                    avail_ctrl = max(1, term_cols - str_width(left_b))
+                    avail_ctrl = max(1, term_cols - str_width(left_b) - 1)
 
-                    opt_full = "[←↑↓→] Navigieren  [ESC] Beenden"
-                    opt_compact = "[←↑↓→] Navigieren [ESC] Beenden"
-                    opt_short = "[←↑↓→] Nav  [ESC] Beenden"
-                    opt_short_c = "[←↑↓→] Nav [ESC] Beenden"
-                    opt_esc_only = "[ESC] Beenden"
-                    opt_esc_mini = "[ESC]"
+                    opt_full = ["[←↑↓→] Navigieren", "[ESC] Beenden"]
+                    opt_short = ["[←↑↓→] Nav", "[ESC] Beenden"]
+                    opt_mini = ["[←↑↓→] Nav", "[ESC]"]
+                    opt_esc_only = ["[ESC] Beenden"]
+                    opt_esc_mini = ["[ESC]"]
 
-                    if str_width(opt_full) <= avail_ctrl:
-                        ctrl = f"{C_GRAY}{opt_full}{C_RESET}"
-                    elif str_width(opt_compact) <= avail_ctrl:
-                        ctrl = f"{C_GRAY}{opt_compact}{C_RESET}"
-                    elif str_width(opt_short) <= avail_ctrl:
-                        ctrl = f"{C_GRAY}{opt_short}{C_RESET}"
-                    elif str_width(opt_short_c) <= avail_ctrl:
-                        ctrl = f"{C_GRAY}{opt_short_c}{C_RESET}"
-                    elif str_width(opt_esc_only) <= avail_ctrl:
-                        ctrl = f"{C_GRAY}{opt_esc_only}{C_RESET}"
-                    elif str_width(opt_esc_mini) <= avail_ctrl:
-                        ctrl = f"{C_GRAY}{opt_esc_mini}{C_RESET}"
+                    w_full = sum(str_width(it) for it in opt_full)
+                    w_short = sum(str_width(it) for it in opt_short)
+                    w_mini = sum(str_width(it) for it in opt_mini)
+
+                    if w_full + 1 <= avail_ctrl:
+                        ctrl = distribute_options(opt_full, avail_ctrl)
+                    elif w_short + 1 <= avail_ctrl:
+                        ctrl = distribute_options(opt_short, avail_ctrl)
+                    elif w_mini + 1 <= avail_ctrl:
+                        ctrl = distribute_options(opt_mini, avail_ctrl)
+                    elif str_width(opt_esc_only[0]) <= avail_ctrl:
+                        ctrl = distribute_options(opt_esc_only, avail_ctrl)
+                    elif str_width(opt_esc_mini[0]) <= avail_ctrl:
+                        ctrl = distribute_options(opt_esc_mini, avail_ctrl)
                     else:
                         ctrl = ""
-                    st_line = pad_to_width(f"{left_b}{ctrl}", term_cols)
+                    st_line = pad_to_width(f"{left_b}{C_GRAY}{ctrl}{C_RESET}" if ctrl else left_b, term_cols)
                 else:
                     if self.selected_paths:
                         c = len(self.selected_paths)
@@ -1584,7 +1694,7 @@ class EasyDateienApp:
                         mode_lbl = ""
 
                     left_b = f" {mode_lbl}  " if mode_lbl else " "
-                    avail_ctrl = max(1, term_cols - str_width(left_b))
+                    avail_ctrl = max(1, term_cols - str_width(left_b) - (1 if mode_lbl else 2))
                     ctrl = self.build_dynamic_controls(avail_ctrl)
                     st_line = pad_to_width(f"{left_b}{ctrl}", term_cols)
 
@@ -1673,50 +1783,39 @@ class EasyDateienApp:
         return all_lines[:term_rows]
 
     def build_dynamic_controls(self, avail_w: int) -> str:
-        # Stufe 1: Vollständig mit Konsole, Menü und Beenden bei ausreichend Platz
-        full_all = "[←↑↓→] Navigieren  [h] Hilfe  [t] Konsole  [m] Menü  [q] Beenden"
-        if str_width(full_all) <= avail_w:
-            return f"{C_GRAY}{full_all}{C_RESET}"
+        # Stufe 1: Vollständig mit 5 Optionen (Navigieren, Hilfe, Konsole, Menü, Beenden)
+        items_full = ["[←↑↓→] Navigieren", "[h] Hilfe", "[t] Konsole", "[m] Menü", "[q] Beenden"]
+        w_full = sum(str_width(it) for it in items_full)
+        if w_full + (len(items_full) - 1) * 1 <= avail_w:
+            return f"{C_GRAY}{distribute_options(items_full, avail_w)}{C_RESET}"
 
-        full_all_compact = "[←↑↓→] Navigieren [h] Hilfe [t] Konsole [m] Menü [q] Beenden"
-        if str_width(full_all_compact) <= avail_w:
-            return f"{C_GRAY}{full_all_compact}{C_RESET}"
+        # Stufe 2: 3 Optionen (Navigieren, Hilfe, Beenden)
+        items_3 = ["[←↑↓→] Navigieren", "[h] Hilfe", "[q] Beenden"]
+        w_3 = sum(str_width(it) for it in items_3)
+        if w_3 + (len(items_3) - 1) * 1 <= avail_w:
+            return f"{C_GRAY}{distribute_options(items_3, avail_w)}{C_RESET}"
 
-        # Stufe 2: Navigation, Hilfe, Beenden
-        nav_help_quit = "[←↑↓→] Navigieren  [h] Hilfe  [q] Beenden"
-        if str_width(nav_help_quit) <= avail_w:
-            return f"{C_GRAY}{nav_help_quit}{C_RESET}"
+        # Stufe 3: 2 Optionen (Navigieren, Hilfe)
+        items_2 = ["[←↑↓→] Navigieren", "[h] Hilfe"]
+        w_2 = sum(str_width(it) for it in items_2)
+        if w_2 + (len(items_2) - 1) * 1 <= avail_w:
+            return f"{C_GRAY}{distribute_options(items_2, avail_w)}{C_RESET}"
 
-        nav_help_quit_c = "[←↑↓→] Navigieren [h] Hilfe [q] Beenden"
-        if str_width(nav_help_quit_c) <= avail_w:
-            return f"{C_GRAY}{nav_help_quit_c}{C_RESET}"
+        # Stufe 4: Bei wenig Platz: "Nav" statt "Navigieren"
+        items_short = ["[←↑↓→] Nav", "[h] Hilfe"]
+        w_short = sum(str_width(it) for it in items_short)
+        if w_short + (len(items_short) - 1) * 1 <= avail_w:
+            return f"{C_GRAY}{distribute_options(items_short, avail_w)}{C_RESET}"
 
-        # Stufe 3: Navigation und Hilfe
-        nav_help = "[←↑↓→] Navigieren  [h] Hilfe"
-        if str_width(nav_help) <= avail_w:
-            return f"{C_GRAY}{nav_help}{C_RESET}"
+        # Stufe 5: Nur Navigation kurz
+        items_nav = ["[←↑↓→] Nav"]
+        if str_width(items_nav[0]) <= avail_w:
+            return f"{C_GRAY}{distribute_options(items_nav, avail_w)}{C_RESET}"
 
-        nav_help_compact = "[←↑↓→] Navigieren [h] Hilfe"
-        if str_width(nav_help_compact) <= avail_w:
-            return f"{C_GRAY}{nav_help_compact}{C_RESET}"
-
-        # Stufe 4: Bei richtig kleinem Platz: "Nav" statt "Navigieren"
-        short_nav_help = "[←↑↓→] Nav  [h] Hilfe"
-        if str_width(short_nav_help) <= avail_w:
-            return f"{C_GRAY}{short_nav_help}{C_RESET}"
-
-        short_nav_help_c = "[←↑↓→] Nav [h] Hilfe"
-        if str_width(short_nav_help_c) <= avail_w:
-            return f"{C_GRAY}{short_nav_help_c}{C_RESET}"
-
-        # Stufe 5: Extrem eng
-        only_nav = "[←↑↓→] Nav"
-        if str_width(only_nav) <= avail_w:
-            return f"{C_GRAY}{only_nav}{C_RESET}"
-
-        only_arrows = "[←↑↓→]"
-        if str_width(only_arrows) <= avail_w:
-            return f"{C_GRAY}{only_arrows}{C_RESET}"
+        # Stufe 6: Nur Pfeilsymbole
+        items_arrows = ["[←↑↓→]"]
+        if str_width(items_arrows[0]) <= avail_w:
+            return f"{C_GRAY}{distribute_options(items_arrows, avail_w)}{C_RESET}"
 
         return f"{C_GRAY}Nav{C_RESET}"[:max(0, avail_w)]
 
