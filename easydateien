@@ -112,6 +112,75 @@ def pad_to_width(text: str, width: int, align: str = "left") -> str:
     return (pad + text) if align == "right" else (text + pad)
 
 
+def replace_ansi_range(base_line: str, start_col: int, replacement: str, repl_width: int, total_width: int) -> str:
+    """Ersetzt in base_line den sichtbaren Spaltenbereich [start_col, start_col + repl_width] durch replacement."""
+    clean_base = ANSI_ESCAPE_RE.sub("", base_line)
+    base_w = str_width(clean_base)
+    if base_w < total_width:
+        base_line = pad_to_width(base_line, total_width)
+
+    left_chars = []
+    right_chars = []
+    cur_w = 0
+    end_col = start_col + repl_width
+
+    i = 0
+    n = len(base_line)
+    while i < n:
+        if base_line[i] == "\x1b":
+            m = ANSI_ESCAPE_RE.match(base_line, i)
+            if m:
+                esc = m.group(0)
+                if cur_w < start_col:
+                    left_chars.append(esc)
+                elif cur_w >= end_col:
+                    right_chars.append(esc)
+                i = m.end()
+                continue
+        c = base_line[i]
+        cw = char_width(c)
+        if cur_w + cw <= start_col:
+            left_chars.append(c)
+        elif cur_w >= end_col:
+            right_chars.append(c)
+        elif cur_w < start_col and cur_w + cw > start_col:
+            left_chars.append(" " * (start_col - cur_w))
+        cur_w += cw
+        i += 1
+
+    left_str = "".join(left_chars)
+    right_str = "".join(right_chars)
+
+    left_pad = pad_to_width(left_str, start_col)
+    right_w = max(0, total_width - end_col)
+    right_pad = pad_to_width(right_str, right_w, align="right") if right_str else (" " * right_w)
+
+    return f"{left_pad}{replacement}{C_RESET}{right_pad}"
+
+
+def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tuple[List[str], int]:
+    """Baut ein standardisiertes Vordergrund-Modal im Yazi-Stil mit blauem Rahmen."""
+    inner_w = max(20, target_w - 6)
+    box_w = inner_w + 6
+    t_clean = ANSI_ESCAPE_RE.sub("", title)
+    t_w = str_width(t_clean)
+    avail_d = max(2, box_w - 2 - t_w - 2)
+    left_d = 2
+    right_d = avail_d - left_d
+    dash_l = "─" * left_d
+    dash_r = "─" * right_d
+    dash_b = "─" * (box_w - 2)
+    top_line = f"{C_BOLD_BLUE}╭{dash_l} {C_BOLD_CYAN}{title}{C_RESET} {C_BOLD_BLUE}{dash_r}╮{C_RESET}"
+    bot_line = f"{C_BOLD_BLUE}╰{dash_b}╯{C_RESET}"
+
+    res = [top_line]
+    for l in content_lines:
+        padded = pad_to_width(l, inner_w)
+        res.append(f"{C_BOLD_BLUE}│{C_RESET}  {padded}  {C_BOLD_BLUE}│{C_RESET}")
+    res.append(bot_line)
+    return res, box_w
+
+
 def format_size(size_bytes: int) -> str:
     """Formatiert Byte-Größen nach standardisierten Einheiten."""
     if size_bytes < 1024:
@@ -539,6 +608,7 @@ class EasyDateienApp:
         self.dialog_input: str = ""
         self.dialog_cursor: int = 0
         self.dialog_target_item: Optional[FileEntry] = None
+        self.help_scroll_offset: int = 0
 
         self.last_click_time: float = 0.0
         self.last_click_idx: Optional[int] = None
@@ -1454,9 +1524,9 @@ class EasyDateienApp:
                         content = f" {suffix.strip()}"
                     st_line = pad_to_width(content, term_cols)
                 elif self.active_dialog == "goto_menu":
-                    prompt_lbl = f"{C_BOLD_BLUE}[GEHE ZU]{C_RESET} "
-                    opts = f"{C_BOLD}[d]{C_RESET} Downloads  {C_BOLD}[f]{C_RESET} Dokumente  {C_BOLD}[h]{C_RESET} Benutzerordner  {C_BOLD}[t]{C_RESET} Papierkorb  {C_BOLD}[i]{C_RESET} Pfadeingabe  {C_BOLD}[p]{C_RESET} Zwischenablage  {C_GRAY}[ESC] Abbrechen{C_RESET}"
-                    st_line = pad_to_width(f" {prompt_lbl}{opts}", term_cols)
+                    st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}  {C_GRAY}Taste wählen oder [ESC] Abbrechen{C_RESET}", term_cols)
+                elif self.active_dialog == "help_menu":
+                    st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}  {C_GRAY}[ESC] Schließen  [↑↓] Scrollen{C_RESET}", term_cols)
                 else:
                     st_line = " " * term_cols
             else:
@@ -1478,6 +1548,88 @@ class EasyDateienApp:
 
             all_lines.append(st_line)
 
+        # Modale Vordergrund-Menüs im Yazi-Stil zentriert überlagern
+        if self.active_dialog == "goto_menu":
+            goto_items = [
+                f"{C_BOLD_CYAN}[d]{C_RESET}  Downloads",
+                f"{C_BOLD_CYAN}[f]{C_RESET}  Dokumente",
+                f"{C_BOLD_CYAN}[h]{C_RESET}  Benutzerordner (~)",
+                f"{C_BOLD_CYAN}[t]{C_RESET}  Papierkorb",
+                f"{C_BOLD_CYAN}[i]{C_RESET}  Pfad manuell eingeben",
+                f"{C_BOLD_CYAN}[p]{C_RESET}  Pfad aus Zwischenablage",
+                "",
+                f"{C_GRAY}[ESC] Abbrechen{C_RESET}",
+            ]
+            target_w = min(term_cols - 4, 46)
+            if target_w >= 24 and term_rows >= 8:
+                box_lines, box_w = build_modal_box("Gehe zu [g]", goto_items, target_w)
+                box_h = len(box_lines)
+                start_x = max(0, (term_cols - box_w) // 2)
+                min_y = 2 if has_top_border else 1
+                max_y = max(min_y, (term_rows - (2 if has_bottom_border else 1)) - box_h)
+                start_y = max(min_y, min(max_y, (term_rows - box_h) // 2))
+                for b_idx, bl in enumerate(box_lines):
+                    r_pos = start_y + b_idx
+                    if 0 <= r_pos < len(all_lines):
+                        all_lines[r_pos] = replace_ansi_range(all_lines[r_pos], start_x, bl, box_w, term_cols)
+
+        elif self.active_dialog == "help_menu":
+            help_items = [
+                f"{C_BOLD_BLUE}Navigation & Ansicht{C_RESET}",
+                f"  {C_BOLD_CYAN}[←↑↓→]{C_RESET}        In Ordnern und Listen navigieren",
+                f"  {C_BOLD_CYAN}[Eingabe]{C_RESET}     Datei öffnen oder Verzeichnis betreten",
+                f"  {C_BOLD_CYAN}[g]{C_RESET}           Gehe zu (Schnellzugriff auf Verzeichnisse)",
+                f"  {C_BOLD_CYAN}[/]{C_RESET}           Dateien nach Suchbegriff filtern",
+                f"  {C_BOLD_CYAN}[.]{C_RESET}           Versteckte Dateien ein- und ausblenden",
+                f"  {C_BOLD_CYAN}[s]{C_RESET}           Sortierung wechseln",
+                f"  {C_BOLD_CYAN}[t]{C_RESET}           Integrierte Terminal-Konsole öffnen",
+                "",
+                f"{C_BOLD_BLUE}Dateioperationen{C_RESET}",
+                f"  {C_BOLD_CYAN}[Leertaste]{C_RESET}   Datei auswählen oder Markierung aufheben",
+                f"  {C_BOLD_CYAN}[a]{C_RESET}           Alle sichtbaren Dateien auswählen",
+                f"  {C_BOLD_CYAN}[n]{C_RESET}           Neue Datei oder neuen Ordner erstellen",
+                f"  {C_BOLD_CYAN}[r]{C_RESET}           Ausgewähltes Element umbenennen",
+                f"  {C_BOLD_CYAN}[d]{C_RESET}           In den Papierkorb verschieben",
+                f"  {C_BOLD_CYAN}[y]{C_RESET}           Ausgewählte Dateien kopieren",
+                f"  {C_BOLD_CYAN}[x]{C_RESET}           Ausgewählte Dateien ausschneiden",
+                f"  {C_BOLD_CYAN}[p]{C_RESET}           Zwischenablage in aktuellen Ordner einfügen",
+                f"  {C_BOLD_CYAN}[z]{C_RESET}           ZIP-Archiv aus Auswahl erstellen",
+                f"  {C_BOLD_CYAN}[u]{C_RESET}           Letzte Dateiaktion rückgängig machen",
+                f"  {C_BOLD_CYAN}[e]{C_RESET}           In Nano bearbeiten",
+                f"  {C_BOLD_CYAN}[o]{C_RESET}           In Vim bearbeiten",
+                "",
+                f"{C_BOLD_BLUE}Verwaltung{C_RESET}",
+                f"  {C_BOLD_CYAN}[m]{C_RESET}           Einstellungen und Farbschema öffnen",
+                f"  {C_BOLD_CYAN}[q]{C_RESET}           EasyDateien beenden",
+                "",
+                f"{C_GRAY}[ESC] Schließen{C_RESET}",
+            ]
+            border_overhead = (1 if has_top_border else 0) + (1 if has_bottom_border else 0) + (1 if has_status_bar else 0) + 1
+            max_box_h = max(6, term_rows - border_overhead - 2)
+            target_box_w = min(term_cols - 4, 72)
+
+            if len(help_items) + 2 <= max_box_h:
+                visible_items = help_items
+                title_extra = ""
+            else:
+                avail_content_h = max_box_h - 2
+                max_scroll = max(0, len(help_items) - avail_content_h)
+                self.help_scroll_offset = max(0, min(max_scroll, self.help_scroll_offset))
+                visible_items = help_items[self.help_scroll_offset : self.help_scroll_offset + avail_content_h]
+                title_extra = f" ({self.help_scroll_offset + 1}-{min(len(help_items), self.help_scroll_offset + avail_content_h)}/{len(help_items)})"
+
+            if target_box_w >= 28 and term_rows >= 6:
+                box_lines, box_w = build_modal_box(f"Navigationshilfe [h]{title_extra}", visible_items, target_box_w)
+                box_h = len(box_lines)
+                start_x = max(0, (term_cols - box_w) // 2)
+                min_y = 2 if has_top_border else 1
+                max_y = max(min_y, (term_rows - (2 if has_bottom_border else 1)) - box_h)
+                start_y = max(min_y, min(max_y, (term_rows - box_h) // 2))
+                for b_idx, bl in enumerate(box_lines):
+                    r_pos = start_y + b_idx
+                    if 0 <= r_pos < len(all_lines):
+                        all_lines[r_pos] = replace_ansi_range(all_lines[r_pos], start_x, bl, box_w, term_cols)
+
         return all_lines[:term_rows]
 
     def build_dynamic_controls(self, avail_w: int) -> str:
@@ -1486,7 +1638,7 @@ class EasyDateienApp:
         has_sel = bool(self.selected_paths)
         has_clip = bool(self.clipboard_paths)
 
-        core: List[Tuple[str, str]] = [("[←↑↓→]", "Nav")]
+        core: List[Tuple[str, str]] = [("[←↑↓→]", "Nav"), ("[h]", "Hilfe"), ("[g]", "Gehe zu")]
 
         if has_clip:
             core.append(("[p]", "Einfügen"))
@@ -1497,17 +1649,17 @@ class EasyDateienApp:
             core.append(("[d]", "Löschen"))
             core.append(("[z]", "ZIP"))
             core.append(("[Leertaste]", "Auswahl"))
+            core.append(("[u]", "Undo"))
         elif cur_item:
             if is_cur_dir:
-                core.append(("[→]", "Betreten"))
                 core.append(("[Eingabe]", "Öffnen"))
             else:
+                core.append(("[Eingabe]", "Öffnen"))
                 core.append(("[e]", "Nano"))
                 core.append(("[o]", "Vim"))
-                core.append(("[Eingabe]", "Öffnen"))
             core.append(("[n]", "Neu"))
             core.append(("[r]", "Umbenennen"))
-            core.append(("[u]", "Rückgängig"))
+            core.append(("[u]", "Undo"))
             core.append(("[d]", "Löschen"))
             core.append(("[y]", "Kopieren"))
             core.append(("[x]", "Ausschneiden"))
@@ -1515,13 +1667,12 @@ class EasyDateienApp:
                 core.append(("[p]", "Einfügen"))
         else:
             core.append(("[n]", "Neu"))
-            core.append(("[u]", "Rückgängig"))
+            core.append(("[u]", "Undo"))
             if has_clip:
                 core.append(("[p]", "Einfügen"))
 
         ext: List[Tuple[str, str]] = [
             ("[/]", "Filter"),
-            ("[g]", "Gehe zu"),
             ("[s]", "Sortieren"),
             ("[.]", "Versteckt"),
             ("[t]", "Konsole"),
@@ -1530,36 +1681,31 @@ class EasyDateienApp:
             ("[q]", "Beenden"),
         ]
 
-        all_candidates = core + [it for it in ext if it not in core]
-        tail_candidates = [("[m]", "Menü"), ("[q]", "Beenden")]
-        tail_str = "  ".join(f"{k} {l}" for k, l in tail_candidates)
-        tail_w = str_width(tail_str)
+        seen = {k for k, _ in core}
+        all_candidates = list(core)
+        for k, l in ext:
+            if k not in seen:
+                all_candidates.append((k, l))
+                seen.add(k)
 
+        items_str = [f"{k} {l}" for k, l in all_candidates]
+
+        joined_wide = "  ".join(items_str)
+        if str_width(joined_wide) <= avail_w:
+            return f"{C_GRAY}{joined_wide}{C_RESET}"
+
+        sep = "  " if avail_w >= 110 else " "
         fitted: List[str] = []
         cur_len = 0
-        budget_for_body = max(0, avail_w - (tail_w + 2)) if avail_w >= (tail_w + 20) else avail_w
-
-        for key, lbl in all_candidates:
-            if (key, lbl) in tail_candidates:
-                continue
-            item_str = f"{key} {lbl}"
-            item_w = str_width(item_str)
-            sep_w = 2 if fitted else 0
-            if cur_len + sep_w + item_w <= budget_for_body:
-                fitted.append(item_str)
-                cur_len += sep_w + item_w
+        for it in items_str:
+            needed = (str_width(sep) if fitted else 0) + str_width(it)
+            if cur_len + needed <= avail_w:
+                fitted.append(it)
+                cur_len += needed
             else:
                 break
 
-        for key, lbl in tail_candidates:
-            item_str = f"{key} {lbl}"
-            item_w = str_width(item_str)
-            sep_w = 2 if fitted else 0
-            if cur_len + sep_w + item_w <= avail_w:
-                fitted.append(item_str)
-                cur_len += sep_w + item_w
-
-        return f"{C_GRAY}{'  '.join(fitted)}{C_RESET}"
+        return f"{C_GRAY}{sep.join(fitted)}{C_RESET}"
 
     def handle_mouse_click(self, x: int, y: int) -> bool:
         if not self.last_layout:
@@ -1652,7 +1798,30 @@ class EasyDateienApp:
             self.dialog_input = ""
             self.dialog_cursor = 0
             self.dialog_target_item = None
+            self.help_scroll_offset = 0
             self.set_status("Aktion abgebrochen")
+            return True
+
+        if self.active_dialog == "help_menu":
+            if key in ("ESC", "q", "Q", "h", "H", "ENTER", "SPACE", " "):
+                self.active_dialog = None
+                self.help_scroll_offset = 0
+                self.set_status("Hilfe geschlossen")
+                return True
+            elif key in ("UP", "k", "MOUSE_WHEEL_UP"):
+                self.help_scroll_offset = max(0, self.help_scroll_offset - 1)
+                return True
+            elif key in ("DOWN", "j", "MOUSE_WHEEL_DOWN"):
+                self.help_scroll_offset += 1
+                return True
+            elif key in ("PAGE_UP",):
+                self.help_scroll_offset = max(0, self.help_scroll_offset - 6)
+                return True
+            elif key in ("PAGE_DOWN",):
+                self.help_scroll_offset += 6
+                return True
+            self.active_dialog = None
+            self.help_scroll_offset = 0
             return True
 
         if self.active_dialog == "trash_confirm":
@@ -2049,6 +2218,12 @@ class EasyDateienApp:
                         needs_redraw = True
                     continue
 
+                if key in ("h", "?"):
+                    self.active_dialog = "help_menu"
+                    self.help_scroll_offset = 0
+                    needs_redraw = True
+                    continue
+
                 if key == "t":
                     self.toggle_console()
                     needs_redraw = True
@@ -2104,7 +2279,7 @@ class EasyDateienApp:
                         self.selected_idx = min(len(self.items) - 1, self.selected_idx + 10)
                         needs_redraw = True
                     continue
-                elif key in ("LEFT", "h"):
+                elif key in ("LEFT",):
                     self.go_parent_directory()
                     needs_redraw = True
                     continue
