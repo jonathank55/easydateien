@@ -623,8 +623,10 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
             return "TAB"
         elif raw in (bytes([127]), bytes([8])):
             return "BACKSPACE"
-        elif raw in (bytes([3]), bytes([4])):
-            return "QUIT"
+        elif raw == bytes([3]):  # Ctrl+C
+            return "CTRL_C"
+        elif raw == bytes([4]):  # Ctrl+D
+            return "CTRL_D"
         elif raw == bytes([26]):  # Ctrl+Z
             return "UNDO"
 
@@ -796,6 +798,8 @@ class EasyDateienApp:
             user_shell, env = get_shell_environment()
             try:
                 subprocess.run([user_shell, "-l", "-c", editor_cmd], env=env)
+            except KeyboardInterrupt:
+                pass
             except Exception:
                 pass
             finally:
@@ -1173,6 +1177,8 @@ class EasyDateienApp:
             sys.stdout.flush()
             try:
                 subprocess.run([user_shell, "-l", "-c", cmd], cwd=self.current_dir, env=env)
+            except KeyboardInterrupt:
+                pass
             except Exception as e:
                 self.console_output_lines.append(f"Fehler: {e}")
             finally:
@@ -1204,6 +1210,8 @@ class EasyDateienApp:
                     clean_l = ANSI_ESCAPE_RE.sub("", l)
                     clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
                     self.console_output_lines.append(clean_l)
+        except KeyboardInterrupt:
+            self.console_output_lines.append("^C")
         except subprocess.TimeoutExpired:
             self.console_output_lines.append("[Befehl nach 60s abgebrochen]")
         except Exception as e:
@@ -1986,7 +1994,7 @@ class EasyDateienApp:
         if not self.active_dialog:
             return False
 
-        if key == "ESC":
+        if key in ("ESC", "CTRL_C"):
             self.active_dialog = None
             self.dialog_input = ""
             self.dialog_cursor = 0
@@ -2409,10 +2417,21 @@ class EasyDateienApp:
                                 self.console_input = ""
                             self.console_cursor_idx = len(self.console_input)
                             needs_redraw = True
-                    elif key == "QUIT":
+                    elif key == "CTRL_C":
                         self.console_input = ""
                         self.console_cursor_idx = 0
+                        self.console_output_lines.append("^C")
                         needs_redraw = True
+                    elif key == "CTRL_D":
+                        if self.console_input:
+                            if self.console_cursor_idx < len(self.console_input):
+                                self.console_input = self.console_input[:self.console_cursor_idx] + self.console_input[self.console_cursor_idx + 1:]
+                                needs_redraw = True
+                        else:
+                            self.show_console = False
+                            self.console_focused = False
+                            self.set_status("Konsole geschlossen")
+                            needs_redraw = True
                     elif key == "UNDO":
                         pass
                     elif len(key) >= 1 and all(c.isprintable() for c in key):
@@ -2424,6 +2443,23 @@ class EasyDateienApp:
                 # 2. DATEIMANAGER-MODUS (Konsole geschlossen ODER Konsole geöffnet aber nicht im Fokus):
                 # Sämtliche Tastenkürzel für Dateiverwaltung sind voll aktiv.
                 # Keine Zeichen fließen in die Konsole.
+                if key == "CTRL_C":
+                    if self.filter_query:
+                        self.filter_query = ""
+                        self.refresh_items()
+                        self.set_status("Filter aufgehoben")
+                        needs_redraw = True
+                    elif self.selected_paths:
+                        self.selected_paths.clear()
+                        self.set_status("Auswahl aufgehoben")
+                        needs_redraw = True
+                    elif self.clipboard_mode or self.clipboard_paths:
+                        self.clipboard_mode = None
+                        self.clipboard_paths = []
+                        self.set_status("Zwischenspeicher geleert")
+                        needs_redraw = True
+                    continue
+
                 if key in ("UP", "DOWN", "k", "j", "PAGE_UP", "PAGE_DOWN"):
                     self.status_expiry_moves += 1
                     if self.status_expiry_moves >= 4:
@@ -2694,7 +2730,7 @@ class EasyDateienApp:
                         self.selected_idx = len(self.items) - 1
                         needs_redraw = True
                     continue
-                elif key in ("QUIT", "q"):
+                elif key in ("q", "Q"):
                     break
         finally:
             self.set_mouse_tracking(False)
@@ -2724,11 +2760,17 @@ def main():
 
     if args.config:
         from easydateien_konfigurator import run_konfigurator
-        run_konfigurator(standalone=True)
+        try:
+            run_konfigurator(standalone=True)
+        except KeyboardInterrupt:
+            pass
         return
 
-    app = EasyDateienApp(initial_path=args.pfad)
-    app.run()
+    try:
+        app = EasyDateienApp(initial_path=args.pfad)
+        app.run()
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
