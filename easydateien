@@ -1630,7 +1630,7 @@ class EasyDateienApp:
         return all_lines[:term_rows]
 
     def build_dynamic_controls(self, avail_w: int) -> str:
-        return f"{C_GRAY}[←↑↓→] Nav  [h] Hilfe{C_RESET}"
+        return f"{C_GRAY}[←↑↓→] Navigieren  [h] Hilfe{C_RESET}"
 
     def handle_mouse_click(self, x: int, y: int) -> bool:
         if not self.last_layout:
