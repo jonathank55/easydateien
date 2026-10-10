@@ -812,14 +812,14 @@ class EasyDateienApp:
         self.status_level = level
         self.status_expiry_moves = 0
 
-    def refresh_items(self):
+    def refresh_items(self, force: bool = False):
         """Aktualisiert die Dateiliste und prüft auf Änderungen im Dateisystem."""
-        if not self._refresh_enabled:
+        if not self._refresh_enabled and not force:
             return
 
         current_time = time.time()
-        # Nur alle 0.5 Sekunden aktualisieren, um Performance zu schonen
-        if current_time - self.last_refresh_time < 0.5:
+        # Sofort aktualisieren, wenn force=True, sonst nur alle 0.1 Sekunden
+        if not force and current_time - self.last_refresh_time < 0.1:
             return
         self.last_refresh_time = current_time
 
@@ -841,20 +841,24 @@ class EasyDateienApp:
         if os.path.isdir(new_path):
             self.current_dir = os.path.abspath(new_path)
             self.selected_idx = 0
-            self.refresh_items()
+            self.refresh_items(force=True)
 
-    def select_filename(self, name: str):
+    def select_filename(self, name: str) -> bool:
+        """Wählt eine Datei nach Namen aus und stellt sicher, dass die Dateiliste aktuell ist."""
+        self.refresh_items(force=True)
+
         for i, it in enumerate(self.items):
             if it.name == name:
                 self.selected_idx = i
-                break
+                return True
+        return False
 
     def go_parent_directory(self):
         parent = os.path.dirname(self.current_dir)
         if parent and parent != self.current_dir:
             prev_name = os.path.basename(self.current_dir)
             self.current_dir = parent
-            self.refresh_items()
+            self.refresh_items(force=True)
             self.select_filename(prev_name)
 
     def open_with_system(self, item: FileEntry):
@@ -892,7 +896,7 @@ class EasyDateienApp:
                 self.sync_mouse_state()
                 sys.stdout.write("\033[2J\033[3J\033[H")
                 sys.stdout.flush()
-                self.refresh_items()
+                self.refresh_items(force=True)
 
     def toggle_select(self):
         if not self.items:
@@ -908,6 +912,7 @@ class EasyDateienApp:
             self.set_status(f"Auswahl: {len(self.selected_paths)}")
         if self.selected_idx < len(self.items) - 1:
             self.selected_idx += 1
+        self.refresh_items(force=True)
 
     def toggle_select_all(self):
         all_paths = {it.path for it in self.items}
@@ -919,6 +924,7 @@ class EasyDateienApp:
         else:
             self.selected_paths.update(all_paths)
             self.set_status(f"Alle {len(self.selected_paths)} markiert")
+        self.refresh_items(force=True)
 
     def cut_selection(self):
         if not self.items:
@@ -935,6 +941,7 @@ class EasyDateienApp:
         self.selected_paths.clear()
         sync_to_macos_clipboard(targets)
         self.set_status(f"{len(targets)} ausgeschnitten (p = einfügen)", "warning")
+        self.refresh_items(force=True)
 
     def copy_selection(self):
         if not self.items:
@@ -951,6 +958,7 @@ class EasyDateienApp:
         self.selected_paths.clear()
         sync_to_macos_clipboard(targets)
         self.set_status(f"{len(targets)} kopiert (Cmd+V im Finder, p hier)", "success")
+        self.refresh_items(force=True)
 
     def paste_clipboard(self):
         sources = list(self.clipboard_paths) if self.clipboard_paths else get_macos_clipboard_files()
@@ -1032,7 +1040,7 @@ class EasyDateienApp:
 
             self.clipboard_mode = None
             self.clipboard_paths = []
-            self.refresh_items()
+            self.refresh_items(force=True)
             if last_name:
                 self.select_filename(last_name)
             self.set_status(f"{success} eingefügt", "success")
@@ -1048,7 +1056,7 @@ class EasyDateienApp:
             targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
             if not targets:
                 self.set_status("Keine Dateien/Ordner ausgewählt", "warning")
-                return
+                return None
 
             # Filtere ungültige Pfade (z. B. Socket-Handles oder nicht existierende Dateien)
             valid_targets = []
@@ -1063,7 +1071,7 @@ class EasyDateienApp:
 
             if not valid_targets:
                 self.set_status("Keine gültigen Dateien/Ordner zum Archivieren", "error")
-                return
+                return None
 
             # Bestimme den Basisnamen für das ZIP-Archiv
             base_name = os.path.basename(valid_targets[0]) if len(valid_targets) == 1 else f"Archiv_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -1107,16 +1115,57 @@ class EasyDateienApp:
 
                 # Aktualisiere die Ansicht und Statusmeldung
                 self.selected_paths.clear()
-                self.refresh_items()
-                self.select_filename(os.path.basename(dest))
+                self.refresh_items(force=True)
+
+                # Wichtig: Hier die neu erstellte Zip-Datei auswählen
+                if not self.select_filename(os.path.basename(dest)):
+                    # Falls die Auswahl nicht funktioniert hat, versuchen wir es mit einer direkten Zuweisung
+                    for i, it in enumerate(self.items):
+                        if it.name == os.path.basename(dest):
+                            self.selected_idx = i
+                            break
+
                 self.undo_stack.append(UndoAction("create_zip", f"ZIP {os.path.basename(dest)}", {"path": dest}))
                 self.set_status(f"ZIP erstellt: {os.path.basename(dest)}", "success")
                 return dest
             except Exception as e:
                 self.set_status(f"Fehler beim Erstellen des ZIP-Archivs: {e}", "error")
+                return None
         finally:
             # Reaktiviere Aktualisierung nach Abschluss
             self._refresh_enabled = True
+
+    def extract_zip_archive(self):
+        """Entpackt ein ZIP-Archiv in den aktuellen Ordner."""
+        if not self.items:
+            self.set_status("Keine Datei ausgewählt", "warning")
+            return
+
+        item = self.items[self.selected_idx]
+        if not item.name.lower().endswith('.zip'):
+            self.set_status("Ausgewählte Datei ist kein ZIP-Archiv", "warning")
+            return
+
+        # Zielordner für die Extraktion
+        extract_dir = os.path.join(self.current_dir, os.path.splitext(item.name)[0])
+
+        # Prüfe, ob der Zielordner bereits existiert
+        if os.path.exists(extract_dir):
+            c = 1
+            while os.path.exists(f"{extract_dir} ({c})"):
+                c += 1
+            extract_dir = f"{extract_dir} ({c})"
+
+        try:
+            with zipfile.ZipFile(item.path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+
+            self.set_status(f"ZIP entpackt nach: {os.path.basename(extract_dir)}", "success")
+            self.refresh_items(force=True)
+            return extract_dir
+        except Exception as e:
+            self.set_status(f"Fehler beim Entpacken: {e}", "error")
+            return None
 
     def undo_last_action(self):
         """Macht die letzte Dateioperation (Löschen, Umbenennen, Erstellen, Einfügen, ZIP) rückgängig."""
@@ -1142,7 +1191,7 @@ class EasyDateienApp:
                                 c += 1
                         shutil.move(trash_p, dest_target)
                         restored += 1
-                self.refresh_items()
+                self.refresh_items(force=True)
                 self.set_status(f"Rückgängig: {restored} Element(e) aus Papierkorb wiederhergestellt", "success")
 
             elif action.action_type == "rename":
@@ -1150,7 +1199,7 @@ class EasyDateienApp:
                 new_p = action.data.get("new_path")
                 if new_p and os.path.exists(new_p) and not os.path.exists(old_p):
                     os.rename(new_p, old_p)
-                    self.refresh_items()
+                    self.refresh_items(force=True)
                     self.select_filename(os.path.basename(old_p))
                     self.set_status(f"Rückgängig: Name in „{os.path.basename(old_p)}“ zurückgesetzt", "success")
 
@@ -1164,7 +1213,7 @@ class EasyDateienApp:
                         dest_p = os.path.join(trash_dir, f"{stem}_{int(time.time())}_{c}{ext}")
                         c += 1
                     shutil.move(p, dest_p)
-                    self.refresh_items()
+                    self.refresh_items(force=True)
                     self.set_status(f"Rückgängig: {os.path.basename(p)} gelöscht", "success")
 
             elif action.action_type == "create_zip":
@@ -1177,7 +1226,7 @@ class EasyDateienApp:
                         dest_p = os.path.join(trash_dir, f"{stem}_{int(time.time())}_{c}{ext}")
                         c += 1
                     shutil.move(p, dest_p)
-                    self.refresh_items()
+                    self.refresh_items(force=True)
                     self.set_status(f"Rückgängig: {os.path.basename(p)} gelöscht", "success")
 
             elif action.action_type == "paste":
@@ -1199,7 +1248,7 @@ class EasyDateienApp:
                                 c += 1
                             shutil.move(dest_p, trash_dest)
                             reverted += 1
-                self.refresh_items()
+                self.refresh_items(force=True)
                 self.set_status(f"Rückgängig: Einfügen von {reverted} Element(en) zurückgesetzt", "success")
         except Exception as e:
             self.set_status(f"Fehler bei Rückgängig: {e}", "error")
@@ -1210,7 +1259,7 @@ class EasyDateienApp:
         nxt = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "mtime"
         self.config["sort_by"] = nxt
         desc = {"mtime": "Datum", "name": "Name", "size": "Größe", "ext": "Dateityp"}
-        self.refresh_items()
+        self.refresh_items(force=True)
         self.set_status(f"Sortierung: {desc.get(nxt, nxt)}", "info")
 
     def get_short_dir(self, path: str) -> str:
@@ -1363,7 +1412,7 @@ class EasyDateienApp:
                 self.sync_mouse_state()
                 sys.stdout.write("\033[2J\033[3J\033[H")
                 sys.stdout.flush()
-                self.refresh_items()
+                self.refresh_items(force=True)
             return
         try:
             res = subprocess.run(
@@ -1404,7 +1453,7 @@ class EasyDateienApp:
             self.console_output_lines.append("[Befehl nach 60s abgebrochen]")
         except Exception as e:
             self.console_output_lines.append(f"Fehler: {e}")
-        self.refresh_items()
+        self.refresh_items(force=True)
 
     def toggle_console(self):
         self.show_console = not self.show_console
@@ -2059,6 +2108,7 @@ class EasyDateienApp:
                 f"  {C_BOLD_CYAN}[x]{C_RESET}           Ausgewählte Dateien ausschneiden",
                 f"  {C_BOLD_CYAN}[p]{C_RESET}           Zwischenablage in aktuellen Ordner einfügen",
                 f"  {C_BOLD_CYAN}[z]{C_RESET}           ZIP-Archiv aus Auswahl erstellen",
+                f"  {C_BOLD_CYAN}[e]{C_RESET}           ZIP-Archiv entpacken",
                 f"  {C_BOLD_CYAN}[u]{C_RESET}           Letzte Dateiaktion rückgängig machen",
                 f"  {C_BOLD_CYAN}[e]{C_RESET}           In Nano bearbeiten",
                 f"  {C_BOLD_CYAN}[o]{C_RESET}           In Vim bearbeiten",
@@ -2255,9 +2305,11 @@ class EasyDateienApp:
             if direction == "up":
                 if self.items:
                     self.selected_idx = max(0, self.selected_idx - 1)
+                    self.refresh_items(force=True)
             else:
                 if self.items:
                     self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1)
+                    self.refresh_items(force=True)
             return True
 
     def handle_dialog_key(self, key: str, fd: int) -> bool:
@@ -2333,7 +2385,7 @@ class EasyDateienApp:
                 self.clipboard_paths = [p for p in self.clipboard_paths if p not in targets]
                 if not self.clipboard_paths:
                     self.clipboard_mode = None
-                self.refresh_items()
+                self.refresh_items(force=True)
                 self.set_status(f"{len(moved_records)} Element(e) in Papierkorb verschoben (u = Rückgängig)", "success")
             else:
                 self.set_status("Löschen abgebrochen")
@@ -2467,7 +2519,7 @@ class EasyDateienApp:
                     os.rename(target_it.path, new_path)
                     desc = f"Umbenennen von {target_it.name} in {val}"
                     self.undo_stack.append(UndoAction("rename", desc, {"old_path": target_it.path, "new_path": new_path}))
-                    self.refresh_items()
+                    self.refresh_items(force=True)
                     self.select_filename(val)
                     self.set_status(f"Umbenannt in: {val} (u = Rückgängig)", "success")
                 except Exception as e:
@@ -2492,7 +2544,7 @@ class EasyDateienApp:
                         open(target_p, "a").close()
                         self.set_status(f"Datei erstellt: {clean_name} (u = Rückgängig)", "success")
                     self.undo_stack.append(UndoAction("create", f"Erstellen von {clean_name}", {"path": target_p}))
-                    self.refresh_items()
+                    self.refresh_items(force=True)
                     self.select_filename(clean_name)
                 except Exception as e:
                     self.set_status(f"Fehler: {e}", "error")
@@ -2519,7 +2571,7 @@ class EasyDateienApp:
 
             elif mode == "search":
                 self.filter_query = val
-                self.refresh_items()
+                self.refresh_items(force=True)
                 self.set_status(f"Filter aktiv: „{val}“ ({len(self.items)} Treffer)" if val else "Filter aufgehoben", "info")
                 return True
 
@@ -2531,7 +2583,7 @@ class EasyDateienApp:
                 self.dialog_cursor -= 1
                 if self.active_dialog == "search":
                     self.filter_query = self.dialog_input
-                    self.refresh_items()
+                    self.refresh_items(force=True)
             return True
 
         if key == "DELETE":
@@ -2539,7 +2591,7 @@ class EasyDateienApp:
                 self.dialog_input = self.dialog_input[:self.dialog_cursor] + self.dialog_input[self.dialog_cursor + 1:]
                 if self.active_dialog == "search":
                     self.filter_query = self.dialog_input
-                    self.refresh_items()
+                    self.refresh_items(force=True)
             return True
 
         if key == "LEFT":
@@ -2563,7 +2615,7 @@ class EasyDateienApp:
             self.dialog_cursor += 1
             if self.active_dialog == "search":
                 self.filter_query = self.dialog_input
-                self.refresh_items()
+                self.refresh_items(force=True)
             return True
 
         if len(key) == 1 and key.isprintable():
@@ -2571,7 +2623,7 @@ class EasyDateienApp:
             self.dialog_cursor += 1
             if self.active_dialog == "search":
                 self.filter_query = self.dialog_input
-                self.refresh_items()
+                self.refresh_items(force=True)
             return True
 
         return True
@@ -2798,7 +2850,7 @@ class EasyDateienApp:
                 if key == "CTRL_C":
                     if self.filter_query:
                         self.filter_query = ""
-                        self.refresh_items()
+                        self.refresh_items(force=True)
                         self.set_status("Filter aufgehoben")
                         needs_redraw = True
                     elif self.selected_paths:
@@ -2826,7 +2878,7 @@ class EasyDateienApp:
                         continue
                     if self.filter_query:
                         self.filter_query = ""
-                        self.refresh_items()
+                        self.refresh_items(force=True)
                         self.set_status("Filter aufgehoben")
                         needs_redraw = True
                         continue
@@ -2880,7 +2932,7 @@ class EasyDateienApp:
                         self.sync_mouse_state()
                         sys.stdout.write("\033[2J\033[3J\033[H")
                         sys.stdout.flush()
-                        self.refresh_items()
+                        self.refresh_items(force=True)
                     needs_redraw = True
                     continue
 
@@ -2949,7 +3001,10 @@ class EasyDateienApp:
                     if self.items:
                         item = self.items[self.selected_idx]
                         if not item.is_dir:
-                            self.open_in_editor(item, fd, old_settings, editor="nano")
+                            if item.name.lower().endswith('.zip'):
+                                self.extract_zip_archive()
+                            else:
+                                self.open_in_editor(item, fd, old_settings, editor="nano")
                             needs_redraw = True
                     continue
                 elif key == "o":
@@ -2983,9 +3038,6 @@ class EasyDateienApp:
                     continue
                 elif key in ("z",):
                     zip_path = self.create_zip_archive()
-                    if zip_path:
-                        # Stelle sicher, dass die neu erstellte Zip-Datei ausgewählt wird
-                        self.select_filename(os.path.basename(zip_path))
                     needs_redraw = True
                     continue
                 elif key == "c":
@@ -3048,7 +3100,7 @@ class EasyDateienApp:
                 elif key == ".":
                     new_h = not self.config.get("show_hidden", False)
                     self.config["show_hidden"] = new_h
-                    self.refresh_items()
+                    self.refresh_items(force=True)
                     self.set_status(f"Versteckte Dateien: {'Ein' if new_h else 'Aus'}")
                     needs_redraw = True
                     continue
@@ -3067,7 +3119,7 @@ class EasyDateienApp:
                     self.sync_mouse_state()
                     sys.stdout.write("\033[2J\033[3J\033[H")
                     sys.stdout.flush()
-                    self.refresh_items()
+                    self.refresh_items(force=True)
                     self.set_status("Einstellungen übernommen", "success")
                     needs_redraw = True
                     continue
