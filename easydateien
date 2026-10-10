@@ -990,34 +990,68 @@ class EasyDateienApp:
         self.set_status(f"{success} eingefügt", "success")
 
     def create_zip_archive(self):
+        """Erstellt ein ZIP-Archiv aus den ausgewählten Dateien/Ordnern mit robuster Fehlerbehandlung."""
         targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
         if not targets:
+            self.set_status("Keine Dateien/Ordner ausgewählt", "warning")
             return
-        base_name = os.path.basename(targets[0]) if len(targets) == 1 else f"Archiv_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        # Filtere ungültige Pfade (z. B. Socket-Handles oder nicht existierende Dateien)
+        valid_targets = []
+        for target in targets:
+            if not os.path.exists(target):
+                self.set_status(f"Warnung: '{os.path.basename(target)}' existiert nicht und wird übersprungen", "warning")
+                continue
+            if stat.S_ISSOCK(os.stat(target).st_mode):
+                self.set_status(f"Warnung: '{os.path.basename(target)}' ist ein Socket und wird übersprungen", "warning")
+                continue
+            valid_targets.append(target)
+
+        if not valid_targets:
+            self.set_status("Keine gültigen Dateien/Ordner zum Archivieren", "error")
+            return
+
+        # Bestimme den Basisnamen für das ZIP-Archiv
+        base_name = os.path.basename(valid_targets[0]) if len(valid_targets) == 1 else f"Archiv_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
         if base_name.lower().endswith(".zip"):
             base_name = base_name[:-4]
+
+        # Finde einen eindeutigen Zielpfad
         dest = os.path.join(self.current_dir, f"{base_name}.zip")
         c = 1
         while os.path.exists(dest):
             dest = os.path.join(self.current_dir, f"{base_name} ({c}).zip")
             c += 1
+
         try:
             with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
-                for t in targets:
-                    if os.path.isdir(t):
-                        for root, _, files in os.walk(t):
-                            for f in files:
-                                fp = os.path.join(root, f)
-                                zf.write(fp, os.path.relpath(fp, self.current_dir))
+                for target in valid_targets:
+                    if os.path.isdir(target):
+                        # Rekursiv alle Dateien im Ordner hinzufügen
+                        for root, _, files in os.walk(target):
+                            for file in files:
+                                file_path = os.path.join(root, file)
+                                # Überspringe Socket-Dateien
+                                if stat.S_ISSOCK(os.stat(file_path).st_mode):
+                                    self.set_status(f"Warnung: '{file}' ist ein Socket und wird übersprungen", "warning")
+                                    continue
+                                arcname = os.path.relpath(file_path, self.current_dir)
+                                zf.write(file_path, arcname)
                     else:
-                        zf.write(t, os.path.basename(t))
+                        # Einzelne Datei hinzufügen
+                        if stat.S_ISSOCK(os.stat(target).st_mode):
+                            self.set_status(f"Warnung: '{os.path.basename(target)}' ist ein Socket und wird übersprungen", "warning")
+                            continue
+                        zf.write(target, os.path.basename(target))
+
+            # Aktualisiere die Ansicht und Statusmeldung
             self.selected_paths.clear()
             self.refresh_items()
             self.select_filename(os.path.basename(dest))
             self.undo_stack.append(UndoAction("create_zip", f"ZIP {os.path.basename(dest)}", {"path": dest}))
             self.set_status(f"ZIP erstellt: {os.path.basename(dest)}", "success")
         except Exception as e:
-            self.set_status(f"Fehler: {e}", "error")
+            self.set_status(f"Fehler beim Erstellen des ZIP-Archivs: {e}", "error")
 
     def undo_last_action(self):
         """Macht die letzte Dateioperation (Löschen, Umbenennen, Erstellen, Einfügen, ZIP) rückgängig."""
