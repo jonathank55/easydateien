@@ -1111,6 +1111,7 @@ class EasyDateienApp:
                 self.select_filename(os.path.basename(dest))
                 self.undo_stack.append(UndoAction("create_zip", f"ZIP {os.path.basename(dest)}", {"path": dest}))
                 self.set_status(f"ZIP erstellt: {os.path.basename(dest)}", "success")
+                return dest
                 run_konfigurator(False, new_zip=dest)
             except Exception as e:
                 self.set_status(f"Fehler beim Erstellen des ZIP-Archivs: {e}", "error")
