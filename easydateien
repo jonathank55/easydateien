@@ -118,7 +118,7 @@ def pad_to_width(text: str, width: int, align: str = "left") -> str:
 
 
 def wrap_line_to_width(text: str, max_w: int) -> List[str]:
-    """Bricht eine Textzeile unter Beachtung visueller Zeichenbreiten und ANSI-Sequenzen deterministisch auf max_w um."""
+    """Bricht eine Textzeile unter Beachtung von Wortgrenzen, visuellen Zeichenbreiten und ANSI-Sequenzen deterministisch auf max_w um."""
     if max_w <= 0:
         return [""]
     if not text:
@@ -127,40 +127,83 @@ def wrap_line_to_width(text: str, max_w: int) -> List[str]:
         return [text]
 
     lines = []
-    cur_chars = []
+    cur_line = []
     cur_w = 0
-    i = 0
-    n = len(text)
     active_ansi = []
 
-    while i < n:
-        if text[i] == "\x1b":
-            m = ANSI_ESCAPE_RE.match(text, i)
-            if m:
+    tokens = re.split(r"(\s+)", text)
+    for token in tokens:
+        if not token:
+            continue
+        tw = str_width(token)
+        if cur_w + tw <= max_w:
+            cur_line.append(token)
+            cur_w += tw
+            for m in ANSI_ESCAPE_RE.finditer(token):
                 esc = m.group(0)
-                cur_chars.append(esc)
                 if esc in ("\033[0m", "\033[m", C_RESET):
                     active_ansi.clear()
                 else:
                     active_ansi.append(esc)
-                i = m.end()
+        else:
+            if token.isspace():
+                line_str = "".join(cur_line)
+                if active_ansi:
+                    line_str += C_RESET
+                lines.append(line_str)
+                cur_line = list(active_ansi)
+                cur_w = sum(char_width(x) for x in ANSI_ESCAPE_RE.sub("", "".join(cur_line)))
                 continue
-        c = text[i]
-        cw = char_width(c)
-        if cur_w + cw > max_w and cur_chars:
-            line_str = "".join(cur_chars)
-            if active_ansi:
-                line_str += C_RESET
-            lines.append(line_str)
-            cur_chars = list(active_ansi)
-            cur_w = sum(char_width(x) for x in ANSI_ESCAPE_RE.sub("", "".join(cur_chars)))
-        cur_chars.append(c)
-        cur_w += cw
-        i += 1
 
-    if cur_chars:
-        lines.append("".join(cur_chars))
-    return lines or [""]
+            if cur_line:
+                line_str = "".join(cur_line)
+                if active_ansi:
+                    line_str += C_RESET
+                lines.append(line_str)
+                cur_line = list(active_ansi)
+                cur_w = sum(char_width(x) for x in ANSI_ESCAPE_RE.sub("", "".join(cur_line)))
+
+            if tw <= max_w:
+                cur_line.append(token)
+                cur_w += tw
+                for m in ANSI_ESCAPE_RE.finditer(token):
+                    esc = m.group(0)
+                    if esc in ("\033[0m", "\033[m", C_RESET):
+                        active_ansi.clear()
+                    else:
+                        active_ansi.append(esc)
+            else:
+                i = 0
+                n = len(token)
+                while i < n:
+                    if token[i] == "\x1b":
+                        m = ANSI_ESCAPE_RE.match(token, i)
+                        if m:
+                            esc = m.group(0)
+                            cur_line.append(esc)
+                            if esc in ("\033[0m", "\033[m", C_RESET):
+                                active_ansi.clear()
+                            else:
+                                active_ansi.append(esc)
+                            i = m.end()
+                            continue
+                    c = token[i]
+                    cw = char_width(c)
+                    if cur_w + cw > max_w and cur_line:
+                        line_str = "".join(cur_line)
+                        if active_ansi:
+                            line_str += C_RESET
+                        lines.append(line_str)
+                        cur_line = list(active_ansi)
+                        cur_w = sum(char_width(x) for x in ANSI_ESCAPE_RE.sub("", "".join(cur_line)))
+                    cur_line.append(c)
+                    cur_w += cw
+                    i += 1
+
+    if cur_line:
+        lines.append("".join(cur_line))
+    res = [l for l in lines if l]
+    return res if res else [""]
 
 
 def get_shell_environment() -> Tuple[str, Dict[str, str]]:
@@ -638,9 +681,9 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
                     b_s, x_s, y_s = seq[2:-1].decode("ascii").split(";")
                     b_c = int(b_s)
                     if b_c == 64:
-                        return "MOUSE_WHEEL_UP"
+                        return f"MOUSE_WHEEL_UP:{int(x_s)}:{int(y_s)}"
                     elif b_c == 65:
-                        return "MOUSE_WHEEL_DOWN"
+                        return f"MOUSE_WHEEL_DOWN:{int(x_s)}:{int(y_s)}"
                     elif not is_rel and b_c == 0:
                         return f"MOUSE_CLICK:{int(x_s)}:{int(y_s)}"
                     elif not is_rel and b_c == 2:
@@ -652,11 +695,18 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
             mapping = {
                 b"[A": "UP", b"[B": "DOWN", b"[C": "RIGHT", b"[D": "LEFT",
                 b"OA": "UP", b"OB": "DOWN", b"OC": "RIGHT", b"OD": "LEFT",
-                b"[1;2A": "PAGE_UP", b"[1;2B": "PAGE_DOWN",
-                b"[1;5A": "PAGE_UP", b"[1;5B": "PAGE_DOWN",
+                b"[1;2A": "SHIFT_UP", b"[1;2B": "SHIFT_DOWN",
+                b"[1;3A": "ALT_UP", b"[1;3B": "ALT_DOWN",
+                b"[1;4A": "ALT_SHIFT_UP", b"[1;4B": "ALT_SHIFT_DOWN",
+                b"[1;5A": "CTRL_UP", b"[1;5B": "CTRL_DOWN",
+                b"[1;6A": "CTRL_SHIFT_UP", b"[1;6B": "CTRL_SHIFT_DOWN",
+                b"[1;9A": "ALT_UP", b"[1;9B": "ALT_DOWN",
                 b"[H": "HOME", b"[F": "END", b"OH": "HOME", b"OF": "END",
                 b"[1~": "HOME", b"[4~": "END", b"[7~": "HOME", b"[8~": "END",
-                b"[5~": "PAGE_UP", b"[6~": "PAGE_DOWN", b"[3~": "DELETE",
+                b"[5~": "PAGE_UP", b"[6~": "PAGE_DOWN",
+                b"[5;2~": "PAGE_UP", b"[6;2~": "PAGE_DOWN",
+                b"[5;5~": "PAGE_UP", b"[6;5~": "PAGE_DOWN",
+                b"[3~": "DELETE",
                 b"[Z": "SHIFT_TAB"
             }
             return mapping.get(seq, "")
@@ -757,10 +807,8 @@ class EasyDateienApp:
                 self._mouse_tracking_active = False
 
     def sync_mouse_state(self):
-        """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Fokus- und Konfigurationsstatus."""
-        # Wenn die Konsole geöffnet und fokussiert ist, wird Maus-Tracking freigegeben,
-        # damit Text im Terminal nativ mit der Maus markiert und kopiert werden kann.
-        should_enable = bool(self.config.get("mouse_support", True)) and not (self.show_console and self.console_focused)
+        """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Konfigurationsstatus."""
+        should_enable = bool(self.config.get("mouse_support", True))
         self.set_mouse_tracking(should_enable)
 
     def load_config(self) -> dict:
@@ -2041,6 +2089,42 @@ class EasyDateienApp:
                 return True
         return False
 
+    def handle_mouse_wheel(self, direction: str, x: Optional[int] = None, y: Optional[int] = None) -> bool:
+        """Behandelt Mausrad-Events präzise nach Mausposition und Fokus."""
+        layout = self.last_layout or {}
+        active_console = layout.get("active_console", False) or self.show_console
+        console_pos = layout.get("console_pos", "unten")
+        split_row = layout.get("split_row", -1)
+        w_left = layout.get("w_left", 0)
+        w_mid = layout.get("w_mid", 0)
+
+        is_over_console = False
+        if active_console:
+            if y is not None and x is not None:
+                if console_pos == "unten" and split_row > 0 and y >= split_row:
+                    is_over_console = True
+                elif console_pos == "rechts" and x >= (w_left + w_mid + 2):
+                    is_over_console = True
+                elif console_pos == "links" and x <= w_left:
+                    is_over_console = True
+            elif self.console_focused:
+                is_over_console = True
+
+        if is_over_console or (self.show_console and self.console_focused):
+            if direction == "up":
+                self.console_scroll_offset += 2
+            else:
+                self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
+            return True
+        else:
+            if direction == "up":
+                if self.items:
+                    self.selected_idx = max(0, self.selected_idx - 1)
+            else:
+                if self.items:
+                    self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1)
+            return True
+
     def handle_dialog_key(self, key: str, fd: int) -> bool:
         if not self.active_dialog:
             return False
@@ -2060,10 +2144,10 @@ class EasyDateienApp:
                 self.help_scroll_offset = 0
                 self.set_status("Hilfe geschlossen")
                 return True
-            elif key in ("UP", "k", "MOUSE_WHEEL_UP"):
+            elif key in ("UP", "k") or key.startswith("MOUSE_WHEEL_UP"):
                 self.help_scroll_offset = max(0, self.help_scroll_offset - 1)
                 return True
-            elif key in ("DOWN", "j", "MOUSE_WHEEL_DOWN"):
+            elif key in ("DOWN", "j") or key.startswith("MOUSE_WHEEL_DOWN"):
                 self.help_scroll_offset += 1
                 return True
             elif key in ("PAGE_UP",):
@@ -2338,18 +2422,12 @@ class EasyDateienApp:
                         if self.status_expiry_moves >= 4:
                             self.status_message = ""
 
-                if key == "MOUSE_WHEEL_UP":
-                    if self.show_console and self.console_focused:
-                        self.console_scroll_offset += 2
-                    elif self.items:
-                        self.selected_idx = max(0, self.selected_idx - 1)
-                    needs_redraw = True
-                    continue
-                elif key == "MOUSE_WHEEL_DOWN":
-                    if self.show_console and self.console_focused:
-                        self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
-                    elif self.items:
-                        self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1)
+                if key.startswith("MOUSE_WHEEL_UP") or key.startswith("MOUSE_WHEEL_DOWN"):
+                    is_up = key.startswith("MOUSE_WHEEL_UP")
+                    coords = key.split(":")
+                    cx = int(coords[1]) if len(coords) >= 3 else None
+                    cy = int(coords[2]) if len(coords) >= 3 else None
+                    self.handle_mouse_wheel("up" if is_up else "down", cx, cy)
                     needs_redraw = True
                     continue
                 elif key.startswith("MOUSE_CLICK:"):
@@ -2446,21 +2524,24 @@ class EasyDateienApp:
                         self.console_output_lines.clear()
                         self.console_scroll_offset = 0
                         needs_redraw = True
-                    elif key == "PAGE_UP":
-                        self.console_scroll_offset += 3
+                    elif key in ("PAGE_UP", "SHIFT_UP", "CTRL_UP", "ALT_UP", "ALT_SHIFT_UP", "CTRL_SHIFT_UP"):
+                        self.console_scroll_offset += 2
                         needs_redraw = True
-                    elif key == "PAGE_DOWN":
-                        self.console_scroll_offset = max(0, self.console_scroll_offset - 3)
+                    elif key in ("PAGE_DOWN", "SHIFT_DOWN", "CTRL_DOWN", "ALT_DOWN", "ALT_SHIFT_DOWN", "CTRL_SHIFT_DOWN"):
+                        self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
                         needs_redraw = True
                     elif key == "UP":
-                        if self.console_cmd_history:
-                            if self.console_history_idx > 0:
-                                self.console_history_idx -= 1
+                        if self.console_cmd_history and self.console_history_idx > 0:
+                            self.console_history_idx -= 1
                             self.console_input = self.console_cmd_history[self.console_history_idx]
                             self.console_cursor_idx = len(self.console_input)
-                            needs_redraw = True
+                        else:
+                            self.console_scroll_offset += 1
+                        needs_redraw = True
                     elif key == "DOWN":
-                        if self.console_cmd_history:
+                        if self.console_scroll_offset > 0:
+                            self.console_scroll_offset = max(0, self.console_scroll_offset - 1)
+                        elif self.console_cmd_history:
                             if self.console_history_idx < len(self.console_cmd_history) - 1:
                                 self.console_history_idx += 1
                                 self.console_input = self.console_cmd_history[self.console_history_idx]
@@ -2468,7 +2549,7 @@ class EasyDateienApp:
                                 self.console_history_idx = len(self.console_cmd_history)
                                 self.console_input = ""
                             self.console_cursor_idx = len(self.console_input)
-                            needs_redraw = True
+                        needs_redraw = True
                     elif key == "CTRL_C":
                         self.console_input = ""
                         self.console_cursor_idx = 0
