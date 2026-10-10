@@ -738,6 +738,7 @@ class EasyDateienApp:
         self.status_expiry_moves: int = 0
         self.filter_query: str = ""
         self.last_refresh_time: float = 0.0
+        self._refresh_enabled: bool = True  # Steuerungsflag für automatische Aktualisierung
 
         self.undo_stack: List[UndoAction] = []
 
@@ -813,6 +814,9 @@ class EasyDateienApp:
 
     def refresh_items(self):
         """Aktualisiert die Dateiliste und prüft auf Änderungen im Dateisystem."""
+        if not self._refresh_enabled:
+            return
+
         current_time = time.time()
         # Nur alle 0.5 Sekunden aktualisieren, um Performance zu schonen
         if current_time - self.last_refresh_time < 0.5:
@@ -978,119 +982,140 @@ class EasyDateienApp:
 
     def _perform_paste(self, sources: List[str]):
         """Führt das eigentliche Einfügen durch, nachdem Konflikte aufgelöst wurden."""
-        success = 0
-        last_name = ""
-        pasted_records = []
-        is_cut = (self.clipboard_mode == "cut")
+        # Deaktiviere automatische Aktualisierung während des Einfügens
+        self._refresh_enabled = False
+        try:
+            success = 0
+            last_name = ""
+            pasted_records = []
+            is_cut = (self.clipboard_mode == "cut")
 
-        for src in sources:
-            if not os.path.exists(src):
-                continue
-            name = os.path.basename(src)
-            dest = os.path.join(self.current_dir, name)
+            for src in sources:
+                if not os.path.exists(src):
+                    continue
+                name = os.path.basename(src)
+                dest = os.path.join(self.current_dir, name)
 
-            # Überspringe, wenn Quelle und Ziel identisch sind (bei Ausschneiden)
-            if os.path.abspath(src) == os.path.abspath(dest) and is_cut:
-                continue
+                # Überspringe, wenn Quelle und Ziel identisch sind (bei Ausschneiden)
+                if os.path.abspath(src) == os.path.abspath(dest) and is_cut:
+                    continue
 
-            # Bei Kopieren: Füge Nummerierung hinzu, wenn Datei bereits existiert
-            if not is_cut and os.path.exists(dest):
-                base, ext = os.path.splitext(name)
-                c = 1
-                while os.path.exists(dest):
-                    dest = os.path.join(self.current_dir, f"{base} ({c}){ext}")
-                    c += 1
+                # Bei Kopieren: Füge Nummerierung hinzu, wenn Datei bereits existiert
+                if not is_cut and os.path.exists(dest):
+                    base, ext = os.path.splitext(name)
+                    c = 1
+                    while os.path.exists(dest):
+                        dest = os.path.join(self.current_dir, f"{base} ({c}){ext}")
+                        c += 1
 
-            try:
-                if is_cut:
-                    shutil.move(src, dest)
-                    pasted_records.append((src, dest))
-                else:
-                    if os.path.isdir(src):
-                        shutil.copytree(src, dest)
+                try:
+                    if is_cut:
+                        shutil.move(src, dest)
+                        pasted_records.append((src, dest))
                     else:
-                        shutil.copy2(src, dest)
-                    pasted_records.append((None, dest))
-                success += 1
-                last_name = os.path.basename(dest)
-            except Exception as e:
-                self.set_status(f"Fehler beim Einfügen: {e}", "error")
-                return
+                        if os.path.isdir(src):
+                            shutil.copytree(src, dest)
+                        else:
+                            shutil.copy2(src, dest)
+                        pasted_records.append((None, dest))
+                    success += 1
+                    last_name = os.path.basename(dest)
+                except Exception as e:
+                    self.set_status(f"Fehler beim Einfügen: {e}", "error")
+                    # Reaktiviere Aktualisierung bei Fehler
+                    self._refresh_enabled = True
+                    return
 
-        if pasted_records:
-            desc = f"Einfügen von {len(pasted_records)} Element(en)"
-            self.undo_stack.append(UndoAction("paste", desc, {"is_cut": is_cut, "records": pasted_records}))
+            if pasted_records:
+                desc = f"Einfügen von {len(pasted_records)} Element(en)"
+                self.undo_stack.append(UndoAction("paste", desc, {"is_cut": is_cut, "records": pasted_records}))
 
-        self.clipboard_mode = None
-        self.clipboard_paths = []
-        self.refresh_items()
-        if last_name:
-            self.select_filename(last_name)
-        self.set_status(f"{success} eingefügt", "success")
+            self.clipboard_mode = None
+            self.clipboard_paths = []
+            self.refresh_items()
+            if last_name:
+                self.select_filename(last_name)
+            self.set_status(f"{success} eingefügt", "success")
+        finally:
+            # Reaktiviere Aktualisierung nach Abschluss
+            self._refresh_enabled = True
 
     def create_zip_archive(self):
         """Erstellt ein ZIP-Archiv aus den ausgewählten Dateien/Ordnern mit robuster Fehlerbehandlung."""
-        targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
-        if not targets:
-            self.set_status("Keine Dateien/Ordner ausgewählt", "warning")
-            return
-
-        # Filtere ungültige Pfade (z. B. Socket-Handles oder nicht existierende Dateien)
-        valid_targets = []
-        for target in targets:
-            if not os.path.exists(target):
-                self.set_status(f"Warnung: '{os.path.basename(target)}' existiert nicht und wird übersprungen", "warning")
-                continue
-            if stat.S_ISSOCK(os.stat(target).st_mode):
-                self.set_status(f"Warnung: '{os.path.basename(target)}' ist ein Socket und wird übersprungen", "warning")
-                continue
-            valid_targets.append(target)
-
-        if not valid_targets:
-            self.set_status("Keine gültigen Dateien/Ordner zum Archivieren", "error")
-            return
-
-        # Bestimme den Basisnamen für das ZIP-Archiv
-        base_name = os.path.basename(valid_targets[0]) if len(valid_targets) == 1 else f"Archiv_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        if base_name.lower().endswith(".zip"):
-            base_name = base_name[:-4]
-
-        # Finde einen eindeutigen Zielpfad
-        dest = os.path.join(self.current_dir, f"{base_name}.zip")
-        c = 1
-        while os.path.exists(dest):
-            dest = os.path.join(self.current_dir, f"{base_name} ({c}).zip")
-            c += 1
-
+        # Deaktiviere automatische Aktualisierung während des Archivierens
+        self._refresh_enabled = False
         try:
-            with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
-                for target in valid_targets:
-                    if os.path.isdir(target):
-                        # Rekursiv alle Dateien im Ordner hinzufügen
-                        for root, _, files in os.walk(target):
-                            for file in files:
-                                file_path = os.path.join(root, file)
-                                # Überspringe Socket-Dateien
-                                if stat.S_ISSOCK(os.stat(file_path).st_mode):
-                                    self.set_status(f"Warnung: '{file}' ist ein Socket und wird übersprungen", "warning")
-                                    continue
-                                arcname = os.path.relpath(file_path, self.current_dir)
-                                zf.write(file_path, arcname)
-                    else:
-                        # Einzelne Datei hinzufügen
-                        if stat.S_ISSOCK(os.stat(target).st_mode):
-                            self.set_status(f"Warnung: '{os.path.basename(target)}' ist ein Socket und wird übersprungen", "warning")
-                            continue
-                        zf.write(target, os.path.basename(target))
+            targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
+            if not targets:
+                self.set_status("Keine Dateien/Ordner ausgewählt", "warning")
+                return
 
-            # Aktualisiere die Ansicht und Statusmeldung
-            self.selected_paths.clear()
-            self.refresh_items()
-            self.select_filename(os.path.basename(dest))
-            self.undo_stack.append(UndoAction("create_zip", f"ZIP {os.path.basename(dest)}", {"path": dest}))
-            self.set_status(f"ZIP erstellt: {os.path.basename(dest)}", "success")
-        except Exception as e:
-            self.set_status(f"Fehler beim Erstellen des ZIP-Archivs: {e}", "error")
+            # Filtere ungültige Pfade (z. B. Socket-Handles oder nicht existierende Dateien)
+            valid_targets = []
+            for target in targets:
+                if not os.path.exists(target):
+                    self.set_status(f"Warnung: '{os.path.basename(target)}' existiert nicht und wird übersprungen", "warning")
+                    continue
+                if stat.S_ISSOCK(os.stat(target).st_mode):
+                    self.set_status(f"Warnung: '{os.path.basename(target)}' ist ein Socket und wird übersprungen", "warning")
+                    continue
+                valid_targets.append(target)
+
+            if not valid_targets:
+                self.set_status("Keine gültigen Dateien/Ordner zum Archivieren", "error")
+                return
+
+            # Bestimme den Basisnamen für das ZIP-Archiv
+            base_name = os.path.basename(valid_targets[0]) if len(valid_targets) == 1 else f"Archiv_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            if base_name.lower().endswith(".zip"):
+                base_name = base_name[:-4]
+
+            # Finde einen eindeutigen Zielpfad
+            dest = os.path.join(self.current_dir, f"{base_name}.zip")
+            c = 1
+            while os.path.exists(dest):
+                dest = os.path.join(self.current_dir, f"{base_name} ({c}).zip")
+                c += 1
+
+            try:
+                with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for target in valid_targets:
+                        if not os.path.exists(target):
+                            continue  # Überspringe, falls Datei während des Archivierens gelöscht wurde
+                        if os.path.isdir(target):
+                            # Rekursiv alle Dateien im Ordner hinzufügen
+                            for root, _, files in os.walk(target):
+                                for file in files:
+                                    file_path = os.path.join(root, file)
+                                    # Überspringe Socket-Dateien und nicht existierende Dateien
+                                    try:
+                                        if not os.path.exists(file_path) or stat.S_ISSOCK(os.stat(file_path).st_mode):
+                                            continue
+                                        arcname = os.path.relpath(file_path, self.current_dir)
+                                        zf.write(file_path, arcname)
+                                    except (OSError, PermissionError):
+                                        self.set_status(f"Warnung: '{file}' konnte nicht gelesen werden", "warning")
+                                        continue
+                        else:
+                            # Einzelne Datei hinzufügen
+                            try:
+                                if not stat.S_ISSOCK(os.stat(target).st_mode):
+                                    zf.write(target, os.path.basename(target))
+                            except (OSError, PermissionError):
+                                self.set_status(f"Warnung: '{os.path.basename(target)}' konnte nicht gelesen werden", "warning")
+                                continue
+
+                # Aktualisiere die Ansicht und Statusmeldung
+                self.selected_paths.clear()
+                self.refresh_items()
+                self.select_filename(os.path.basename(dest))
+                self.undo_stack.append(UndoAction("create_zip", f"ZIP {os.path.basename(dest)}", {"path": dest}))
+                self.set_status(f"ZIP erstellt: {os.path.basename(dest)}", "success")
+            except Exception as e:
+                self.set_status(f"Fehler beim Erstellen des ZIP-Archivs: {e}", "error")
+        finally:
+            # Reaktiviere Aktualisierung nach Abschluss
+            self._refresh_enabled = True
 
     def undo_last_action(self):
         """Macht die letzte Dateioperation (Löschen, Umbenennen, Erstellen, Einfügen, ZIP) rückgängig."""
@@ -1850,8 +1875,8 @@ class EasyDateienApp:
                 elif self.active_dialog == "trash_confirm":
                     targets_c = len(self.selected_paths) if self.selected_paths else 1
                     t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
-                    badge = f"{C_BOLD_RED}[PAPIERKORB]{C_RESET}" if term_cols >= 40 else f"{C_BOLD_RED}[LÖSCHEN]{C_RESET}"
-                    opts_full = ["[y] Ersetzen", "[n / ESC] Zurück"]
+                    badge = f"{C_BOLD_RED}[LÖSCHEN]{C_RESET}" if term_cols >= 40 else f"{C_BOLD_RED}[LÖSCHEN]{C_RESET}"
+                    opts_full = ["[y] Löschen", "[n / ESC] Zurück"]
                     opts_short = ["[y] Ja", "[n] Nein"]
                     opts_mini = ["[y/n]"]
                     min_q_w = str_width(f" {badge} ") + 8
