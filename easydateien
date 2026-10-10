@@ -1527,17 +1527,17 @@ class EasyDateienApp:
                         content = f" {suffix.strip()}"
                     st_line = pad_to_width(content, term_cols)
                 elif self.active_dialog == "goto_menu":
-                    if term_cols >= 45:
-                        st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}  {C_GRAY}Taste wählen oder [ESC] Abbrechen{C_RESET}", term_cols)
+                    if term_cols >= 48:
+                        st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}  {C_GRAY}Taste wählen oder [ESC / q] Abbrechen{C_RESET}", term_cols)
                     elif term_cols >= 26:
-                        st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}  {C_GRAY}[ESC] Abbrechen{C_RESET}", term_cols)
+                        st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}  {C_GRAY}[ESC / q] Abbrechen{C_RESET}", term_cols)
                     else:
                         st_line = pad_to_width(f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET}", term_cols)
                 elif self.active_dialog == "help_menu":
-                    if term_cols >= 45:
-                        st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}  {C_GRAY}[ESC] Schließen  [↑↓] Scrollen{C_RESET}", term_cols)
+                    if term_cols >= 48:
+                        st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}  {C_GRAY}[ESC / q] Schließen  [↑↓] Scrollen{C_RESET}", term_cols)
                     elif term_cols >= 26:
-                        st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}  {C_GRAY}[ESC] Schließen{C_RESET}", term_cols)
+                        st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}  {C_GRAY}[ESC / q] Schließen{C_RESET}", term_cols)
                     else:
                         st_line = pad_to_width(f" {C_BOLD_BLUE}[HILFE]{C_RESET}", term_cols)
                 else:
@@ -1574,7 +1574,7 @@ class EasyDateienApp:
                 f"{C_BOLD_CYAN}[i]{C_RESET}  Pfad manuell eingeben",
                 f"{C_BOLD_CYAN}[p]{C_RESET}  Pfad aus Zwischenablage",
                 "",
-                f"{C_GRAY}[ESC] Abbrechen{C_RESET}",
+                f"{C_GRAY}[ESC / q] Abbrechen{C_RESET}",
             ]
             target_w = min(term_cols - 4, 46)
             if target_w >= 24 and term_rows >= 8:
@@ -1618,7 +1618,7 @@ class EasyDateienApp:
                 f"  {C_BOLD_CYAN}[m]{C_RESET}           Einstellungen und Farbschema öffnen",
                 f"  {C_BOLD_CYAN}[q]{C_RESET}           EasyDateien beenden",
                 "",
-                f"{C_GRAY}[ESC] Schließen{C_RESET}",
+                f"{C_GRAY}[ESC / q] Schließen{C_RESET}",
             ]
             border_overhead = (1 if has_top_border else 0) + (1 if has_bottom_border else 0) + (1 if has_status_bar else 0) + 1
             max_box_h = max(6, term_rows - border_overhead - 2)
@@ -1647,16 +1647,25 @@ class EasyDateienApp:
         return all_lines[:term_rows]
 
     def build_dynamic_controls(self, avail_w: int) -> str:
-        # Stufe 1: Vollständig mit Konsole und Menü bei ausreichend Platz
-        full_str = "[←↑↓→] Navigieren  [h] Hilfe  [t] Konsole  [m] Menü"
-        if str_width(full_str) <= avail_w:
-            return f"{C_GRAY}{full_str}{C_RESET}"
+        # Stufe 1: Vollständig mit Konsole, Menü und Beenden bei ausreichend Platz
+        full_all = "[←↑↓→] Navigieren  [h] Hilfe  [t] Konsole  [m] Menü  [q] Beenden"
+        if str_width(full_all) <= avail_w:
+            return f"{C_GRAY}{full_all}{C_RESET}"
 
-        full_compact = "[←↑↓→] Navigieren [h] Hilfe [t] Konsole [m] Menü"
-        if str_width(full_compact) <= avail_w:
-            return f"{C_GRAY}{full_compact}{C_RESET}"
+        full_all_compact = "[←↑↓→] Navigieren [h] Hilfe [t] Konsole [m] Menü [q] Beenden"
+        if str_width(full_all_compact) <= avail_w:
+            return f"{C_GRAY}{full_all_compact}{C_RESET}"
 
-        # Stufe 2: Navigieren und Hilfe
+        # Stufe 2: Navigation, Hilfe, Beenden
+        nav_help_quit = "[←↑↓→] Navigieren  [h] Hilfe  [q] Beenden"
+        if str_width(nav_help_quit) <= avail_w:
+            return f"{C_GRAY}{nav_help_quit}{C_RESET}"
+
+        nav_help_quit_c = "[←↑↓→] Navigieren [h] Hilfe [q] Beenden"
+        if str_width(nav_help_quit_c) <= avail_w:
+            return f"{C_GRAY}{nav_help_quit_c}{C_RESET}"
+
+        # Stufe 3: Navigation und Hilfe
         nav_help = "[←↑↓→] Navigieren  [h] Hilfe"
         if str_width(nav_help) <= avail_w:
             return f"{C_GRAY}{nav_help}{C_RESET}"
@@ -1665,7 +1674,7 @@ class EasyDateienApp:
         if str_width(nav_help_compact) <= avail_w:
             return f"{C_GRAY}{nav_help_compact}{C_RESET}"
 
-        # Stufe 3: Bei richtig kleinem Platz: "Nav" statt "Navigieren"
+        # Stufe 4: Bei richtig kleinem Platz: "Nav" statt "Navigieren"
         short_nav_help = "[←↑↓→] Nav  [h] Hilfe"
         if str_width(short_nav_help) <= avail_w:
             return f"{C_GRAY}{short_nav_help}{C_RESET}"
@@ -1674,7 +1683,7 @@ class EasyDateienApp:
         if str_width(short_nav_help_c) <= avail_w:
             return f"{C_GRAY}{short_nav_help_c}{C_RESET}"
 
-        # Stufe 4: Extrem eng
+        # Stufe 5: Extrem eng
         only_nav = "[←↑↓→] Nav"
         if str_width(only_nav) <= avail_w:
             return f"{C_GRAY}{only_nav}{C_RESET}"
