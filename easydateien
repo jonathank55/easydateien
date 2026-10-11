@@ -447,8 +447,7 @@ def format_mtime(mtime: float) -> str:
     """Formatiert Änderungszeitpunkte lesbar."""
     try:
         dt = datetime.datetime.fromtimestamp(mtime)
-        now = datetime.datetime.now()
-        return dt.strftime("%d. %b %H:%M") if dt.year == now.year else dt.strftime("%d.%m.%Y")
+        return dt.strftime("%d.%m.%Y %H:%M")
     except Exception:
         return "---"
 
