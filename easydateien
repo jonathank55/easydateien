@@ -1683,7 +1683,7 @@ class EasyDateienApp:
         tokens = cmd.split()
         first_prog = os.path.basename(tokens[0]) if tokens else ""
         interactive_tools = {
-            "start", "aider", "goose", "agy", "nano", "vim", "vi", "emacs", "micro",
+            "start", "aider", "goose", "agy", "agy-real", "nano", "vim", "vi", "emacs", "micro",
             "nvim", "helix", "hx", "kak", "ed", "joe", "ne",
             "top", "htop", "btop", "glances", "bottom", "nvtop", "gtop",
             "less", "more", "bat", "most", "man", "info", "pydoc",
@@ -1693,7 +1693,8 @@ class EasyDateienApp:
             "fzf", "fzy", "peco", "skim", "sk",
             "tmux", "screen", "zellij", "cmatrix", "lazygit", "lazydocker", "tig",
             "mac_control", "settings", "sudo", "su", "passwd", "nmtui",
-            "sqlite3", "psql", "mysql", "redis-cli", "mongosh"
+            "sqlite3", "psql", "mysql", "redis-cli", "mongosh",
+            "lki", "ki-lokal", "kil"
         }
         has_interactive_pipe = any(p in cmd for p in ["| less", "| more", "| bat", "| most", "| fzf"])
         is_git_interactive = cmd.startswith("git ") and any(sub in cmd for sub in ["log", "diff", "commit", "add -p", "add -i", "rebase", "branch", "show", "stash", "blame"])
@@ -2218,7 +2219,7 @@ class EasyDateienApp:
                 elif self.active_dialog == "trash_confirm":
                     targets_c = len(self.selected_paths) if self.selected_paths else 1
                     t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
-                    badge = f"[LÖSCHEN]" if term_cols >= 40 else f"[LÖSCHEN]"
+                    badge = "[LÖSCHEN]"
                     opts_full = ["[y] Löschen", "[n / ESC] Zurück"]
                     opts_short = ["[y] Ja", "[n] Nein"]
                     opts_mini = ["[y/n]"]
