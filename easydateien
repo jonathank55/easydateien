@@ -1616,39 +1616,39 @@ class EasyDateienApp:
         return path
 
     def load_file_preview_lines(self, path: str, max_lines: int, wrap_width: Optional[int] = None) -> List[str]:
-        if self.cached_file_preview_path == path and self.cached_file_preview_lines:
-            return self.cached_file_preview_lines[:max_lines]
+        if self.cached_file_preview_path != path or not self.cached_file_preview_lines:
+            lines = []
+            try:
+                if zipfile.is_zipfile(path):
+                    with zipfile.ZipFile(path, "r") as zf:
+                        infos = zf.infolist()
+                        lines.append(f"Archiv-Inhalt ({len(infos)} Dateien):")
+                        for info in infos[:max_lines - 1]:
+                            lines.append(f"  {info.filename} ({format_size(info.file_size):>8})")
+                else:
+                    with open(path, "r", encoding="utf-8", errors="replace") as f:
+                        for _ in range(max_lines * 3):  # Mehr Zeilen lesen, falls Umbruch aktiviert ist
+                            line = f.readline()
+                            if not line:
+                                break
+                            clean_line = line.rstrip("\r\n").replace("\t", "    ")
+                            clean_line = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_line)
+                            lines.append(clean_line)
+            except Exception:
+                lines = ["[Binäre Datei oder nicht lesbar]"]
 
-        lines = []
-        try:
-            if zipfile.is_zipfile(path):
-                with zipfile.ZipFile(path, "r") as zf:
-                    infos = zf.infolist()
-                    lines.append(f"Archiv-Inhalt ({len(infos)} Dateien):")
-                    for info in infos[:max_lines - 1]:
-                        lines.append(f"  {info.filename} ({format_size(info.file_size):>8})")
-            else:
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
-                    for _ in range(max_lines * 3):  # Mehr Zeilen lesen, falls Umbruch aktiviert ist
-                        line = f.readline()
-                        if not line:
-                            break
-                        clean_line = line.rstrip("\r\n").replace("\t", "    ")
-                        clean_line = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_line)
-                        lines.append(clean_line)
-        except Exception:
-            lines = ["[Binäre Datei oder nicht lesbar]"]
+            self.cached_file_preview_path = path
+            self.cached_file_preview_lines = lines
 
-        self.cached_file_preview_path = path
-        self.cached_file_preview_lines = lines
-        
-        # Umbruch anwenden, wenn aktiviert und wrap_width angegeben
+        lines = self.cached_file_preview_lines
+
+        # Umbruch nach dem Cache anwenden, damit auch Cache-Treffer und Breitenänderungen (Resize) umbrechen
         if self.preview_wrap and wrap_width and wrap_width > 0:
             wrapped = []
             for l in lines[:max_lines * 3]:
                 wrapped.extend(wrap_line_to_width(l, wrap_width))
             return wrapped[:max_lines]
-        
+
         return lines[:max_lines]
 
     def get_console_display_lines(self, width: int, height: int) -> List[str]:
@@ -2041,7 +2041,7 @@ class EasyDateienApp:
         preview_lines = []
         if eff_cols == 3 and cur_item and not is_cur_dir and not (active_console and console_pos == "rechts"):
             needed_p = max(1, fm_rows - 6)
-            preview_wrap_width = w_right if self.preview_wrap else None
+            preview_wrap_width = max(2, w_right - 2) if self.preview_wrap else None
             preview_lines = self.load_file_preview_lines(cur_item.path, needed_p, preview_wrap_width)
 
         self.last_layout = {
