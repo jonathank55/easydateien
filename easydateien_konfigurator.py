@@ -45,13 +45,16 @@ DEFAULT_CONFIG = {
     "divider_style": "alle",
     "columns_enabled": True,
     "esc_to_quit": False,
-    "mouse_support": True,
+    "mouse_support": False,
     "show_console": False,
     "console_position": "unten",
+    "console_always_visible": True,
+    "console_dynamic_height": True,
+    "preview_wrap": True,
     "text_editor": "nano %s",
     "opener": "open %s",
-    "sort_by": "mtime",
-    "sort_reverse": False,
+    "sort_by": "name",
+    "sort_reverse": True,
     "sort_dir_first": True,
     "show_hidden": False,
     "keybindings": None,  # Wird mit Standardwerten gefüllt, wenn nicht vorhanden
@@ -132,18 +135,22 @@ def build_keymap(cfg: dict = None) -> dict:
 
 
 KEYBINDING_ITEMS = [(action, desc, f"[{disp}]") for _s, action, disp, _k, desc in KEY_BINDINGS] + [
-    ("reset", "Auf Standardwerte zurücksetzen", "[Standard]"),
+    ("reset", "Auf Standardwerte zurücksetzen", "[standard]"),
 ]
 
 MAIN_MENU_ITEMS = [
-    ("divider", "Trennungslinien-Stil", "alle"),
-    ("columns", "Spalten-Layout", "Ein"),
-    ("mouse", "Mausunterstützung", "Ein"),
-    ("hidden", "Versteckte Dateien anzeigen", "Aus"),
-    ("sort", "Datei- und Ordneranordnung", "Öffnen"),
+    ("divider", "Trennungslinien", "alle"),
+    ("columns", "Spalten-Layout", "ein"),
+    ("mouse", "Mausunterstützung", "ein"),
+    ("hidden", "Versteckte Dateien anzeigen", "aus"),
+    ("console_always_visible", "Konsole immer eingeblendet", "aus"),
+    ("console_dynamic_height", "Dynamische Konsolenhöhe", "ein"),
+    ("console_position", "Konsolenposition", "unten"),
+    ("preview_wrap", "Vorschau-Umbruch", "ein"),
+    ("sort", "Datei- und Ordneranordnung", "öffnen"),
     ("editor", "Editor", "nano"),
-    ("keybindings", "Tastenbelegungen", "Öffnen"),
-    ("reset", "Auf Standardwerte zurücksetzen", "Standard"),
+    ("keybindings", "Tastenbelegungen", "öffnen"),
+    ("reset", "Auf Standardwerte zurücksetzen", "standard"),
 ]
 
 EDITOR_CHOICES = ["nano", "vim", "nvim", "micro", "hx", "emacs -nw"]
@@ -563,8 +570,8 @@ def sort_menu(fd: int):
     while True:
         # Aktuelle Einstellungen anzeigen
         current_sort = cfg.get("sort_by", "mtime")
-        reverse_state = "Normal" if cfg.get("sort_reverse", False) else "Umgekehrt"
-        dir_first_state = "Ordner zuerst" if cfg.get("sort_dir_first", True) else "Gemischt"
+        reverse_state = "normal" if cfg.get("sort_reverse", False) else "umgekehrt"
+        dir_first_state = "ordner zuerst" if cfg.get("sort_dir_first", True) else "gemischt"
         
         sort_rows = []
         for key, lbl, _ in sort_options:
@@ -679,19 +686,27 @@ def main_menu(fd: int):
             if key == "divider":
                 val = f"[{cfg.get('divider_style', 'alle')}]"
             elif key == "columns":
-                val = f"[{'Ein' if cfg.get('columns_enabled', True) else 'Aus'}]"
+                val = f"[{'ein' if cfg.get('columns_enabled', True) else 'aus'}]"
             elif key == "mouse":
-                val = f"[{'Ein' if cfg.get('mouse_support', True) else 'Aus'}]"
+                val = f"[{'ein' if cfg.get('mouse_support', True) else 'aus'}]"
             elif key == "hidden":
-                val = f"[{'Ein' if cfg.get('show_hidden', False) else 'Aus'}]"
+                val = f"[{'ein' if cfg.get('show_hidden', False) else 'aus'}]"
+            elif key == "console_always_visible":
+                val = f"[{'ein' if cfg.get('console_always_visible', False) else 'aus'}]"
+            elif key == "console_dynamic_height":
+                val = f"[{'ein' if cfg.get('console_dynamic_height', True) else 'aus'}]"
+            elif key == "console_position":
+                val = f"[{cfg.get('console_position', 'unten')}]"
+            elif key == "preview_wrap":
+                val = f"[{'ein' if cfg.get('preview_wrap', True) else 'aus'}]"
             elif key == "sort":
-                val = "[Öffnen]"
+                val = "[öffnen]"
             elif key == "editor":
                 val = f"[{editor_command(cfg)}]"
             elif key == "keybindings":
-                val = "[Öffnen]"
+                val = "[öffnen]"
             elif key == "reset":
-                val = "[Standard]"
+                val = "[standard]"
             else:
                 val = ""
             rows.append((key, lbl, val))
@@ -746,6 +761,22 @@ def main_menu(fd: int):
                 save_config(cfg)
             elif act == "hidden":
                 cfg["show_hidden"] = not cfg.get("show_hidden", False)
+                save_config(cfg)
+            elif act == "console_always_visible":
+                cfg["console_always_visible"] = not cfg.get("console_always_visible", False)
+                save_config(cfg)
+            elif act == "console_dynamic_height":
+                cfg["console_dynamic_height"] = not cfg.get("console_dynamic_height", True)
+                save_config(cfg)
+            elif act == "console_position":
+                opts = ["unten", "rechts", "links"]
+                cur = cfg.get("console_position", "unten")
+                cur_i = opts.index(cur) if cur in opts else 0
+                step = -1 if k == "LEFT" else 1
+                cfg["console_position"] = opts[(cur_i + step) % len(opts)]
+                save_config(cfg)
+            elif act == "preview_wrap":
+                cfg["preview_wrap"] = not cfg.get("preview_wrap", True)
                 save_config(cfg)
             elif act == "editor":
                 cycle_editor(cfg, -1 if k == "LEFT" else 1)
