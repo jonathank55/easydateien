@@ -2143,18 +2143,18 @@ class EasyDateienApp:
                     mode_str = cur_item.mode_str
                     card = [
                         " Details",
-                        f" Typ:{' ' * max(0, w_right - 11 - 4)}   {truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 10))}",
-                        f" Größe:{' ' * max(0, w_right - 11 - 6)}  {size_str:>8}",
-                        f" Datum:{' ' * max(0, w_right - 11 - 6)}  {date_str}",
-                        f" Rechte:{' ' * max(0, w_right - 11 - 7)} {mode_str}",
+                        f" Typ:  {truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 7))}",
+                        f" Größe:  {truncate_to_width(size_str, max(3, w_right - 9))}",
+                        f" Datum:  {truncate_to_width(date_str, max(3, w_right - 9))}",
+                        f" Rechte:  {truncate_to_width(mode_str, max(3, w_right - 10))}",
                     ]
                     if cur_item.is_symlink:
-                        card.append(f" Ziel:{' ' * max(0, w_right - 11 - 5)}   {truncate_to_width(cur_item.symlink_target, max(3, w_right - 10))}")
+                        card.append(f" Ziel:  {truncate_to_width(cur_item.symlink_target, max(3, w_right - 8))}")
 
                     if r < len(card):
                         cell_right = pad_to_width(card[r], w_right)
                     elif r == len(card) and fm_rows >= 10:
-                        cell_right = pad_to_width(f" {'─' * max(2, w_right - 2)}", w_right)
+                        cell_right = "─" * w_right
                     elif r == len(card) + 1 and fm_rows >= 10:
                         cell_right = pad_to_width(f" Vorschau", w_right)
                     else:
