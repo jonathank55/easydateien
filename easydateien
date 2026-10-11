@@ -2025,11 +2025,15 @@ class EasyDateienApp:
                 if p_idx < len(parent_items):
                     p_it = parent_items[p_idx]
                     is_act = (os.path.abspath(p_it.path) == os.path.abspath(self.current_dir))
-                    prefix_char = f"{C_BOLD}▸{C_RESET}" if is_act else " "
-                    prefix_str = f" {prefix_char} "
-                    p_styled = format_entry_name(p_it, max(2, w_left - 3 - 10), bold=is_act)
-                    txt_l = f"{prefix_str}{p_styled}"
-                    cell_left = pad_to_width(txt_l, w_left - 10) + " " * 10
+                    prefix_char = f"{C_BOLD}▸{C_RESET}  " if is_act else "   "
+                    if w_left >= 26:
+                        p_styled = format_entry_name(p_it, max(3, w_left - 13), bold=is_act)
+                        txt_l = f"{prefix_char}{p_styled}"
+                        cell_left = pad_to_width(txt_l, w_left - 10) + " " * 10
+                    else:
+                        p_styled = format_entry_name(p_it, max(2, w_left - 3), bold=is_act)
+                        txt_l = f"{prefix_char}{p_styled}"
+                        cell_left = pad_to_width(txt_l, w_left)
                 else:
                     cell_left = " " * w_left
             else:
