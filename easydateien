@@ -1624,7 +1624,7 @@ class EasyDateienApp:
                         infos = zf.infolist()
                         lines.append(f"Archiv-Inhalt ({len(infos)} Dateien):")
                         for info in infos[:max_lines - 1]:
-                            lines.append(f"  {info.filename} ({format_size(info.file_size):>8})")
+                            lines.append(f"  {info.filename} ({format_size(info.file_size)})")
                 else:
                     with open(path, "r", encoding="utf-8", errors="replace") as f:
                         for _ in range(max_lines * 3):  # Mehr Zeilen lesen, falls Umbruch aktiviert ist
@@ -2143,11 +2143,11 @@ class EasyDateienApp:
                             name_w = max(3, w_right - 13)
                             c_styled = format_entry_name(c_it, name_w, bold=False)
                             s_part = f"  {c_size:>8}" if c_size else " " * 10
-                            cell_right = pad_to_width(f"   {c_styled}", w_right - 10) + s_part
+                            cell_right = pad_to_width(f"  {c_styled}", w_right - 10) + s_part
                         else:
                             name_w = max(3, w_right - 3)
                             c_styled = format_entry_name(c_it, name_w, bold=False)
-                            cell_right = pad_to_width(f"   {c_styled}", w_right)
+                            cell_right = pad_to_width(f"  {c_styled}", w_right)
                     elif len(child_items) == 0 and r == 0:
                         cell_right = pad_to_width(f"  (leer)", w_right)
                     else:
@@ -3277,14 +3277,9 @@ class EasyDateienApp:
                     continue
 
                 if key == "ESC":
-                    if self.show_console:
-                        if self.console_always_visible:
-                            self.console_focused = False
-                            
-                        else:
-                            self.show_console = False
-                            self.console_focused = False
-                            
+                    if self.show_console and not self.console_always_visible:
+                        self.show_console = False
+                        self.console_focused = False
                         needs_redraw = True
                         continue
                     if self.filter_query:
