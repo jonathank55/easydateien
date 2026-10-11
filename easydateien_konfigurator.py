@@ -119,7 +119,7 @@ MAIN_MENU_ITEMS = [
     ("columns", "Spalten-Layout", "Ein"),
     ("mouse", "Mausunterstützung", "Ein"),
     ("hidden", "Versteckte Dateien anzeigen", "Aus"),
-    ("editor", "Texteditor (Taste o)", "nano"),
+    ("editor", "Texteditor", "nano"),
     ("keybindings", "Tastenbelegungen ansehen", "Öffnen"),
     ("reset", "Auf Standardwerte zurücksetzen", "Standard"),
 ]
