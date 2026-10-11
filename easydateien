@@ -1835,10 +1835,10 @@ class EasyDateienApp:
         if active_console and console_pos in ("rechts", "links") and term_cols < 60:
             console_pos = "unten"
 
-        # Dynamische Berechnung der Konsolenhöhe - proportional zum verfügbaren Platz
+        # Dynamische Berechnung der Konsolenhöhe - klein halten
         if active_console and console_pos == "unten" and avail_total >= 4:
-            # Konsolenhöhe auf etwa 1/3 des verfügbaren Platzes begrenzen, aber mindestens 4 Zeilen
-            console_h = max(4, min(12, avail_total // 3))
+            # Konsolenhöhe auf 4 Zeilen begrenzen
+            console_h = 4
             fm_rows = avail_total - console_h - 1
         else:
             console_h = 0
@@ -2141,11 +2141,10 @@ class EasyDateienApp:
         if has_status_bar:
             if self.active_dialog:
                 if self.active_dialog == "rename":
-                    badge = "[UMBENENNEN]" if term_cols >= 45 else "[NAME]"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    left_str = f" {badge} {disp_inp}"
+                    left_str = f" Umbenennen: {disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Bestätigen", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
@@ -2160,11 +2159,10 @@ class EasyDateienApp:
                         hints = ""
                     st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "new":
-                    badge = "[NEU ERSTELLEN]" if term_cols >= 45 else "[NEU]"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    left_str = f" {badge} {disp_inp}"
+                    left_str = f" Neu erstellen: {disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Erstellen", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
@@ -2179,11 +2177,10 @@ class EasyDateienApp:
                         hints = ""
                     st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "search":
-                    badge = "[FILTER / SUCHE]" if term_cols >= 45 else "[FILTER]"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    left_str = f" {badge} {disp_inp}"
+                    left_str = f" Filtern/Suche: {disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Filtern", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
@@ -2198,11 +2195,10 @@ class EasyDateienApp:
                         hints = ""
                     st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "goto_path":
-                    badge = "[GEHE ZU PFAD]" if term_cols >= 45 else "[PFAD]"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    left_str = f" {badge} {disp_inp}"
+                    left_str = f" Pfad: {disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Wechseln", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
@@ -2219,25 +2215,20 @@ class EasyDateienApp:
                 elif self.active_dialog == "trash_confirm":
                     targets_c = len(self.selected_paths) if self.selected_paths else 1
                     t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
-                    badge = "[LÖSCHEN]"
-                    opts_full = ["[y] Löschen", "[n / ESC] Zurück"]
-                    opts_short = ["[y] Ja", "[n] Nein"]
+                    opts_full = ["[y] Ja", "[n] Nein"]
+                    opts_short = ["[y/n]"]
                     opts_mini = ["[y/n]"]
-                    min_q_w = str_width(f" {badge} ") + 8
-                    avail_for_opts = max(0, term_cols - min_q_w)
-                    if sum(str_width(x) for x in opts_full) + 2 <= avail_for_opts:
+                    if sum(str_width(x) for x in opts_full) + 2 <= term_cols - 2:
                         chosen_opts = opts_full
-                    elif sum(str_width(x) for x in opts_short) + 1 <= avail_for_opts:
+                    elif sum(str_width(x) for x in opts_short) + 1 <= term_cols - 2:
                         chosen_opts = opts_short
-                    elif str_width(opts_mini[0]) <= avail_for_opts:
-                        chosen_opts = opts_mini
                     else:
-                        chosen_opts = []
+                        chosen_opts = opts_mini
                     opts_w = sum(str_width(x) for x in chosen_opts) + max(0, len(chosen_opts) - 1) if chosen_opts else 0
-                    avail_name = max(1, term_cols - str_width(badge) - 12 - opts_w)
+                    avail_name = max(1, term_cols - 12 - opts_w)
                     t_trunc = truncate_to_width(t_name, avail_name)
-                    left_str = f" {badge} {t_trunc} löschen?"
-                    avail_right = max(1, term_cols - str_width(left_str) - 1)
+                    left_str = f" {t_trunc} löschen?"
+                    avail_right = max(0, term_cols - str_width(left_str) - 1)
                     if chosen_opts:
                         hints = distribute_options(chosen_opts, avail_right)
                         st_line = pad_to_width(f"{left_str} {hints}", term_cols)
@@ -2247,25 +2238,26 @@ class EasyDateienApp:
                     if self.conflicts_to_resolve:
                         src, dest = self.conflicts_to_resolve[0]
                         file_name = os.path.basename(dest)
-                        badge = f"[ERSETZEN]" if term_cols >= 40 else f"[ÜBERSCHREIBEN]"
-                        opts_full = ["[y] Ersetzen", "[n] Überspringen", "[a] Alle ersetzen", "[ESC] Abbrechen"]
-                        opts_short = ["[y] Ja", "[n] Nein", "[a] Alle"]
-                        opts_mini = ["[y/n/a]"]
-                        min_q_w = str_width(f" {badge} ") + 8
-                        avail_for_opts = max(0, term_cols - min_q_w)
-                        if sum(str_width(x) for x in opts_full) + 2 <= avail_for_opts:
-                            chosen_opts = opts_full
-                        elif sum(str_width(x) for x in opts_short) + 1 <= avail_for_opts:
-                            chosen_opts = opts_short
-                        elif str_width(opts_mini[0]) <= avail_for_opts:
-                            chosen_opts = opts_mini
+                        has_multiple = len(self.conflicts_to_resolve) > 1
+                        if has_multiple:
+                            opts_full = ["[y] Ja", "[n] Nein", "[a] Alle"]
+                            opts_short = ["[y/n/a]"]
+                            opts_mini = ["[y/n/a]"]
                         else:
-                            chosen_opts = []
+                            opts_full = ["[y] Ja", "[n] Nein"]
+                            opts_short = ["[y/n]"]
+                            opts_mini = ["[y/n]"]
+                        if sum(str_width(x) for x in opts_full) + 2 <= term_cols - 2:
+                            chosen_opts = opts_full
+                        elif sum(str_width(x) for x in opts_short) + 1 <= term_cols - 2:
+                            chosen_opts = opts_short
+                        else:
+                            chosen_opts = opts_mini
                         opts_w = sum(str_width(x) for x in chosen_opts) + max(0, len(chosen_opts) - 1) if chosen_opts else 0
-                        avail_name = max(1, term_cols - str_width(badge) - 12 - opts_w)
+                        avail_name = max(1, term_cols - 12 - opts_w)
                         t_trunc = truncate_to_width(file_name, avail_name)
-                        left_str = f" {badge} „{t_trunc}“ ersetzen?"
-                        avail_right = max(1, term_cols - str_width(left_str) - 1)
+                        left_str = f" „{t_trunc}“ ersetzen?"
+                        avail_right = max(0, term_cols - str_width(left_str) - 1)
                         if chosen_opts:
                             hints = distribute_options(chosen_opts, avail_right)
                             st_line = pad_to_width(f"{left_str} {hints}", term_cols)
@@ -2274,9 +2266,9 @@ class EasyDateienApp:
                     else:
                         st_line = " " * term_cols
                 elif self.active_dialog == "goto_menu":
-                    badge = f" [GEHE ZU] "
-                    avail_r = max(1, term_cols - str_width(badge) - 1)
-                    opts_full = ["Taste im Menü wählen", "[ESC / q] Zurück"]
+                    left_str = " Menü: Taste wählen"
+                    avail_r = max(1, term_cols - str_width(left_str) - 1)
+                    opts_full = ["[ESC / q] Zurück"]
                     opts_short = ["[ESC / q] Zurück"]
                     opts_mini = ["[ESC]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_r:
@@ -2287,11 +2279,11 @@ class EasyDateienApp:
                         hints = distribute_options(opts_mini, avail_r)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{badge}{hints}" if hints else badge, term_cols)
+                    st_line = pad_to_width(f"{left_str} {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "help_menu":
-                    badge = f" [HILFE] "
-                    avail_r = max(1, term_cols - str_width(badge) - 1)
-                    opts_full = ["[↑↓] Scrollen", "[ESC / q] Zurück"]
+                    left_str = " Hilfe: ↑↓ Scrollen"
+                    avail_r = max(1, term_cols - str_width(left_str) - 1)
+                    opts_full = ["[ESC / q] Zurück"]
                     opts_short = ["[ESC / q] Zurück"]
                     opts_mini = ["[ESC]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_r:
@@ -2302,17 +2294,17 @@ class EasyDateienApp:
                         hints = distribute_options(opts_mini, avail_r)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{badge}{hints}" if hints else badge, term_cols)
+                    st_line = pad_to_width(f"{left_str} {hints}" if hints else left_str, term_cols)
                 else:
                     st_line = " " * term_cols
             else:
                 if self.show_console and self.console_focused:
-                    mode_lbl = f"[KONSOLE]" if term_cols >= 45 else f"[KONS]"
+                    mode_lbl = "Konsole"
                     left_b = f" {mode_lbl}  " if mode_lbl else " "
                     avail_ctrl = max(1, term_cols - str_width(left_b) - 1)
 
                     # Dynamische Optionen für die Hilfeleiste in der Konsole
-                    opt_full = ["[PG_UP/PG_DWN] Scrollen", "[TAB] Fokus", "[ESC] Schließen"]
+                    opt_full = ["[PG_UP/DWN] Scrollen", "[TAB] Fokus", "[ESC] Schließen"]
                     opt_short = ["[PG_UP/DWN] Scrollen", "[TAB] Fokus", "[ESC] Schließen"]
                     opt_mini = ["[PG_UP/DWN]", "[TAB]", "[ESC]"]
                     opt_esc_only = ["[ESC] Schließen"]
@@ -2338,13 +2330,13 @@ class EasyDateienApp:
                 else:
                     if self.selected_paths:
                         c = len(self.selected_paths)
-                        mode_lbl = f"[AUSWAHL {c}]" if term_cols >= 45 else f"[{c}]"
+                        mode_lbl = f"Auswahl: {c}"
                     elif self.clipboard_mode == "cut":
                         c = len(self.clipboard_paths)
-                        mode_lbl = f"[AUSSCHNEIDEN {c}]" if term_cols >= 50 else f"[×{c}]"
+                        mode_lbl = f"Ausschneiden: {c}"
                     elif self.clipboard_mode == "copy":
                         c = len(self.clipboard_paths)
-                        mode_lbl = f"[KOPIEREN {c}]" if term_cols >= 50 else f"[+{c}]"
+                        mode_lbl = f"Kopieren: {c}"
                     else:
                         mode_lbl = ""
 
