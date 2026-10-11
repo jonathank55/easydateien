@@ -13,17 +13,18 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
 ## Kernmerkmale
 
 - **Integrierte Konsole & Terminal mit strikter Fokus-Isolation (`t`, `Tab`, `ESC`):**  
-  EasyDateien besitzt ein vollintegriertes Terminal-Panel mit konfigurierbarer Position (`[Unten]`, `[Rechts]` oder `[Links]`):
+  EasyDateien besitzt ein vollintegriertes Terminal-Panel mit konfigurierbarer Position (`unten`, `rechts` oder `links`; Einstellung `console_position` in der Konfigurationsdatei, Standard `unten`; am unteren Rand ist das Panel 4 Zeilen hoch):
   - **Strikte Fokus-Isolation:**  
-    - **Konsole im Fokus (`[KONSOLE]`):** Sämtliche Tastenbelegungen des Dateimanagers sind strikt inaktiv. Alle Buchstaben und Zeichen (`u`, `z`, `d`, `q`, `r`, `y`, `x`, `p`, `e`, `o`, `m`, `s`, etc.) fließen ohne Kollision direkt in die Befehlszeile.
+    - **Konsole im Fokus (Statusleiste „Konsole“):** Sämtliche Tastenbelegungen des Dateimanagers sind strikt inaktiv. Alle Buchstaben und Zeichen (`u`, `z`, `d`, `q`, `r`, `y`, `x`, `p`, `e`, `o`, `m`, `s`, etc.) fließen ohne Kollision direkt in die Befehlszeile.
     - **Native Textauswahl & Kopieren:** Sobald die Konsole fokussiert ist, wird das Maus-Tracking automatisch freigegeben. Textausgaben, Pfade und Befehle können direkt mit der Maus markiert und per `Cmd+C` (oder Kontextmenü) in die Zwischenablage kopiert werden.
     - **`ESC`:** Schließt die Konsole deterministisch.
     - **`Tab` / `Shift+Tab`:** Wechselt den Fokus zurück zum Dateimanager.
     - **Konsole geöffnet, aber nicht im Fokus:** Sämtliche Tastenkürzel des Dateimanagers sind aktiv; es wird nichts versehentlich in die Konsole eingetippt. `Tab` setzt den Fokus zurück in die Konsole.
   - **Zwei-Wege-Verzeichnissynchronisation:** Das Terminal operiert immer im aktuellen Verzeichnis des Dateimanagers. Navigiert man im Dateimanager, folgt das Terminal automatisch. Wechselt man im Terminal mit `cd ..` das Verzeichnis, folgt der Dateimanager sofort!
-  - **Automatische Dateilisten-Aktualisierung:** Sobald im Terminal Befehle wie `touch datei.txt`, `mkdir ordner`, `git checkout` oder `rm bild.png` ausgeführt werden, aktualisiert der Dateimanager die Ansicht unverzüglich.
+  - **Automatische Dateilisten-Aktualisierung:** Sobald im Terminal Befehle wie `touch datei.txt`, `mkdir ordner`, `git checkout` oder `rm bild.png` ausgeführt werden, aktualisiert der Dateimanager die Ansicht unverzüglich. Auch Änderungen von außen (z. B. laufende Downloads) werden selbstständig erkannt.
   - **Voller Terminalkomfort:** Befehlsverlauf (`↑`/`↓`), Zeilennavigation (`Pos1`/`Ende`, `Ctrl+A`/`Ctrl+E`, `Ctrl+W` zum Wortlöschen, `Ctrl+U`/`Ctrl+K` zum Zeilenlöschen mit Zwischenablage, `Ctrl+Y` zum Einfügen, `Ctrl+L` zum Leeren), Bildlauf (`BildAuf`/`BildAb` oder Mausrad) und Schließen per `exit`, `quit` oder `Ctrl+D`.
-  - **Interaktive Vollbild-Programme:** Anwendungen wie `nano`, `vim`, `htop` oder `zsh` werden sauber im Vollbild ausgeführt und kehren ohne Bildartefakte zurück.
+  - **Interaktive Vollbild-Programme:** Anwendungen wie `nano`, `vim`, `htop` oder `zsh` (sowie u. a. `ssh`, `less`, `python`, interaktive `git`-Befehle) werden automatisch erkannt, sauber im Vollbild ausgeführt und kehren ohne Bildartefakte zurück.
+  - **Befehlsausführung:** Alle anderen Befehle laufen in der Login-Shell des Benutzers (`$SHELL`) im aktuellen Ordner; ihre Ausgabe erscheint im Konsolenpanel (Abbruch nach 60 Sekunden). `cd`, `clear`, `exit` und `quit` werden intern behandelt.
 
 - **Elegantes Kasten-Design & vollständige Fensterfüllung:**  
   Präziser Kastenaufbau mit echten abgerundeten Ecken (`╭`, `╮`, `╰`, `╯`) und Spaltentrennlinien (`┬`, `┴`, `│`), der sich nahtlos über die gesamte Terminalbreite und -höhe erstreckt. Durch die Nutzung des Alternate-Screen-Buffers (`\033[?1049h`) und strikte Zeilenbudgetierung ist ein Verrutschen oder Scrollen des Terminalfensters technisch ausgeschlossen.
@@ -40,9 +41,9 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
 
 - **Vollständige Mausnavigation & Scrollen:**  
   - **Mausrad nach oben / unten:** Flüssiges Scrollen durch die Dateiliste (bzw. Konsolenausgabe im Konsolenfokus)  
-  - **Linksklick:** Element auswählen; Doppelklick öffnet die Datei bzw. betritt den Ordner  
+  - **Linksklick:** Element auswählen; Doppelklick öffnet es mit dem konfigurierten Opener (Standard `open`: Dateien in der Standard-App, Ordner im Finder)  
   - **Klick auf linke Spalte:** Sofortiges Zurückwechseln in den übergeordneten Ordner  
-  - **Klick auf rechte Spalte:** Kindordner betreten bzw. Datei-Details ansehen  
+  - **Klick auf rechte Spalte:** Ordner betreten bzw. Datei im Standardprogramm öffnen  
   - **Klick in Konsolenbereich:** Setzt den Fokus direkt auf die Konsole (Mausauswahl sofort aktiv)  
   - **Rechtsklick:** Element markieren bzw. Markierung umschalten (`*`)  
   - Im Konfigurationsmenü über `Mausunterstützung: [Ein / Aus]` jederzeit anpassbar.
@@ -51,21 +52,26 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
   - **Suchen & Schnellfilter (`/`):** Interaktiver Live-Filter für die Dateiliste.  
   - **Neu erstellen (`n`):** Neue Dateien oder Verzeichnisse anlegen (Ordner mit `/` am Ende).  
   - **Umbenennen (`r`):** Inline-Umbenennen mit Sofort-Feedback.  
-  - **Papierkorb (`d`):** Sicheres Verschieben in den macOS-Papierkorb (`~/.Trash`) mit Sicherheitsabfrage.  
-  - **Rückgängig (`u`):** Mehrstufiges Undo-System für Erstellen, Umbenennen und Löschen.  
-  - **ZIP-Komprimierung (`z`):** Ausgewählte Dateien direkt als ZIP-Archiv komprimieren.  
-  - **Editor-Integration (`e` für Nano, `o` für Vim):** Dateien blitzschnell im gewünschten Editor bearbeiten.  
-  - **Systemweites Öffnen (`Enter`):** Öffnet Dateien mit der macOS-Standard-App oder Ordner direkt im Finder.
+  - **Papierkorb (`d` / `Entf`):** Sicheres Verschieben in den macOS-Papierkorb (`~/.Trash`) mit Sicherheitsabfrage.  
+  - **Rückgängig (`u`):** Mehrstufiges Undo-System für Erstellen, Umbenennen, Löschen, Einfügen sowie ZIP-Erstellen und -Entpacken.  
+  - **ZIP-Komprimierung (`z`):** Ausgewählte Dateien und Ordner direkt als ZIP-Archiv komprimieren; der Cursor springt auf das neue Archiv.  
+  - **ZIP-Entpacken (`e`):** Markierte bzw. ausgewählte ZIP-Archive in einen neuen Ordner entpacken.  
+  - **Editor-Integration (`o`):** Dateien im konfigurierten Texteditor bearbeiten (Standard `nano`; im Konfigurationsmenü wählbar).  
+  - **Systemweites Öffnen (`Enter`):** Öffnet Dateien mit der macOS-Standard-App oder Ordner direkt im Finder (Befehl über `opener` konfigurierbar).  
+  - **Interaktive Shell (`!` / `$`):** Öffnet eine Login-Shell im aktuellen Ordner; mit `exit` geht es zurück zu EasyDateien.
+
+- **Details & Vorschau (rechte Spalte):**  
+  Bei Dateien zeigt die rechte Spalte Typ, Größe, Datum und Rechte (bei Symlinks zusätzlich das Ziel) sowie – bei ausreichender Fensterhöhe – eine Textvorschau bzw. den Inhalt von ZIP-Archiven. Bei Ordnern wird deren Inhalt angezeigt. Symlinks erscheinen als `name @ ziel`.
 
 - **Auswahldarstellung & macOS-Systemzwischenablage:**  
-  - Auswahl: `*` (z. B. `▸ * datei.txt`)  
-  - Ausschneiden (Cut): `×` (z. B. `  × datei.txt`)  
-  - Kopieren: `+` (z. B. `  + datei.txt`)  
+  - Auswahl: `*` (z. B. ` ▸*datei.txt`)  
+  - Ausschneiden (Cut): `x` (z. B. `  xdatei.txt`)  
+  - Kopieren: `+` (z. B. `  +datei.txt`)  
   - `Space` / `v`: Datei oder Ordner markieren / abwählen (`*`)  
-  - `V` / `a`: Alle sichtbaren Dateien auf einmal markieren oder abwählen  
-  - `x`: Markierte Dateien zum **Ausschneiden** vormerken (`×`)  
+  - `a` / `V`: Alle sichtbaren Dateien auf einmal markieren oder abwählen  
+  - `x`: Markierte Dateien zum **Ausschneiden** vormerken (`x`)  
   - `y` / `c`: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notizen eingefügt werden!  
-  - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien und verhindert Namenskollisionen automatisch)  
+  - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien). Existiert der Name bereits, erscheint eine Rückfrage (`y` ersetzen, `n` überspringen, `a` alle ersetzen; bei Kopien erhalten Duplikate bei Bedarf eine Nummerierung `(1)`).  
   - `Y` / `X`: Zwischenspeicher leeren  
   - `c c`: Absoluten Dateipfad in die Zwischenablage kopieren  
   - `c f`: Dateinamen in die Zwischenablage kopieren  
@@ -80,13 +86,18 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
   - `g p`: Zu Pfad aus Zwischenablage springen  
 
 - **Interaktives Konfigurationsmenü (`m`):**  
-  Vollwertiger interaktiver Konfigurator mit direktem In-Place-Toggeln ohne störende Untermenüs:
-  - Trennungslinien-Stil (`alle`, `vertikal`, `außen`, `horizontal`, `keine`)
+  Interaktiver Konfigurator (Navigation mit `↑`/`↓`, Ändern mit `Enter`/`Space`/`←`/`→`, Zurück mit `ESC`/`q`; Änderungen werden sofort gespeichert):
+  - Trennungslinien-Stil (`alle`, `vertikal`, `horizontal`, `außen`, `keine`)
   - Spalten-Layout (`Ein` / `Aus`)
   - Mausunterstützung (`Ein` / `Aus`)
   - Versteckte Dateien anzeigen (`Ein` / `Aus`)
-  - Tastenbelegungen ansehen und anpassen
-  - Auf Standardwerte zurücksetzen
+  - Datei- und Ordneranordnung (Untermenü): Sortierkriterium, Sortierreihenfolge, Ordnerposition
+  - Editor für die Taste `o` (`nano`, `vim`, `nvim`, `micro`, `hx`, `emacs -nw`)
+  - Tastenbelegungen (Untermenü zum Ansehen und Bearbeiten)
+  - Auf Standardwerte zurücksetzen (mit Sicherheitsabfrage)
+
+> [!NOTE]
+> **Tastenbelegungen:** Der Dateimanager verwendet derzeit die fest eingebauten Standardbelegungen aus der [Tastatur-Referenz](#tastatur-referenz). Im Menü gespeicherte, abweichende Belegungen werden in der Konfigurationsdatei abgelegt, aber von der Tastensteuerung noch nicht angewendet.
 
 ---
 
@@ -106,7 +117,20 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
    ./install.sh
    ```
 
-Das Skript richtet das Konfigurationsverzeichnis unter `~/.config/easydateien/` ein, kompiliert das native macOS-Clipboard-Modul und erstellt die Symlinks `easydateien` und `ed` in `~/.local/bin/`.
+Das Skript
+
+- verlinkt `easydateien` und `easydateien_konfigurator.py` nach `~/.config/easydateien/`,
+- kompiliert (sofern `clang` vorhanden ist) das native macOS-Clipboard-Modul `easydateien_clip` nach `~/.config/easydateien/`,
+- legt `~/.config/easydateien/config.json` aus [`config.example.json`](config.example.json) an, falls noch keine Konfiguration existiert (eine vorhandene bleibt unberührt),
+- erstellt die Symlinks `easydateien` und `ed` in `~/.local/bin/` bzw. `~/bin/` (je nachdem, welches Verzeichnis existiert; `~/.local/bin/` wird bei Bedarf angelegt und sollte im `PATH` liegen).
+
+Der Repository-Ordner muss nach der Installation bestehen bleiben, da die Symlinks darauf zeigen.
+
+### Voraussetzungen
+
+- macOS mit Python 3 (nur Standardbibliothek, keine externen Python-Abhängigkeiten)
+- Optional: `clang` (Xcode Command Line Tools) für das native Clipboard-Modul (wird bei Bedarf auch beim ersten Start kompiliert); ohne `clang` nutzt EasyDateien AppleScript zum Kopieren und `pbpaste` zum Einfügen
+- Ein UTF-8-fähiges Terminal mit ANSI-/SGR-Maus-Unterstützung
 
 ---
 
@@ -138,11 +162,20 @@ Innerhalb des Programms genügt das Drücken der Taste `m`. Alternativ kann der 
 easydateien --config
 ```
 
+### Kommandozeilenoptionen
+
+| Option | Funktion |
+| :--- | :--- |
+| `pfad` | Startverzeichnis (optional; Standard: aktuelles Verzeichnis) |
+| `-c`, `--config` | Konfigurationsmenü öffnen |
+| `-v`, `--version` | Programmversion anzeigen |
+| `-h` | Hilfe anzeigen |
+
 ---
 
 ## Konfigurationsdatei (`~/.config/easydateien/config.json`)
 
-Die Konfiguration wird im standardisierten JSON-Format gespeichert:
+Die Konfiguration wird im standardisierten JSON-Format gespeichert. Fehlende Schlüssel werden mit den hier gezeigten Standardwerten ergänzt (Vorlage: [`config.example.json`](config.example.json)):
 
 ```json
 {
@@ -161,6 +194,24 @@ Die Konfiguration wird im standardisierten JSON-Format gespeichert:
 }
 ```
 
+| Schlüssel | Standard | Bedeutung |
+| :--- | :--- | :--- |
+| `divider_style` | `"alle"` | Trennlinien: `alle`, `vertikal`, `außen`, `horizontal`, `keine` |
+| `columns_enabled` | `true` | Mehrspaltiges Layout (Miller-Columns) ein/aus |
+| `esc_to_quit` | `false` | Reserviert; wird von der aktuellen Version nicht ausgewertet (Beenden: `q`) |
+| `mouse_support` | `true` | Mausunterstützung ein/aus |
+| `show_console` | `false` | Integrierte Konsole beim Start geöffnet |
+| `console_position` | `"unten"` | Position der Konsole: `unten`, `rechts`, `links` (bei Terminalbreite unter 60 Zeichen immer unten); nur in der Datei einstellbar, Konsolenhöhe unten: 4 Zeilen |
+| `text_editor` | `"nano %s"` | Editor für `o`; `%s` steht für den Dateipfad (im Menü wählbar: `nano`, `vim`, `nvim`, `micro`, `hx`, `emacs -nw`) |
+| `opener` | `"open %s"` | Befehl für `Enter` und Doppelklick |
+| `sort_by` | `"mtime"` | Sortierung: `mtime` (Datum), `name`, `size` (Größe), `ext` (Typ) |
+| `sort_reverse` | `true` | Bei Datum und Größe: Neueste bzw. größte zuerst (Name und Typ immer aufsteigend A–Z) |
+| `sort_dir_first` | `true` | Ordner vor Dateien anzeigen |
+| `show_hidden` | `false` | Versteckte Dateien anzeigen |
+| `keybindings` | – | Optional; vom Tastenbelegungs-Editor des Konfigurators geschriebene Belegungsliste |
+
+Das Konfigurationsmenü speichert Änderungen sofort. Die Tasten `.` (versteckte Dateien) und `s` (Sortierung) wirken dagegen nur für die laufende Sitzung.
+
 ---
 
 ## Tastatur-Referenz
@@ -173,70 +224,78 @@ Die Konfiguration wird im standardisierten JSON-Format gespeichert:
 | `↓` / `j` | Cursor nach unten bewegen |
 | `→` / `l` | In Verzeichnis wechseln |
 | `←` | In übergeordneten Ordner wechseln |
-| `Enter` | Element systemweit öffnen via `open` (Ordner öffnen im Finder) |
-| `Space` / `v` | Aktuelle Datei markieren / Markierung aufheben (`*`) |
-| `V` / `a` | Alle Dateien markieren bzw. Auswahl aufheben |
+| `Enter` | Element mit dem konfigurierten Opener öffnen (Standard `open`; Ordner öffnen im Finder) |
+| `Space` / `v` | Aktuelle Datei markieren / Markierung aufheben (`*`); der Cursor rückt eine Zeile weiter |
+| `a` / `V` | Alle sichtbaren Elemente markieren bzw. Auswahl aufheben |
 | `n` | Neue Datei oder neuen Ordner erstellen (Ordner mit `/` am Ende) |
 | `r` | Datei / Ordner umbenennen |
-| `/` | Such- und Schnellfilter aktivieren |
-| `s` | Sortierkriterium umschalten (Datum, Name, Größe, Typ) |
-| `u` | Letzte Dateiaktion rückgängig machen (Undo für Erstellen, Umbenennen, Papierkorb) |
-| `z` | ZIP-Archiv aus Auswahl erstellen |
+| `/` | Such- und Schnellfilter aktivieren (Live-Filter nach Namensteil) |
+| `s` | Sortierkriterium umschalten (Datum, Name, Größe, Typ); gilt für die laufende Sitzung |
+| `u` / `Z` | Letzte Dateiaktion rückgängig machen (Erstellen, Umbenennen, Papierkorb, Einfügen, ZIP erstellen/entpacken) |
+| `z` | ZIP-Archiv aus Auswahl (bzw. Eintrag unter dem Cursor) erstellen |
+| `e` | Markiertes bzw. ausgewähltes ZIP-Archiv in einen neuen Ordner entpacken |
 | `y` / `c` | Auswahl in macOS-Zwischenablage kopieren (Finder-kompatibel) |
-| `x` | Auswahl ausschneiden (`×`) |
+| `x` | Auswahl ausschneiden (`x`-Markierung) |
 | `p` | Zwischenablage im aktuellen Ordner einfügen |
 | `Y` / `X` | Zwischenspeicher leeren |
 | `c c` | Absoluten Dateipfad in die Zwischenablage kopieren |
 | `c f` | Dateinamen in die Zwischenablage kopieren |
 | `c d` | Ordnerpfad in die Zwischenablage kopieren |
-| `d` | In macOS-Papierkorb verschieben (mit Bestätigung) |
-| `e` | Datei in `nano` bearbeiten |
-| `o` | Datei in `vim` bearbeiten |
-| `.` | Versteckte Dateien ein- oder ausblenden |
+| `d` / `Entf` | In macOS-Papierkorb verschieben (Bestätigung mit `y` oder `Enter`, alles andere bricht ab) |
+| `o` | Datei im konfigurierten Texteditor bearbeiten (Standard `nano`, im Menü `m` änderbar) |
+| `.` | Versteckte Dateien ein- oder ausblenden; gilt für die laufende Sitzung |
 | `g` | Gehe-zu-Menü öffnen (`d` Downloads, `f` Dokumente, `h`/`~` Home, `t` Papierkorb, `i` Pfadeingabe, `p` Zwischenablage) |
 | `~` | Direkt zum Benutzerordner (`~`) springen |
 | `Home` | An den Anfang der Dateiliste springen |
 | `End` / `G` | An das Ende der Dateiliste springen |
 | `BildAuf` / `BildAb` | 10 Einträge nach oben / unten blättern |
 | `t` | Integrierte Konsole öffnen / schließen |
-| `Tab` | Fokus auf integrierte Konsole setzen (oder Konsole öffnen) |
+| `Tab` / `Shift+Tab` | Fokus auf integrierte Konsole setzen (oder Konsole öffnen) |
+| `!` / `$` | Interaktive Login-Shell im aktuellen Ordner öffnen (nach `exit` zurück zu EasyDateien) |
+| `h` / `?` | Hilfe mit Tastenübersicht öffnen |
 | `m` | Konfigurationsmenü öffnen |
-| `ESC` | Konsole schließen, Filter aufheben oder Auswahl/Zwischenspeicher leeren |
-| `q` | EasyDateien beenden |
+| `ESC` | Konsole schließen, Filter aufheben oder Auswahl/Zwischenspeicher leeren (in dieser Reihenfolge) |
+| `q` / `Ctrl+C` | EasyDateien beenden |
 
 ### Konsolen-Modus (Konsole im Fokus)
 
 | Taste | Aktion |
 | :--- | :--- |
 | **Alle Zeichen** | Direkte Befehlseingabe (alle Dateimanager-Kürzel sind isoliert deaktiviert) |
-| `Enter` | Eingegebenen Befehl im aktuellen Verzeichnis ausführen |
+| `Enter` | Eingegebenen Befehl im aktuellen Verzeichnis ausführen (`cd`, `clear`, `exit` / `quit` werden intern behandelt) |
 | `Tab` / `Shift+Tab` | Fokus zurück auf Dateimanager wechseln |
-| `ESC` | Konsole schließen und Fokus auf Dateimanager setzen |
-| `↑` / `↓` | Befehlsverlauf durchblättern |
+| `ESC` | Konsole schließen |
+| `↑` / `↓` | Befehlsverlauf durchblättern (ohne Verlauf: Ausgabe scrollen) |
 | `←` / `→` | Cursor in der Befehlszeile nach links / rechts bewegen |
 | `Pos1` / `Ctrl+A` | Cursor an den Anfang der Zeile setzen |
 | `Ende` / `Ctrl+E` | Cursor an das Ende der Zeile setzen |
 | `Backspace` | Zeichen vor dem Cursor löschen |
 | `Delete` | Zeichen unter dem Cursor löschen |
-| `Ctrl+W` | Vorheriges Wort löschen |
-| `Ctrl+U` | Zeile bis zum Cursor löschen |
-| `Ctrl+K` | Zeile ab Cursor bis zum Ende löschen |
+| `Ctrl+W` | Vorheriges Wort löschen (landet in der macOS-Zwischenablage) |
+| `Ctrl+U` | Zeile bis zum Cursor löschen (landet in der macOS-Zwischenablage) |
+| `Ctrl+K` | Zeile ab Cursor bis zum Ende löschen (landet in der macOS-Zwischenablage) |
+| `Ctrl+Y` | Text aus der macOS-Zwischenablage einfügen |
 | `Ctrl+L` | Terminal-Ausgabepuffer leeren (`clear`) |
-| `BildAuf` / `BildAb` | Konsolenausgabe nach oben / unten scrollen |
-| `Ctrl+C` / `Ctrl+D` | Aktuelle Eingabezeile verwerfen |
+| `BildAuf` / `BildAb` (auch mit `Shift` / `Ctrl` / `Alt` + `↑` / `↓`) | Konsolenausgabe nach oben / unten scrollen |
+| `Ctrl+D` | Zeichen unter dem Cursor löschen; bei leerer Eingabezeile Konsole schließen |
+
+> [!NOTE]
+> `Ctrl+C` wird vom Terminal als Signal behandelt und beendet EasyDateien auch bei fokussierter Konsole sofort (Terminal wird sauber wiederhergestellt). Zum Verwerfen einer Eingabezeile dient `Ctrl+U`.
 
 ---
 
 ## Maus-Referenz
 
+Die Maus ist standardmäßig aktiv (`mouse_support`) und im Konfigurationsmenü abschaltbar. Solange die Konsole im Fokus ist, wird das Maus-Tracking automatisch freigegeben (native Textauswahl des Terminals).
+
 | Maus-Aktion | Funktion |
 | :--- | :--- |
-| **Mausrad nach oben / unten** | Cursor in der Dateiliste bewegen bzw. Konsolenausgabe scrollen |
+| **Mausrad nach oben / unten** | Cursor in der Dateiliste bewegen bzw. Konsolenausgabe scrollen (über der Konsole) |
 | **Linksklick auf Eintrag** | Element auswählen |
-| **Doppelklick auf Eintrag** | Datei öffnen bzw. Ordner betreten |
+| **Doppelklick auf Eintrag** | Element mit dem konfigurierten Opener öffnen (Standard `open`: Dateien in der Standard-App, Ordner im Finder) |
 | **Linksklick auf linke Spalte** | Zum übergeordneten Ordner zurückkehren |
-| **Linksklick auf rechte Spalte** | Kindordner betreten bzw. Datei-Details öffnen |
-| **Linksklick in Konsole** | Fokus direkt auf die Konsole setzen |
+| **Linksklick auf rechte Spalte** | Bei Ordnern: Ordner betreten und angeklickten Eintrag auswählen; bei Dateien: Datei mit dem Opener öffnen |
+| **Linksklick in Konsolenbereich** | Fokus direkt auf die Konsole setzen (Klick außerhalb setzt den Fokus zurück auf den Dateimanager) |
 | **Rechtsklick auf Eintrag** | Element-Auswahl umschalten (`*`) |
 
 ---
