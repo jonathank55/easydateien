@@ -2093,15 +2093,18 @@ class EasyDateienApp:
                     else:
                         cell_right = " " * w_right
                 elif cur_item and not is_cur_dir:
+                    size_str = format_size(cur_item.size)
+                    date_str = format_mtime(cur_item.mtime)
+                    mode_str = cur_item.mode_str
                     card = [
                         " Details",
-                        f" Typ:    {truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 9))}",
-                        f" Größe:  {format_size(cur_item.size):>8}",
-                        f" Datum:  {format_mtime(cur_item.mtime)}",
-                        f" Rechte: {cur_item.mode_str}",
+                        f"Typ:{' ' * max(0, w_right - 10 - 4)}   {truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 9))}",
+                        f"Größe:{' ' * max(0, w_right - 10 - 6)}  {size_str:>8}",
+                        f"Datum:{' ' * max(0, w_right - 10 - 6)}  {date_str}",
+                        f"Rechte:{' ' * max(0, w_right - 10 - 7)} {mode_str}",
                     ]
                     if cur_item.is_symlink:
-                        card.append(f" Ziel:   {truncate_to_width(cur_item.symlink_target, max(3, w_right - 9))}")
+                        card.append(f"Ziel:{' ' * max(0, w_right - 10 - 5)}   {truncate_to_width(cur_item.symlink_target, max(3, w_right - 9))}")
 
                     if r < len(card):
                         cell_right = pad_to_width(card[r], w_right)
