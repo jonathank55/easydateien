@@ -1691,7 +1691,10 @@ class EasyDateienApp:
                         )
                         lines.append(f"Archiv-Inhalt ({len(infos)} Dateien):")
                         for fe in zip_entries[:max_lines - 1]:
-                            lines.append(f"  {fe.name} ({format_size(fe.size)})")
+                            if fe.is_dir:
+                                lines.append(f"  {fe.name}")
+                            else:
+                                lines.append(f"  {fe.name} ({format_size(fe.size)})")
                 else:
                     with open(path, "r", encoding="utf-8", errors="replace") as f:
                         for _ in range(max_lines * 3):  # Mehr Zeilen lesen, falls Umbruch aktiviert ist
