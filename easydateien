@@ -20,29 +20,33 @@ import argparse
 import stat
 import json
 import unicodedata
+import functools
+import shlex
 from typing import List, Dict, Set, Optional, Tuple
+
+from easydateien_konfigurator import KEY_BINDINGS, build_keymap, fit_hints
 
 HOME_DIR = os.path.expanduser("~")
 CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 CLIP_HELPER_PATH = os.path.join(CONFIG_DIR, "easydateien_clip")
 
-# Farbcodes nach optimi-Farbnorm
+# Farbcodes - Farben deaktiviert, nur Formatierungen (Fett, Kursiv, Invertiert) beibehalten
 C_RESET = "\033[0m"
 C_BOLD = "\033[1m"
 C_DIM = "\033[2m"
 C_ITALIC = "\033[3m"
-C_BLUE = "\033[0;34m"
-C_BOLD_BLUE = "\033[1;34m"
-C_CYAN = "\033[0;36m"
-C_BOLD_CYAN = "\033[1;36m"
-C_GREEN = "\033[0;32m"
-C_BOLD_GREEN = "\033[1;32m"
-C_YELLOW = "\033[1;33m"
-C_RED = "\033[0;31m"
-C_BOLD_RED = "\033[1;31m"
-C_MAGENTA = "\033[0;35m"
-C_GRAY = "\033[90m"
+C_BLUE = ""
+C_BOLD_BLUE = ""
+C_CYAN = ""
+C_BOLD_CYAN = ""
+C_GREEN = ""
+C_BOLD_GREEN = ""
+C_YELLOW = ""
+C_RED = ""
+C_BOLD_RED = ""
+C_MAGENTA = ""
+C_GRAY = ""
 C_INVERT = "\033[7m"
 
 CLEAR_LINE = "\033[2K"
@@ -53,6 +57,7 @@ ENABLE_AUTOWRAP = "\033[?7h"
 
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
+@functools.lru_cache(maxsize=8192)
 def char_width(c: str) -> int:
     """Ermittelt die visuelle Terminal-Spaltenbreite eines einzelnen Zeichens."""
     if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
@@ -61,15 +66,20 @@ def char_width(c: str) -> int:
     if eaw in ("W", "F"):
         return 2
     cp = ord(c)
-    if (0x1F300 <= cp <= 0x1FAFF) or (0x2600 <= cp <= 0x27BF) or (0xFE00 <= cp <= 0xFE0F):
+    if 0x1F300 <= cp <= 0x1FAFF:
         return 2
     return 1
 
+@functools.lru_cache(maxsize=32768)
 def str_width(text: str) -> int:
     """Berechnet die tatsächliche sichtbare Spaltenbreite eines Textes ohne ANSI-Codes."""
-    clean = ANSI_ESCAPE_RE.sub("", text)
-    return sum(char_width(c) for c in clean)
+    if "\x1b" in text:
+        text = ANSI_ESCAPE_RE.sub("", text)
+    if text.isascii() and text.isprintable():
+        return len(text)
+    return sum(char_width(c) for c in text)
 
+@functools.lru_cache(maxsize=32768)
 def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
     """Kürzt Text deterministisch auf die maximale visuelle Terminalbreite unter Erhalt von ANSI-Codes."""
     if max_w <= 0:
@@ -99,18 +109,101 @@ def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
         w += cw
         i += 1
     res_str = "".join(res)
-    if has_ansi:
-        return f"{res_str}{C_RESET}{ellipsis}"
     return f"{res_str}{ellipsis}"
 
 def pad_to_width(text: str, width: int, align: str = "left") -> str:
     """Füllt formatierten Text exakt auf die gewünschte visuelle Terminalbreite auf."""
+    if width <= 0:
+        return ""
     w = str_width(text)
     if w > width:
         clean = ANSI_ESCAPE_RE.sub("", text)
-        return truncate_to_width(clean, width)
-    pad = " " * (width - w)
+        text = truncate_to_width(clean, width)
+        w = str_width(text)
+    pad = " " * max(0, width - w)
     return (pad + text) if align == "right" else (text + pad)
+
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+@functools.lru_cache(maxsize=8192)
+def safe_text(text: str) -> str:
+    """Ersetzt Steuerzeichen in Dateinamen, damit sie das Layout nie zerstören können."""
+    return _CONTROL_CHARS_RE.sub("?", text)
+
+def take_width(text: str, max_w: int) -> str:
+    """Liefert das längste Präfix von text, das höchstens max_w Spalten belegt."""
+    out = []
+    w = 0
+    for c in text:
+        cw = char_width(c)
+        if w + cw > max_w:
+            break
+        out.append(c)
+        w += cw
+    return "".join(out)
+
+def truncate_left(text: str, max_w: int) -> str:
+    """Kürzt am Anfang mit „…“ und behält das Ende (z. B. Pfade: der letzte Teil ist am wichtigsten)."""
+    if max_w <= 0:
+        return ""
+    if str_width(text) <= max_w:
+        return text
+    if max_w == 1:
+        return "…"
+    out = []
+    w = 0
+    for c in reversed(text):
+        cw = char_width(c)
+        if w + cw > max_w - 1:
+            break
+        out.append(c)
+        w += cw
+    return "…" + "".join(reversed(out))
+
+def split_name_ext(name: str, is_dir: bool) -> Tuple[str, str]:
+    """Trennt einen Namen in (Stamm, Endung). Ordner haben „/“, Dateien ihre Endung (.tar.gz inklusive)."""
+    if is_dir:
+        return name, "/"
+    stem, ext = os.path.splitext(name)
+    if stem.lower().endswith(".tar") and ext:
+        stem, ext = stem[:-4], ".tar" + ext
+    if not stem or not ext or len(ext) > 16 or " " in ext:
+        return name, ""
+    return stem, ext
+
+def truncate_name(name: str, is_dir: bool, max_w: int) -> str:
+    """Kürzt einen Datei-/Ordnernamen mit „…“ so, dass die Endung (.txt) bzw. das „/“ nach dem „…“ erhalten bleibt."""
+    if max_w <= 0:
+        return ""
+    name = safe_text(name)
+    full = name + ("/" if is_dir else "")
+    if str_width(full) <= max_w:
+        return full
+    stem, suffix = split_name_ext(name, is_dir)
+    keep = max_w - str_width(suffix) - 1
+    if suffix and keep >= 1:
+        head = take_width(stem, keep)
+        if head:
+            return f"{head}…{suffix}"
+    return truncate_to_width(full, max_w)
+
+def render_input_field(text: str, cursor: int, width: int) -> str:
+    """Zeichnet ein Eingabefeld mit invertiertem Cursor; zu lange Eingaben werden mit „…“ um den Cursor herum gekürzt."""
+    if width <= 0:
+        return ""
+    cursor = max(0, min(cursor, len(text)))
+    cur_raw = text[cursor] if cursor < len(text) else " "
+    cur_ch = safe_text(cur_raw)
+    cur_w = max(1, char_width(cur_ch))
+    before = safe_text(text[:cursor])
+    after = safe_text(text[cursor + 1:])
+    bw, aw = str_width(before), str_width(after)
+    if bw + cur_w + aw > width:
+        a_budget = min(aw, max(0, (width - cur_w) // 3))
+        b_budget = max(0, width - cur_w - a_budget)
+        before = truncate_left(before, b_budget)
+        after = truncate_to_width(after, max(0, width - cur_w - str_width(before)))
+    return f"{before}{C_INVERT}{cur_ch}{C_RESET}{after}"
 
 def wrap_line_to_width(text: str, max_w: int) -> List[str]:
     """Bricht eine Textzeile unter Beachtung von Wortgrenzen, visuellen Zeichenbreiten und ANSI-Sequenzen deterministisch auf max_w um."""
@@ -136,15 +229,13 @@ def wrap_line_to_width(text: str, max_w: int) -> List[str]:
             cur_w += tw
             for m in ANSI_ESCAPE_RE.finditer(token):
                 esc = m.group(0)
-                if esc in ("\033[0m", "\033[m", C_RESET):
+                if esc in ("\033[0m", "\033[m"):
                     active_ansi.clear()
                 else:
                     active_ansi.append(esc)
         else:
             if token.isspace():
                 line_str = "".join(cur_line)
-                if active_ansi:
-                    line_str += C_RESET
                 lines.append(line_str)
                 cur_line = list(active_ansi)
                 cur_w = sum(char_width(x) for x in ANSI_ESCAPE_RE.sub("", "".join(cur_line)))
@@ -152,8 +243,6 @@ def wrap_line_to_width(text: str, max_w: int) -> List[str]:
 
             if cur_line:
                 line_str = "".join(cur_line)
-                if active_ansi:
-                    line_str += C_RESET
                 lines.append(line_str)
                 cur_line = list(active_ansi)
                 cur_w = sum(char_width(x) for x in ANSI_ESCAPE_RE.sub("", "".join(cur_line)))
@@ -163,7 +252,7 @@ def wrap_line_to_width(text: str, max_w: int) -> List[str]:
                 cur_w += tw
                 for m in ANSI_ESCAPE_RE.finditer(token):
                     esc = m.group(0)
-                    if esc in ("\033[0m", "\033[m", C_RESET):
+                    if esc in ("\033[0m", "\033[m"):
                         active_ansi.clear()
                     else:
                         active_ansi.append(esc)
@@ -176,7 +265,7 @@ def wrap_line_to_width(text: str, max_w: int) -> List[str]:
                         if m:
                             esc = m.group(0)
                             cur_line.append(esc)
-                            if esc in ("\033[0m", "\033[m", C_RESET):
+                            if esc in ("\033[0m", "\033[m"):
                                 active_ansi.clear()
                             else:
                                 active_ansi.append(esc)
@@ -186,8 +275,6 @@ def wrap_line_to_width(text: str, max_w: int) -> List[str]:
                     cw = char_width(c)
                     if cur_w + cw > max_w and cur_line:
                         line_str = "".join(cur_line)
-                        if active_ansi:
-                            line_str += C_RESET
                         lines.append(line_str)
                         cur_line = list(active_ansi)
                         cur_w = sum(char_width(x) for x in ANSI_ESCAPE_RE.sub("", "".join(cur_line)))
@@ -272,7 +359,7 @@ def replace_ansi_range(base_line: str, start_col: int, replacement: str, repl_wi
     right_w = max(0, total_width - end_col)
     right_pad = pad_to_width(right_str, right_w, align="right") if right_str else (" " * right_w)
 
-    return f"{left_pad}{replacement}{C_RESET}{right_pad}"
+    return f"{left_pad}{replacement}{right_pad}"
 
 def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tuple[List[str], int]:
     """Baut ein standardisiertes Vordergrund-Modal im Yazi-Stil mit blauem Rahmen."""
@@ -286,7 +373,7 @@ def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tupl
     dash_l = "─" * left_d
     dash_r = "─" * right_d
     dash_b = "─" * (box_w - 2)
-    top_line = f"╭{dash_l} {C_BOLD_CYAN}{title}{C_RESET} {dash_r}╮"
+    top_line = f"╭{dash_l} {title} {dash_r}╮"
     bot_line = f"╰{dash_b}╯"
 
     res = [top_line]
@@ -529,13 +616,14 @@ class UndoAction:
         self.data = data
 
 class FileEntry:
-    __slots__ = ("name", "path", "is_dir", "is_symlink", "is_exec", "size", "mtime", "ext", "mode_str", "symlink_target")
+    __slots__ = ("name", "path", "is_dir", "is_symlink", "is_exec", "size", "mtime", "ext", "mode_str", "symlink_target", "is_broken")
 
-    def __init__(self, path: str, name: str):
+    def __init__(self, path: str, name: str, dir_entry: Optional["os.DirEntry"] = None):
         self.path = path
         self.name = name
         self.is_dir = False
-        self.is_symlink = os.path.islink(path)
+        self.is_symlink = False
+        self.is_broken = False
         self.is_exec = False
         self.size = 0
         self.mtime = 0.0
@@ -543,29 +631,41 @@ class FileEntry:
         self.symlink_target = ""
         _, self.ext = os.path.splitext(name)
         try:
-            st = os.stat(path, follow_symlinks=False)
+            if dir_entry is not None:
+                self.is_symlink = dir_entry.is_symlink()
+                st = dir_entry.stat(follow_symlinks=False)
+            else:
+                self.is_symlink = os.path.islink(path)
+                st = os.stat(path, follow_symlinks=False)
             self.mtime = st.st_mtime
-            try:
-                self.mode_str = stat.filemode(st.st_mode)
-            except Exception:
-                pass
-            self.is_dir = os.path.isdir(path) if self.is_symlink else stat.S_ISDIR(st.st_mode)
-            self.is_exec = bool(st.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)) and not self.is_dir
+            self.mode_str = stat.filemode(st.st_mode)
             self.size = st.st_size
             if self.is_symlink:
                 try:
                     self.symlink_target = os.readlink(path)
-                except Exception:
+                except OSError:
                     pass
-        except Exception:
+                try:
+                    tst = os.stat(path)  # folgt dem Link: Ziel-Typ und -Größe
+                    self.is_dir = stat.S_ISDIR(tst.st_mode)
+                    self.size = tst.st_size
+                    self.is_exec = bool(tst.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)) and not self.is_dir
+                except OSError:
+                    self.is_broken = True
+            else:
+                self.is_dir = stat.S_ISDIR(st.st_mode)
+                self.is_exec = bool(st.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)) and not self.is_dir
+        except OSError:
             pass
 
 def get_file_type_desc(item: FileEntry) -> str:
     """Liefert eine präzise deutsche Typbezeichnung."""
+    if item.is_symlink:
+        if item.is_broken:
+            return "Defekter Link"
+        return "Link auf Ordner" if item.is_dir else "Symbolischer Link"
     if item.is_dir:
         return "Verzeichnis"
-    if item.is_symlink:
-        return "Symbolischer Link"
     ext = item.ext.lower()
     m = {
         ".txt": "Textdokument", ".md": "Markdown-Datei", ".py": "Python-Skript",
@@ -586,10 +686,50 @@ def get_file_type_desc(item: FileEntry) -> str:
         return "Ausführbare Datei"
     return f"Datei ({ext})" if ext else "Binärdatei"
 
-def get_file_colored_name(item: FileEntry) -> str:
-    """Liefert den Dateinamen neutral ohne typbezogene Farbakzente."""
-    suffix = "/" if (item.is_dir and not item.name.endswith("/")) else ("@" if (item.is_symlink and not item.name.endswith("@")) else "")
-    return f"{item.name}{suffix}"
+_NATURAL_RE = re.compile(r"(\d+)")
+
+def natural_key(text: str) -> list:
+    """Natürlicher Sortierschlüssel (datei2 < datei10), unabhängig von Groß-/Kleinschreibung."""
+    return [int(p) if p.isdigit() else p for p in _NATURAL_RE.split(text.lower())]
+
+def scan_raw(path: str) -> List[FileEntry]:
+    """Liest alle Einträge eines Verzeichnisses ungefiltert und unsortiert ein."""
+    entries = []
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                entries.append(FileEntry(entry.path, entry.name, entry))
+    except OSError:
+        return []
+    return entries
+
+def arrange_entries(
+    raw: List[FileEntry],
+    show_hidden: bool = False,
+    sort_by: str = "mtime",
+    sort_reverse: bool = True,
+    sort_dir_first: bool = True,
+    filter_query: str = ""
+) -> List[FileEntry]:
+    """Filtert und sortiert eingelesene Einträge deterministisch."""
+    q = filter_query.lower()
+    entries = [
+        e for e in raw
+        if (show_hidden or not e.name.startswith(".")) and (not q or q in e.name.lower())
+    ]
+
+    # Datum und Größe: neueste/größte zuerst (sort_reverse); Name und Typ: stets aufsteigend A–Z
+    if sort_by == "name":
+        entries.sort(key=lambda e: natural_key(e.name))
+    elif sort_by == "size":
+        entries.sort(key=lambda e: (e.size, natural_key(e.name)), reverse=sort_reverse)
+    elif sort_by == "ext":
+        entries.sort(key=lambda e: (e.ext.lower(), natural_key(e.name)))
+    else:
+        entries.sort(key=lambda e: (e.mtime, natural_key(e.name)), reverse=sort_reverse)
+    if sort_dir_first:
+        entries.sort(key=lambda e: not e.is_dir)
+    return entries
 
 def scan_directory(
     path: str,
@@ -600,31 +740,41 @@ def scan_directory(
     filter_query: str = ""
 ) -> List[FileEntry]:
     """Liest ein Verzeichnis ein, filtert und sortiert deterministisch."""
-    entries = []
-    try:
-        with os.scandir(path) as it:
-            for entry in it:
-                if not show_hidden and entry.name.startswith("."):
-                    continue
-                if filter_query and filter_query.lower() not in entry.name.lower():
-                    continue
-                entries.append(FileEntry(entry.path, entry.name))
-    except Exception:
-        return []
+    return arrange_entries(scan_raw(path), show_hidden, sort_by, sort_reverse, sort_dir_first, filter_query)
 
-    def sort_key(e: FileEntry):
-        if sort_by == "name":
-            return e.name.lower()
-        elif sort_by == "size":
-            return e.size
-        elif sort_by == "ext":
-            return e.ext.lower()
-        return e.mtime
+def listing_signature(entries: List[FileEntry]) -> Tuple:
+    """Schneller Fingerabdruck eines Verzeichnisinhalts (Name, Größe, Änderungszeit) zur Änderungserkennung."""
+    return tuple(sorted((e.name, e.size, e.mtime, e.symlink_target) for e in entries))
 
-    entries.sort(key=sort_key, reverse=sort_reverse)
-    if sort_dir_first:
-        entries.sort(key=lambda e: not e.is_dir)
-    return entries
+def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
+    """Rendert Name (und bei Links „ @ Ziel“ kursiv) exakt auf `width` Spalten.
+
+    Der Name hat Vorrang: Ist er zu lang, wird er mit „…“ gekürzt, die Endung bzw. „/“ bleibt dahinter
+    erhalten. Nur verbleibender Platz wird für den (am Anfang mit „…“ gekürzten) Linkzielpfad genutzt.
+    """
+    if width <= 0:
+        return ""
+    st_on = C_BOLD if bold else ""
+    full_name = safe_text(it.name) + ("/" if it.is_dir else "")
+    name_w = str_width(full_name)
+
+    def styled(txt: str) -> str:
+        return f"{st_on}{txt}{C_RESET}" if txt else ""
+
+    if it.is_symlink:
+        target = safe_text(it.symlink_target)
+        if target and name_w + 3 + 4 <= width:
+            tgt = truncate_left(target, width - name_w - 3)
+            body = f"{styled(full_name)} @ {C_ITALIC}{tgt}{C_RESET}"
+        elif name_w + 2 <= width:
+            body = f"{styled(full_name)} @"
+        elif width >= 6:
+            body = f"{styled(truncate_name(it.name, it.is_dir, width - 2))} @"
+        else:
+            body = styled(truncate_name(it.name, it.is_dir, width))
+    else:
+        body = styled(truncate_name(it.name, it.is_dir, width))
+    return pad_to_width(body, width)
 
 def read_key(fd: int, timeout: float = 0.05) -> str:
     """Liest Tastatur- und Maus-Events zuverlässig über SGR und ANSI-Sequenzen."""
@@ -725,20 +875,24 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
         return ""
 
 class EasyDateienApp:
+    STATUS_TIMEOUT = 6.0  # Sekunden, nach denen Statusmeldungen automatisch verschwinden
+
     def __init__(self, initial_path: Optional[str] = None):
         self.current_dir = os.path.abspath(initial_path if initial_path else os.getcwd())
         self.config = self.load_config()
+        self.keymap: Dict[str, str] = build_keymap()
         self.items: List[FileEntry] = []
         self.selected_idx: int = 0
+        self.view_start: int = 0
         self.selected_paths: Set[str] = set()
         self.clipboard_paths: List[str] = []
         self.clipboard_mode: Optional[str] = None
         self.status_message: str = ""
         self.status_level: str = "info"
         self.status_expiry_moves: int = 0
+        self.status_time: float = 0.0
         self.filter_query: str = ""
-        self.last_refresh_time: float = 0.0
-        self._refresh_enabled: bool = True  # Steuerungsflag für automatische Aktualisierung
+        self.quit_requested: bool = False
 
         self.undo_stack: List[UndoAction] = []
 
@@ -763,15 +917,31 @@ class EasyDateienApp:
         self.console_scroll_offset: int = 0
         self._mouse_tracking_active: bool = False
 
+        # Verzeichnis-Cache: Pfad -> (mtime_ns des Ordners, Version, Einträge)
+        self._raw_cache: Dict[str, Tuple[int, int, List[FileEntry]]] = {}
+        self._raw_version: int = 0
+        self._arranged_cache: Dict[Tuple, List[FileEntry]] = {}
+        self._cur_stamp: int = -1
+        self._cur_sig: Optional[Tuple] = None
+        self._next_full_poll: float = 0.0
+        self._pane_paths: List[str] = []
+        self.cached_file_preview_key: Optional[Tuple] = None
+        self.cached_file_preview_lines: List[str] = []
+        self.cached_file_preview_path: Optional[str] = None
+
+        # Parent/Child pane caches
         self.cached_parent_dir: Optional[str] = None
         self.cached_parent_items: List[FileEntry] = []
         self.cached_child_path: Optional[str] = None
         self.cached_child_items: List[FileEntry] = []
-        self.cached_file_preview_path: Optional[str] = None
-        self.cached_file_preview_lines: List[str] = []
+
+        # Frame-Puffer für differenzielles Zeichnen
+        self._prev_frame: Optional[List[str]] = None
 
         ensure_clip_helper()
         self.refresh_items()
+
+    # ------------------------------------------------------------------ Terminal
 
     def set_mouse_tracking(self, enable: bool):
         """Aktiviert oder deaktiviert das SGR-Maus-Tracking im Terminal deterministisch."""
@@ -790,6 +960,27 @@ class EasyDateienApp:
         """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Konfigurationsstatus."""
         should_enable = bool(self.config.get("mouse_support", True)) and not (self.show_console and self.console_focused)
         self.set_mouse_tracking(should_enable)
+
+    def suspend_tui(self, fd: int, old_settings):
+        """Verlässt die Vollbildansicht (für Editor, Shell, interaktive Programme)."""
+        self.set_mouse_tracking(False)
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
+        sys.stdout.flush()
+
+    def resume_tui(self, fd: int):
+        """Kehrt in die Vollbildansicht zurück und erzwingt ein vollständiges Neuzeichnen."""
+        tty.setcbreak(fd, termios.TCSADRAIN)
+        try:
+            termios.tcflush(fd, termios.TCIFLUSH)  # liegengebliebene Tasten des Fremdprogramms verwerfen
+        except Exception:
+            pass
+        sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
+        self.sync_mouse_state()
+        sys.stdout.write("\033[2J\033[3J\033[H")
+        sys.stdout.flush()
+        self._prev_frame = None
+        self.refresh_items()
 
     def load_config(self) -> dict:
         cfg = {
@@ -811,92 +1002,204 @@ class EasyDateienApp:
         self.status_message = msg
         self.status_level = level
         self.status_expiry_moves = 0
+        self.status_time = time.monotonic()
 
-    def refresh_items(self, force: bool = False):
-        """Aktualisiert die Dateiliste und prüft auf Änderungen im Dateisystem."""
-        if not self._refresh_enabled and not force:
-            return
+    # ------------------------------------------------------------ Verzeichnisse
 
-        current_time = time.time()
-        # Sofort aktualisieren, wenn force=True, sonst nur alle 0.1 Sekunden
-        if not force and current_time - self.last_refresh_time < 0.1:
-            return
-        self.last_refresh_time = current_time
+    @staticmethod
+    def dir_stamp(path: str) -> int:
+        """Änderungsstempel eines Ordners (ändert sich bei Anlegen, Löschen und Umbenennen von Einträgen)."""
+        try:
+            return os.stat(path).st_mtime_ns
+        except OSError:
+            return -1
 
-        self.cached_parent_dir = None
-        self.cached_child_path = None
-        self.cached_file_preview_path = None
-        self.items = scan_directory(
-            self.current_dir,
-            show_hidden=self.config.get("show_hidden", False),
-            sort_by=self.config.get("sort_by", "mtime"),
-            sort_reverse=self.config.get("sort_reverse", True),
-            sort_dir_first=self.config.get("sort_dir_first", True),
-            filter_query=self.filter_query,
-        )
+    def get_raw_entries(self, path: str, fresh: bool = False) -> List[FileEntry]:
+        """Liefert die Einträge eines Ordners aus dem Cache; veraltete Caches werden automatisch neu eingelesen."""
+        stamp = self.dir_stamp(path)
+        cached = self._raw_cache.get(path)
+        if cached and cached[0] == stamp and not fresh:
+            return cached[2]
+        entries = scan_raw(path)
+        self._raw_version += 1
+        self._raw_cache[path] = (stamp, self._raw_version, entries)
+        if len(self._raw_cache) > 64:
+            oldest = min(self._raw_cache, key=lambda p: self._raw_cache[p][1])
+            if oldest != path:
+                del self._raw_cache[oldest]
+        return entries
+
+    def get_arranged(self, path: str, use_filter: bool = False) -> List[FileEntry]:
+        """Liefert die gefilterte und sortierte Ansicht eines Ordners (mit Cache je Konfiguration)."""
+        raw = self.get_raw_entries(path)
+        version = self._raw_cache[path][1]
+        cfg = self.config
+        flt = self.filter_query if use_filter else ""
+        key = (path, version, cfg.get("show_hidden", False), cfg.get("sort_by", "mtime"),
+               cfg.get("sort_reverse", True), cfg.get("sort_dir_first", True), flt)
+        res = self._arranged_cache.get(key)
+        if res is None:
+            res = arrange_entries(raw, key[2], key[3], key[4], key[5], flt)
+            if len(self._arranged_cache) > 48:
+                self._arranged_cache.clear()
+            self._arranged_cache[key] = res
+        return res
+
+    def refresh_items(self, force: bool = True):
+        """Liest den aktuellen Ordner frisch ein. Der Cursor bleibt auf derselben Datei, auch wenn sich die Liste ändert.
+
+        Der Parameter `force` bleibt aus Kompatibilitätsgründen erhalten; es wird stets frisch eingelesen,
+        denn die Anzeige muss jederzeit exakt den Ordnerzustand widerspiegeln.
+        """
+        prev_path = None
+        prev_idx = self.selected_idx
+        if self.items and 0 <= self.selected_idx < len(self.items):
+            prev_path = self.items[self.selected_idx].path
+
+        self._cur_stamp = self.dir_stamp(self.current_dir)
+        raw = self.get_raw_entries(self.current_dir, fresh=True)
+        self._cur_sig = listing_signature(raw)
+        self.items = self.get_arranged(self.current_dir, use_filter=True)
+
+        if prev_path is not None:
+            for i, it in enumerate(self.items):
+                if it.path == prev_path:
+                    self.selected_idx = i
+                    break
+            else:
+                self.selected_idx = prev_idx
         if self.selected_idx >= len(self.items):
             self.selected_idx = max(0, len(self.items) - 1)
+        if self.selected_idx < 0:
+            self.selected_idx = 0
+
+    def poll_changes(self) -> bool:
+        """Prüft kostengünstig auf Änderungen im Dateisystem; True bedeutet: Bildschirm neu zeichnen.
+
+        Ordner-Stempel werden bei jedem Aufruf geprüft (ein stat-Aufruf je sichtbarem Ordner). Zusätzlich
+        werden die sichtbaren Ordner in adaptiven Abständen komplett neu eingelesen, damit auch Größen- und
+        Zeitänderungen einzelner Dateien (z. B. laufende Downloads) sofort erscheinen.
+        """
+        changed = False
+        now = time.monotonic()
+
+        if (self.status_message and not self.active_dialog and self.status_time
+                and now - self.status_time > self.STATUS_TIMEOUT):
+            self.status_message = ""
+            changed = True
+
+        full_poll = now >= self._next_full_poll
+        if full_poll or self.dir_stamp(self.current_dir) != self._cur_stamp:
+            before = self._cur_sig
+            t0 = time.monotonic()
+            self.refresh_items()
+            elapsed = time.monotonic() - t0
+            if self._cur_sig != before:
+                changed = True
+            if full_poll:
+                self._next_full_poll = time.monotonic() + max(0.5, elapsed * 10)
+
+        for path in self._pane_paths:
+            cached = self._raw_cache.get(path)
+            if cached is None or cached[0] != self.dir_stamp(path):
+                changed = True
+            elif full_poll:
+                old_sig = listing_signature(cached[2])
+                new_entries = self.get_raw_entries(path, fresh=True)
+                if listing_signature(new_entries) != old_sig:
+                    changed = True
+        return changed
+
+    def enter_directory(self, new_path: str):
+        """Wechselt in einen Ordner und setzt Cursor, Ansicht und Filter zurück."""
+        self.current_dir = os.path.abspath(new_path)
+        self.items = []
+        self.selected_idx = 0
+        self.view_start = 0
+        if self.filter_query:
+            self.filter_query = ""
+        self.refresh_items()
 
     def change_directory(self, new_path: str):
         if os.path.isdir(new_path):
-            self.current_dir = os.path.abspath(new_path)
-            self.selected_idx = 0
-            self.refresh_items(force=True)
+            self.enter_directory(new_path)
 
     def select_filename(self, name: str) -> bool:
         """Wählt eine Datei nach Namen aus und stellt sicher, dass die Dateiliste aktuell ist."""
-        self.refresh_items(force=True)
-
+        self.refresh_items()
         for i, it in enumerate(self.items):
             if it.name == name:
                 self.selected_idx = i
                 return True
         return False
 
+    def reveal_filename(self, name: str) -> bool:
+        """Wie select_filename, hebt aber Filter und Versteckt-Ausblendung auf, falls sie den Eintrag verbergen."""
+        if self.select_filename(name):
+            return True
+        if self.filter_query:
+            self.filter_query = ""
+            if self.select_filename(name):
+                return True
+        if name.startswith(".") and not self.config.get("show_hidden", False):
+            self.config["show_hidden"] = True
+            self.refresh_items()
+            return self.select_filename(name)
+        return False
+
     def go_parent_directory(self):
         parent = os.path.dirname(self.current_dir)
         if parent and parent != self.current_dir:
             prev_name = os.path.basename(self.current_dir)
-            self.current_dir = parent
-            self.refresh_items(force=True)
+            self.enter_directory(parent)
             self.select_filename(prev_name)
 
+    # ------------------------------------------------------------- Öffnen/Editor
+
+    @staticmethod
+    def build_command(template: str, path: str) -> str:
+        """Setzt den Pfad (sicher für die Shell gequotet) in eine Befehlsvorlage ein; ohne %s wird er angehängt."""
+        quoted = shlex.quote(path)
+        return template.replace("%s", quoted) if "%s" in template else f"{template} {quoted}"
+
     def open_with_system(self, item: FileEntry):
-        opener = self.config.get("opener", "open %s")
-        cmd = opener.replace("%s", f'"{item.path}"')
+        opener = self.config.get("opener", "open %s") or "open %s"
+        cmd = self.build_command(opener, item.path)
         user_shell, env = get_shell_environment()
         try:
-            subprocess.Popen([user_shell, "-l", "-c", cmd], start_new_session=True, env=env)
+            subprocess.Popen([user_shell, "-c", cmd], start_new_session=True, env=env,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.set_status(f"Geöffnet: {item.name}", "success")
         except Exception as e:
             self.set_status(f"Fehler: {e}", "error")
 
-    def open_in_editor(self, item: FileEntry, fd: Optional[int], old_settings, editor: str = "nano"):
-        if fd is not None and old_settings is not None:
-            self.set_mouse_tracking(False)
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
-            sys.stdout.flush()
-            if editor == "vim":
-                editor_cmd = f'vim "{item.path}"'
-            elif editor == "nano":
-                editor_cmd = f'nano "{item.path}"'
-            else:
-                editor_cmd = self.config.get("text_editor", "nano %s").replace("%s", f'"{item.path}"')
-            user_shell, env = get_shell_environment()
-            try:
-                subprocess.run([user_shell, "-l", "-c", editor_cmd], env=env)
-            except KeyboardInterrupt:
-                pass
-            except Exception:
-                pass
-            finally:
-                tty.setcbreak(fd, termios.TCSADRAIN)
-                sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
-                self.sync_mouse_state()
-                sys.stdout.write("\033[2J\033[3J\033[H")
-                sys.stdout.flush()
-                self.refresh_items(force=True)
+    def open_in_editor(self, item: FileEntry, fd: Optional[int], old_settings):
+        """Öffnet die Datei im konfigurierten Texteditor (Standard: nano; in den Einstellungen änderbar)."""
+        if item.is_dir:
+            self.set_status("Ordner lassen sich nicht im Editor öffnen", "warning")
+            return
+        template = self.config.get("text_editor", "nano %s") or "nano %s"
+        user_shell, env = get_shell_environment()
+        try:
+            editor_bin = shlex.split(template)[0]
+        except (ValueError, IndexError):
+            self.set_status(f"Ungültiger Editor-Befehl: {template}", "error")
+            return
+        if not shutil.which(editor_bin, path=env.get("PATH")):
+            self.set_status(f"Editor „{editor_bin}“ nicht gefunden (Einstellung: m)", "error")
+            return
+        if fd is None or old_settings is None:
+            return
+        cmd = self.build_command(template, item.path)
+        self.suspend_tui(fd, old_settings)
+        try:
+            subprocess.run([user_shell, "-c", cmd], env=env, cwd=self.current_dir)
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            self.set_status(f"Fehler beim Editor: {e}", "error")
+        finally:
+            self.resume_tui(fd)
 
     def toggle_select(self):
         if not self.items:
@@ -912,7 +1215,6 @@ class EasyDateienApp:
             self.set_status(f"Auswahl: {len(self.selected_paths)}")
         if self.selected_idx < len(self.items) - 1:
             self.selected_idx += 1
-        self.refresh_items(force=True)
 
     def toggle_select_all(self):
         all_paths = {it.path for it in self.items}
@@ -924,7 +1226,6 @@ class EasyDateienApp:
         else:
             self.selected_paths.update(all_paths)
             self.set_status(f"Alle {len(self.selected_paths)} markiert")
-        self.refresh_items(force=True)
 
     def cut_selection(self):
         if not self.items:
@@ -941,7 +1242,6 @@ class EasyDateienApp:
         self.selected_paths.clear()
         sync_to_macos_clipboard(targets)
         self.set_status(f"{len(targets)} ausgeschnitten (p = einfügen)", "warning")
-        self.refresh_items(force=True)
 
     def copy_selection(self):
         if not self.items:
@@ -958,7 +1258,6 @@ class EasyDateienApp:
         self.selected_paths.clear()
         sync_to_macos_clipboard(targets)
         self.set_status(f"{len(targets)} kopiert (Cmd+V im Finder, p hier)", "success")
-        self.refresh_items(force=True)
 
     def paste_clipboard(self):
         sources = list(self.clipboard_paths) if self.clipboard_paths else get_macos_clipboard_files()
@@ -990,182 +1289,191 @@ class EasyDateienApp:
 
     def _perform_paste(self, sources: List[str]):
         """Führt das eigentliche Einfügen durch, nachdem Konflikte aufgelöst wurden."""
-        # Deaktiviere automatische Aktualisierung während des Einfügens
-        self._refresh_enabled = False
-        try:
-            success = 0
-            last_name = ""
-            pasted_records = []
-            is_cut = (self.clipboard_mode == "cut")
+        success = 0
+        last_name = ""
+        pasted_records = []
+        failed = False
+        is_cut = (self.clipboard_mode == "cut")
 
-            for src in sources:
-                if not os.path.exists(src):
-                    continue
-                name = os.path.basename(src)
-                dest = os.path.join(self.current_dir, name)
+        for src in sources:
+            if not os.path.exists(src):
+                continue
+            name = os.path.basename(src)
+            dest = os.path.join(self.current_dir, name)
 
-                # Überspringe, wenn Quelle und Ziel identisch sind (bei Ausschneiden)
-                if os.path.abspath(src) == os.path.abspath(dest) and is_cut:
-                    continue
+            # Überspringe, wenn Quelle und Ziel identisch sind (bei Ausschneiden)
+            if os.path.abspath(src) == os.path.abspath(dest) and is_cut:
+                continue
 
-                # Bei Kopieren: Füge Nummerierung hinzu, wenn Datei bereits existiert
-                if not is_cut and os.path.exists(dest):
-                    base, ext = os.path.splitext(name)
-                    c = 1
-                    while os.path.exists(dest):
-                        dest = os.path.join(self.current_dir, f"{base} ({c}){ext}")
-                        c += 1
-
-                try:
-                    if is_cut:
-                        shutil.move(src, dest)
-                        pasted_records.append((src, dest))
-                    else:
-                        if os.path.isdir(src):
-                            shutil.copytree(src, dest)
-                        else:
-                            shutil.copy2(src, dest)
-                        pasted_records.append((None, dest))
-                    success += 1
-                    last_name = os.path.basename(dest)
-                except Exception as e:
-                    self.set_status(f"Fehler beim Einfügen: {e}", "error")
-                    # Reaktiviere Aktualisierung bei Fehler
-                    self._refresh_enabled = True
-                    return
-
-            if pasted_records:
-                desc = f"Einfügen von {len(pasted_records)} Element(en)"
-                self.undo_stack.append(UndoAction("paste", desc, {"is_cut": is_cut, "records": pasted_records}))
-
-            self.clipboard_mode = None
-            self.clipboard_paths = []
-            self.refresh_items(force=True)
-            if last_name:
-                self.select_filename(last_name)
-            self.set_status(f"{success} eingefügt", "success")
-        finally:
-            # Reaktiviere Aktualisierung nach Abschluss
-            self._refresh_enabled = True
-
-    def create_zip_archive(self):
-        """Erstellt ein ZIP-Archiv aus den ausgewählten Dateien/Ordnern mit robuster Fehlerbehandlung."""
-        # Deaktiviere automatische Aktualisierung während des Archivierens
-        self._refresh_enabled = False
-        try:
-            targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
-            if not targets:
-                self.set_status("Keine Dateien/Ordner ausgewählt", "warning")
-                return None
-
-            # Filtere ungültige Pfade (z. B. Socket-Handles oder nicht existierende Dateien)
-            valid_targets = []
-            for target in targets:
-                if not os.path.exists(target):
-                    self.set_status(f"Warnung: '{os.path.basename(target)}' existiert nicht und wird übersprungen", "warning")
-                    continue
-                if stat.S_ISSOCK(os.stat(target).st_mode):
-                    self.set_status(f"Warnung: '{os.path.basename(target)}' ist ein Socket und wird übersprungen", "warning")
-                    continue
-                valid_targets.append(target)
-
-            if not valid_targets:
-                self.set_status("Keine gültigen Dateien/Ordner zum Archivieren", "error")
-                return None
-
-            # Bestimme den Basisnamen für das ZIP-Archiv
-            base_name = os.path.basename(valid_targets[0]) if len(valid_targets) == 1 else f"Archiv_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            if base_name.lower().endswith(".zip"):
-                base_name = base_name[:-4]
-
-            # Finde einen eindeutigen Zielpfad
-            dest = os.path.join(self.current_dir, f"{base_name}.zip")
-            c = 1
-            while os.path.exists(dest):
-                dest = os.path.join(self.current_dir, f"{base_name} ({c}).zip")
-                c += 1
+            # Bei Kopieren: Füge Nummerierung hinzu, wenn Datei bereits existiert
+            if not is_cut and os.path.exists(dest):
+                base, ext = os.path.splitext(name)
+                c = 1
+                while os.path.exists(dest):
+                    dest = os.path.join(self.current_dir, f"{base} ({c}){ext}")
+                    c += 1
 
             try:
-                with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
-                    for target in valid_targets:
-                        if not os.path.exists(target):
-                            continue  # Überspringe, falls Datei während des Archivierens gelöscht wurde
-                        if os.path.isdir(target):
-                            # Rekursiv alle Dateien im Ordner hinzufügen
-                            for root, _, files in os.walk(target):
-                                for file in files:
-                                    file_path = os.path.join(root, file)
-                                    # Überspringe Socket-Dateien und nicht existierende Dateien
-                                    try:
-                                        if not os.path.exists(file_path) or stat.S_ISSOCK(os.stat(file_path).st_mode):
-                                            continue
-                                        arcname = os.path.relpath(file_path, self.current_dir)
-                                        zf.write(file_path, arcname)
-                                    except (OSError, PermissionError):
-                                        self.set_status(f"Warnung: '{file}' konnte nicht gelesen werden", "warning")
-                                        continue
-                        else:
-                            # Einzelne Datei hinzufügen
-                            try:
-                                if not stat.S_ISSOCK(os.stat(target).st_mode):
-                                    zf.write(target, os.path.basename(target))
-                            except (OSError, PermissionError):
-                                self.set_status(f"Warnung: '{os.path.basename(target)}' konnte nicht gelesen werden", "warning")
-                                continue
-
-                # Aktualisiere die Ansicht und Statusmeldung
-                self.selected_paths.clear()
-                self.refresh_items(force=True)
-
-                # Wichtig: Hier die neu erstellte Zip-Datei auswählen
-                if not self.select_filename(os.path.basename(dest)):
-                    # Falls die Auswahl nicht funktioniert hat, versuchen wir es mit einer direkten Zuweisung
-                    for i, it in enumerate(self.items):
-                        if it.name == os.path.basename(dest):
-                            self.selected_idx = i
-                            break
-
-                self.undo_stack.append(UndoAction("create_zip", f"ZIP {os.path.basename(dest)}", {"path": dest}))
-                self.set_status(f"ZIP erstellt: {os.path.basename(dest)}", "success")
-                return dest
+                if is_cut:
+                    shutil.move(src, dest)
+                    pasted_records.append((src, dest))
+                else:
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dest)
+                    else:
+                        shutil.copy2(src, dest)
+                    pasted_records.append((None, dest))
+                success += 1
+                last_name = os.path.basename(dest)
             except Exception as e:
-                self.set_status(f"Fehler beim Erstellen des ZIP-Archivs: {e}", "error")
-                return None
-        finally:
-            # Reaktiviere Aktualisierung nach Abschluss
-            self._refresh_enabled = True
+                self.set_status(f"Fehler beim Einfügen: {e}", "error")
+                failed = True
+                break
 
-    def extract_zip_archive(self):
-        """Entpackt ein ZIP-Archiv in den aktuellen Ordner."""
-        if not self.items:
-            self.set_status("Keine Datei ausgewählt", "warning")
-            return
+        if pasted_records:
+            desc = f"Einfügen von {len(pasted_records)} Element(en)"
+            self.undo_stack.append(UndoAction("paste", desc, {"is_cut": is_cut, "records": pasted_records}))
 
-        item = self.items[self.selected_idx]
-        if not item.name.lower().endswith('.zip'):
-            self.set_status("Ausgewählte Datei ist kein ZIP-Archiv", "warning")
-            return
+        if not failed:
+            self.clipboard_mode = None
+            self.clipboard_paths = []
+        self.refresh_items()
+        if last_name:
+            self.reveal_filename(last_name)
+        if not failed:
+            self.set_status(f"{success} eingefügt", "success")
 
-        # Zielordner für die Extraktion
-        extract_dir = os.path.join(self.current_dir, os.path.splitext(item.name)[0])
+    @staticmethod
+    def unique_path(directory: str, stem: str, suffix: str = "") -> str:
+        """Liefert einen noch nicht vergebenen Pfad „stem suffix“, „stem (1) suffix“, …"""
+        dest = os.path.join(directory, f"{stem}{suffix}")
+        c = 1
+        while os.path.lexists(dest):
+            dest = os.path.join(directory, f"{stem} ({c}){suffix}")
+            c += 1
+        return dest
 
-        # Prüfe, ob der Zielordner bereits existiert
-        if os.path.exists(extract_dir):
-            c = 1
-            while os.path.exists(f"{extract_dir} ({c})"):
-                c += 1
-            extract_dir = f"{extract_dir} ({c})"
+    def create_zip_archive(self):
+        """Erstellt ein ZIP-Archiv aus der Auswahl (oder dem Eintrag unter dem Cursor) und springt darauf."""
+        targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
+        if not targets:
+            self.set_status("Keine Dateien/Ordner ausgewählt", "warning")
+            return None
+
+        # Filtere ungültige Pfade (z. B. Socket-Handles oder nicht existierende Dateien)
+        valid_targets = []
+        for target in sorted(targets):
+            if not os.path.exists(target):
+                self.set_status(f"Warnung: „{os.path.basename(target)}“ existiert nicht und wird übersprungen", "warning")
+                continue
+            if stat.S_ISSOCK(os.stat(target).st_mode):
+                self.set_status(f"Warnung: „{os.path.basename(target)}“ ist ein Socket und wird übersprungen", "warning")
+                continue
+            valid_targets.append(target)
+
+        if not valid_targets:
+            self.set_status("Keine gültigen Dateien/Ordner zum Archivieren", "error")
+            return None
+
+        # Bestimme den Basisnamen für das ZIP-Archiv
+        if len(valid_targets) == 1:
+            base_name = os.path.basename(valid_targets[0])
+        else:
+            base_name = f"Archiv_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        if base_name.lower().endswith(".zip"):
+            base_name = base_name[:-4]
+
+        dest = self.unique_path(self.current_dir, base_name, ".zip")
+        skipped = 0
 
         try:
-            with zipfile.ZipFile(item.path, 'r') as zip_ref:
-                zip_ref.extractall(extract_dir)
-
-            self.set_status(f"ZIP entpackt nach: {os.path.basename(extract_dir)}", "success")
-            self.refresh_items(force=True)
-            return extract_dir
+            with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+                for target in valid_targets:
+                    base_dir = os.path.dirname(os.path.abspath(target))
+                    if os.path.isdir(target):
+                        for root, dirs, files in os.walk(target):
+                            rel_root = os.path.relpath(root, base_dir)
+                            if not dirs and not files:
+                                zf.writestr(rel_root.rstrip("/") + "/", "")  # leere Ordner bewahren
+                            for file in files:
+                                file_path = os.path.join(root, file)
+                                try:
+                                    if not os.path.exists(file_path) or stat.S_ISSOCK(os.stat(file_path).st_mode):
+                                        skipped += 1
+                                        continue
+                                    zf.write(file_path, os.path.relpath(file_path, base_dir))
+                                except OSError:
+                                    skipped += 1
+                    else:
+                        try:
+                            zf.write(target, os.path.basename(target))
+                        except OSError:
+                            skipped += 1
         except Exception as e:
-            self.set_status(f"Fehler beim Entpacken: {e}", "error")
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
+            self.refresh_items()
+            self.set_status(f"Fehler beim Erstellen des ZIP-Archivs: {e}", "error")
             return None
+
+        self.selected_paths.clear()
+        self.refresh_items()
+        zip_name = os.path.basename(dest)
+        self.reveal_filename(zip_name)  # Zeiger springt direkt auf das neue Archiv
+        self.undo_stack.append(UndoAction("create_zip", f"ZIP {zip_name}", {"path": dest}))
+        if skipped:
+            self.set_status(f"ZIP erstellt: {zip_name} ({skipped} übersprungen)", "warning")
+        else:
+            self.set_status(f"ZIP erstellt: {zip_name}", "success")
+        return dest
+
+    def extract_zip_archive(self):
+        """Entpackt markierte bzw. das ausgewählte ZIP-Archiv in einen neuen Ordner und springt darauf."""
+        if not self.items:
+            self.set_status("Keine Datei ausgewählt", "warning")
+            return None
+
+        if self.selected_paths:
+            archives = sorted(p for p in self.selected_paths if p.lower().endswith(".zip") and os.path.isfile(p))
+            if not archives:
+                self.set_status("Keine ZIP-Archive in der Auswahl", "warning")
+                return None
+        else:
+            item = self.items[self.selected_idx]
+            if item.is_dir or not item.name.lower().endswith(".zip"):
+                self.set_status(f"„{item.name}“ ist kein ZIP-Archiv", "warning")
+                return None
+            archives = [item.path]
+
+        last_dir = None
+        done = 0
+        for archive in archives:
+            stem = os.path.splitext(os.path.basename(archive))[0] or "Archiv"
+            extract_dir = self.unique_path(self.current_dir, stem)
+            try:
+                with zipfile.ZipFile(archive, "r") as zip_ref:
+                    zip_ref.extractall(extract_dir)
+            except Exception as e:
+                shutil.rmtree(extract_dir, ignore_errors=True)
+                reason = "beschädigt oder kein gültiges ZIP" if isinstance(e, zipfile.BadZipFile) else str(e)
+                self.set_status(f"Fehler beim Entpacken von „{os.path.basename(archive)}“: {reason}", "error")
+                continue
+            self.undo_stack.append(UndoAction("create", f"Entpacken von {os.path.basename(archive)}", {"path": extract_dir}))
+            last_dir = extract_dir
+            done += 1
+
+        self.selected_paths.clear()
+        self.refresh_items()
+        if last_dir:
+            name = os.path.basename(last_dir)
+            self.reveal_filename(name)  # Zeiger springt direkt auf den entpackten Ordner
+            if done > 1:
+                self.set_status(f"{done} ZIP-Archive entpackt (zuletzt: {name})", "success")
+            else:
+                self.set_status(f"ZIP entpackt nach: {name}", "success")
+        return last_dir
 
     def undo_last_action(self):
         """Macht die letzte Dateioperation (Löschen, Umbenennen, Erstellen, Einfügen, ZIP) rückgängig."""
@@ -1278,7 +1586,7 @@ class EasyDateienApp:
             if zipfile.is_zipfile(path):
                 with zipfile.ZipFile(path, "r") as zf:
                     infos = zf.infolist()
-                    lines.append(f"{C_BOLD}Archiv-Inhalt ({len(infos)} Dateien):{C_RESET}")
+                    lines.append(f"Archiv-Inhalt ({len(infos)} Dateien):")
                     for info in infos[:max_lines - 1]:
                         lines.append(f"  {info.filename} ({format_size(info.file_size)})")
             else:
@@ -1291,7 +1599,7 @@ class EasyDateienApp:
                         clean_line = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_line)
                         lines.append(clean_line)
         except Exception:
-            lines = [f"{C_GRAY}[Binäre Datei oder nicht lesbar]{C_RESET}"]
+            lines = ["[Binäre Datei oder nicht lesbar]"]
 
         self.cached_file_preview_path = path
         self.cached_file_preview_lines = lines
@@ -1479,16 +1787,16 @@ class EasyDateienApp:
         cur_idx_str = f"{self.selected_idx + 1}/{total_items}" if total_items > 0 else "0/0"
 
         if self.status_message:
-            lvl_color = C_BOLD_GREEN if self.status_level == "success" else (C_BOLD_RED if self.status_level == "error" else (C_YELLOW if self.status_level == "warning" else C_CYAN))
-            msg_str = f" [{lvl_color}{self.status_message}{C_RESET}]"
+            msg_str = f" [{self.status_message}]"
         else:
             msg_str = ""
 
-        right_header = f"{msg_str}  {C_BOLD_CYAN}{cur_idx_str}{C_RESET}".strip() if msg_str else f"{C_BOLD_CYAN}{cur_idx_str}{C_RESET}"
-        right_header_plain = ANSI_ESCAPE_RE.sub("", right_header)
+        right_header = (msg_str + "  " + cur_idx_str).strip() if msg_str else cur_idx_str
+        right_header_plain = right_header
 
         avail_for_path = max(1, term_cols - str_width(right_header_plain) - 2)
-        path_styled = f"{C_BOLD_BLUE}{truncate_to_width(disp_path, avail_for_path)}{C_RESET}"
+        path_truncated = truncate_to_width(disp_path, avail_for_path)
+        path_styled = path_truncated
         pad_space = " " * max(1, term_cols - str_width(path_styled) - str_width(right_header_plain))
         header_line = f"{path_styled}{pad_space}{right_header}"
         header_line = pad_to_width(header_line, term_cols)
@@ -1672,13 +1980,9 @@ class EasyDateienApp:
                 if p_idx < len(parent_items):
                     p_it = parent_items[p_idx]
                     is_act = (os.path.abspath(p_it.path) == os.path.abspath(self.current_dir))
-                    p_name = p_it.name + ("/" if p_it.is_dir else "")
-                    prefix = f"{C_BOLD}▸{C_RESET} " if is_act else "  "
-                    p_trunc = truncate_to_width(p_name, max(2, w_left - 3))
-                    if is_act:
-                        txt_l = f" {prefix}{C_BOLD}{p_trunc}{C_RESET}"
-                    else:
-                        txt_l = f" {C_GRAY}{prefix}{p_trunc}{C_RESET}"
+                    p_styled = format_entry_name(p_it, max(2, w_left - 4), bold=is_act)
+                    prefix = f"{C_BOLD}▸{C_RESET}" if is_act else " "
+                    txt_l = f" {prefix} {p_styled}"
                     cell_left = pad_to_width(txt_l, w_left)
                 else:
                     cell_left = " " * w_left
@@ -1695,30 +1999,22 @@ class EasyDateienApp:
 
                 c_char = f"{C_BOLD}▸{C_RESET}" if is_cur else " "
                 if in_cut:
-                    b_char = f"{C_BOLD_RED}×{C_RESET}"
+                    b_char = "x"
                 elif in_copy:
-                    b_char = f"{C_BOLD_GREEN}+{C_RESET}"
+                    b_char = "+"
                 elif is_sel:
-                    b_char = f"{C_YELLOW}*{C_RESET}"
+                    b_char = "*"
                 else:
                     b_char = " "
 
-                prefix_str = f" {c_char}{b_char} "
-                prefix_len = 4
+                prefix_str = f" {c_char}{b_char}"
+                prefix_len = 3
                 s_str = format_size(it.size) if not it.is_dir else ""
 
                 if w_mid >= 26:
                     avail_n = max(3, w_mid - prefix_len - 10)
-                    n_trunc = truncate_to_width(it.name, avail_n - (1 if it.is_dir else 0))
-                    it_fake = FileEntry(it.path, n_trunc)
-                    it_fake.is_dir = it.is_dir
-                    it_fake.is_symlink = it.is_symlink
-                    it_fake.is_exec = it.is_exec
-                    it_fake.ext = it.ext
-                    n_styled = get_file_colored_name(it_fake)
-                    if is_cur:
-                        n_styled = f"{C_BOLD}{n_styled}{C_RESET}"
-                    s_part = f"  {C_GRAY}{s_str:>8}{C_RESET}" if s_str else " " * 10
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur)
+                    s_part = f"  {s_str:>8}" if s_str else " " * 10
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid - 10) + s_part
                 else:
@@ -1728,14 +2024,11 @@ class EasyDateienApp:
                     it_fake.is_dir = it.is_dir
                     it_fake.is_symlink = it.is_symlink
                     it_fake.is_exec = it.is_exec
-                    it_fake.ext = it.ext
-                    n_styled = get_file_colored_name(it_fake)
-                    if is_cur:
-                        n_styled = f"{C_BOLD}{n_styled}{C_RESET}"
+                    n_styled = format_entry_name(it, max(2, w_mid - prefix_len), bold=is_cur)
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid)
             elif len(self.items) == 0 and r == 0:
-                cell_mid = pad_to_width(f"  {C_ITALIC}(leer){C_RESET}", w_mid)
+                cell_mid = pad_to_width(f"  (leer)", w_mid)
             else:
                 cell_mid = " " * w_mid
 
@@ -1754,8 +2047,8 @@ class EasyDateienApp:
                             c_it_fake.is_symlink = c_it.is_symlink
                             c_it_fake.is_exec = c_it.is_exec
                             c_it_fake.ext = c_it.ext
-                            c_styled = get_file_colored_name(c_it_fake)
-                            cell_right = pad_to_width(f"  {c_styled}", w_right - 10) + f"  {C_GRAY}{c_size:>8}{C_RESET}"
+                            c_styled = format_entry_name(c_it_fake, max(2, w_right - 12), bold=False)
+                            cell_right = pad_to_width(f"  {c_styled}", w_right - 10) + f"  {c_size:>8}"
                         else:
                             avail_c = max(3, w_right - 3)
                             c_trunc = truncate_to_width(c_it.name, avail_c - (1 if c_it.is_dir else 0))
@@ -1764,34 +2057,34 @@ class EasyDateienApp:
                             c_it_fake.is_symlink = c_it.is_symlink
                             c_it_fake.is_exec = c_it.is_exec
                             c_it_fake.ext = c_it.ext
-                            c_styled = get_file_colored_name(c_it_fake)
+                            c_styled = format_entry_name(c_it_fake, max(2, w_right), bold=False)
                             cell_right = pad_to_width(f"  {c_styled}", w_right)
                     elif len(child_items) == 0 and r == 0:
-                        cell_right = pad_to_width(f"  {C_ITALIC}(leer){C_RESET}", w_right)
+                        cell_right = pad_to_width(f"  (leer)", w_right)
                     else:
                         cell_right = " " * w_right
                 elif cur_item and not is_cur_dir:
                     card = [
-                        f" {C_BOLD_BLUE}Details{C_RESET}",
-                        f" {C_BOLD}Typ:{C_RESET}    {truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 9))}",
-                        f" {C_BOLD}Größe:{C_RESET}  {format_size(cur_item.size)}",
-                        f" {C_BOLD}Datum:{C_RESET}  {format_mtime(cur_item.mtime)}",
-                        f" {C_BOLD}Rechte:{C_RESET} {C_GRAY}{cur_item.mode_str}{C_RESET}",
+                        " Details",
+                        f" Typ:    {truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 9))}",
+                        f" Größe:  {format_size(cur_item.size)}",
+                        f" Datum:  {format_mtime(cur_item.mtime)}",
+                        f" Rechte: {cur_item.mode_str}",
                     ]
                     if cur_item.is_symlink:
-                        card.append(f" {C_BOLD}Ziel:{C_RESET}   {C_CYAN}{truncate_to_width(cur_item.symlink_target, max(3, w_right - 9))}{C_RESET}")
+                        card.append(f" Ziel:   {truncate_to_width(cur_item.symlink_target, max(3, w_right - 9))}")
 
                     if r < len(card):
                         cell_right = pad_to_width(card[r], w_right)
                     elif r == len(card) and fm_rows >= 10:
                         cell_right = pad_to_width(f" {'─' * max(2, w_right - 2)}", w_right)
                     elif r == len(card) + 1 and fm_rows >= 10:
-                        cell_right = pad_to_width(f" {C_BOLD_CYAN}Vorschau{C_RESET}", w_right)
+                        cell_right = pad_to_width(f" Vorschau", w_right)
                     else:
                         p_line_idx = r - (len(card) + 2) if fm_rows >= 10 else -1
                         if 0 <= p_line_idx < len(preview_lines):
                             p_txt = preview_lines[p_line_idx]
-                            cell_right = pad_to_width(f" {C_GRAY}{truncate_to_width(p_txt, max(2, w_right - 2))}{C_RESET}", w_right)
+                            cell_right = pad_to_width(f" {truncate_to_width(p_txt, max(2, w_right - 2))}", w_right)
                         else:
                             cell_right = " " * w_right
                 else:
@@ -1847,7 +2140,7 @@ class EasyDateienApp:
         if has_status_bar:
             if self.active_dialog:
                 if self.active_dialog == "rename":
-                    badge = f"{C_YELLOW}[UMBENENNEN]{C_RESET}" if term_cols >= 45 else f"{C_YELLOW}[NAME]{C_RESET}"
+                    badge = "[UMBENENNEN]" if term_cols >= 45 else "[NAME]"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
@@ -1864,9 +2157,9 @@ class EasyDateienApp:
                         hints = distribute_options(opts_mini, avail_h)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str}  {C_GRAY}{hints}{C_RESET}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "new":
-                    badge = f"{C_BOLD_GREEN}[NEU ERSTELLEN]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_GREEN}[NEU]{C_RESET}"
+                    badge = "[NEU ERSTELLEN]" if term_cols >= 45 else "[NEU]"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
@@ -1883,9 +2176,9 @@ class EasyDateienApp:
                         hints = distribute_options(opts_mini, avail_h)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str}  {C_GRAY}{hints}{C_RESET}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "search":
-                    badge = f"{C_BOLD_CYAN}[FILTER / SUCHE]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_CYAN}[FILTER]{C_RESET}"
+                    badge = "[FILTER / SUCHE]" if term_cols >= 45 else "[FILTER]"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
@@ -1902,9 +2195,9 @@ class EasyDateienApp:
                         hints = distribute_options(opts_mini, avail_h)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str}  {C_GRAY}{hints}{C_RESET}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "goto_path":
-                    badge = f"{C_BOLD_BLUE}[GEHE ZU PFAD]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_BLUE}[PFAD]{C_RESET}"
+                    badge = "[GEHE ZU PFAD]" if term_cols >= 45 else "[PFAD]"
                     inp_txt = self.dialog_input
                     c_pos = self.dialog_cursor
                     disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
@@ -1921,11 +2214,11 @@ class EasyDateienApp:
                         hints = distribute_options(opts_mini, avail_h)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str}  {C_GRAY}{hints}{C_RESET}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "trash_confirm":
                     targets_c = len(self.selected_paths) if self.selected_paths else 1
                     t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
-                    badge = f"{C_BOLD_RED}[LÖSCHEN]{C_RESET}" if term_cols >= 40 else f"{C_BOLD_RED}[LÖSCHEN]{C_RESET}"
+                    badge = f"[LÖSCHEN]" if term_cols >= 40 else f"[LÖSCHEN]"
                     opts_full = ["[y] Löschen", "[n / ESC] Zurück"]
                     opts_short = ["[y] Ja", "[n] Nein"]
                     opts_mini = ["[y/n]"]
@@ -1946,14 +2239,14 @@ class EasyDateienApp:
                     avail_right = max(1, term_cols - str_width(left_str) - 1)
                     if chosen_opts:
                         hints = distribute_options(chosen_opts, avail_right)
-                        st_line = pad_to_width(f"{left_str} {C_YELLOW}{hints}{C_RESET}", term_cols)
+                        st_line = pad_to_width(f"{left_str} {hints}", term_cols)
                     else:
                         st_line = pad_to_width(left_str, term_cols)
                 elif self.active_dialog == "overwrite_confirm":
                     if self.conflicts_to_resolve:
                         src, dest = self.conflicts_to_resolve[0]
                         file_name = os.path.basename(dest)
-                        badge = f"{C_BOLD_RED}[ERSETZEN]{C_RESET}" if term_cols >= 40 else f"{C_BOLD_RED}[ÜBERSCHREIBEN]{C_RESET}"
+                        badge = f"[ERSETZEN]" if term_cols >= 40 else f"[ÜBERSCHREIBEN]"
                         opts_full = ["[y] Ersetzen", "[n] Überspringen", "[a] Alle ersetzen", "[ESC] Abbrechen"]
                         opts_short = ["[y] Ja", "[n] Nein", "[a] Alle"]
                         opts_mini = ["[y/n/a]"]
@@ -1974,13 +2267,13 @@ class EasyDateienApp:
                         avail_right = max(1, term_cols - str_width(left_str) - 1)
                         if chosen_opts:
                             hints = distribute_options(chosen_opts, avail_right)
-                            st_line = pad_to_width(f"{left_str} {C_YELLOW}{hints}{C_RESET}", term_cols)
+                            st_line = pad_to_width(f"{left_str} {hints}", term_cols)
                         else:
                             st_line = pad_to_width(left_str, term_cols)
                     else:
                         st_line = " " * term_cols
                 elif self.active_dialog == "goto_menu":
-                    badge = f" {C_BOLD_BLUE}[GEHE ZU]{C_RESET} "
+                    badge = f" [GEHE ZU] "
                     avail_r = max(1, term_cols - str_width(badge) - 1)
                     opts_full = ["Taste im Menü wählen", "[ESC / q] Zurück"]
                     opts_short = ["[ESC / q] Zurück"]
@@ -1993,9 +2286,9 @@ class EasyDateienApp:
                         hints = distribute_options(opts_mini, avail_r)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{badge}{C_GRAY}{hints}{C_RESET}" if hints else badge, term_cols)
+                    st_line = pad_to_width(f"{badge}{hints}" if hints else badge, term_cols)
                 elif self.active_dialog == "help_menu":
-                    badge = f" {C_BOLD_BLUE}[HILFE]{C_RESET} "
+                    badge = f" [HILFE] "
                     avail_r = max(1, term_cols - str_width(badge) - 1)
                     opts_full = ["[↑↓] Scrollen", "[ESC / q] Zurück"]
                     opts_short = ["[ESC / q] Zurück"]
@@ -2008,12 +2301,12 @@ class EasyDateienApp:
                         hints = distribute_options(opts_mini, avail_r)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{badge}{C_GRAY}{hints}{C_RESET}" if hints else badge, term_cols)
+                    st_line = pad_to_width(f"{badge}{hints}" if hints else badge, term_cols)
                 else:
                     st_line = " " * term_cols
             else:
                 if self.show_console and self.console_focused:
-                    mode_lbl = f"{C_BOLD_GREEN}[KONSOLE]{C_RESET}" if term_cols >= 45 else f"{C_BOLD_GREEN}[KONS]{C_RESET}"
+                    mode_lbl = f"[KONSOLE]" if term_cols >= 45 else f"[KONS]"
                     left_b = f" {mode_lbl}  " if mode_lbl else " "
                     avail_ctrl = max(1, term_cols - str_width(left_b) - 1)
 
@@ -2040,17 +2333,17 @@ class EasyDateienApp:
                         ctrl = distribute_options(opt_esc_mini, avail_ctrl)
                     else:
                         ctrl = ""
-                    st_line = pad_to_width(f"{left_b}{C_GRAY}{ctrl}{C_RESET}" if ctrl else left_b, term_cols)
+                    st_line = pad_to_width(f"{left_b}{ctrl}" if ctrl else left_b, term_cols)
                 else:
                     if self.selected_paths:
                         c = len(self.selected_paths)
-                        mode_lbl = f"{C_YELLOW}[AUSWAHL {c}]{C_RESET}" if term_cols >= 45 else f"{C_YELLOW}[{c}]{C_RESET}"
+                        mode_lbl = f"[AUSWAHL {c}]" if term_cols >= 45 else f"[{c}]"
                     elif self.clipboard_mode == "cut":
                         c = len(self.clipboard_paths)
-                        mode_lbl = f"{C_BOLD_RED}[AUSSCHNEIDEN {c}]{C_RESET}" if term_cols >= 50 else f"{C_BOLD_RED}[×{c}]{C_RESET}"
+                        mode_lbl = f"[AUSSCHNEIDEN {c}]" if term_cols >= 50 else f"[×{c}]"
                     elif self.clipboard_mode == "copy":
                         c = len(self.clipboard_paths)
-                        mode_lbl = f"{C_BOLD_GREEN}[KOPIEREN {c}]{C_RESET}" if term_cols >= 50 else f"{C_BOLD_GREEN}[+{c}]{C_RESET}"
+                        mode_lbl = f"[KOPIEREN {c}]" if term_cols >= 50 else f"[+{c}]"
                     else:
                         mode_lbl = ""
 
@@ -2064,14 +2357,14 @@ class EasyDateienApp:
         # Modale Vordergrund-Menüs im Yazi-Stil zentriert überlagern
         if self.active_dialog == "goto_menu":
             goto_items = [
-                f"{C_BOLD_CYAN}[d]{C_RESET}  Downloads",
-                f"{C_BOLD_CYAN}[f]{C_RESET}  Dokumente",
-                f"{C_BOLD_CYAN}[h]{C_RESET}  Benutzerordner (~)",
-                f"{C_BOLD_CYAN}[t]{C_RESET}  Papierkorb",
-                f"{C_BOLD_CYAN}[i]{C_RESET}  Pfad manuell eingeben",
-                f"{C_BOLD_CYAN}[p]{C_RESET}  Pfad aus Zwischenablage",
+                f"[d]  Downloads",
+                f"[f]  Dokumente",
+                f"[h]  Benutzerordner (~)",
+                f"[t]  Papierkorb",
+                f"[i]  Pfad manuell eingeben",
+                f"[p]  Pfad aus Zwischenablage",
                 "",
-                f"{C_GRAY}[ESC / q] Zurück{C_RESET}",
+                f"[ESC / q] Zurück",
             ]
             target_w = min(term_cols - 4, 46)
             if target_w >= 24 and term_rows >= 8:
@@ -2088,36 +2381,35 @@ class EasyDateienApp:
 
         elif self.active_dialog == "help_menu":
             help_items = [
-                f"{C_BOLD_BLUE}Navigation & Ansicht{C_RESET}",
-                f"  {C_BOLD_CYAN}[←↑↓→]{C_RESET}        In Ordnern und Listen navigieren",
-                f"  {C_BOLD_CYAN}[Eingabe]{C_RESET}     Im Finder oder System öffnen",
-                f"  {C_BOLD_CYAN}[g]{C_RESET}           Gehe zu (Schnellzugriff auf Verzeichnisse)",
-                f"  {C_BOLD_CYAN}[/]{C_RESET}           Dateien nach Suchbegriff filtern",
-                f"  {C_BOLD_CYAN}[.]{C_RESET}           Versteckte Dateien ein- und ausblenden",
-                f"  {C_BOLD_CYAN}[s]{C_RESET}           Sortierung wechseln",
-                f"  {C_BOLD_CYAN}[t]{C_RESET}           Integrierte Terminal-Konsole öffnen",
-                f"  {C_BOLD_CYAN}[!]{C_RESET}           Interaktive Shell im Ordner öffnen",
+                f"Navigation & Ansicht",
+                f"  [←↑↓→]        In Ordnern und Listen navigieren",
+                f"  [Eingabe]     Im Finder oder System öffnen",
+                f"  [g]           Gehe zu (Schnellzugriff auf Verzeichnisse)",
+                f"  [/]           Dateien nach Suchbegriff filtern",
+                f"  [.]           Versteckte Dateien ein- und ausblenden",
+                f"  [s]           Sortierung wechseln",
+                f"  [t]           Integrierte Terminal-Konsole öffnen",
+                f"  [!]           Interaktive Shell im Ordner öffnen",
                 "",
-                f"{C_BOLD_BLUE}Dateioperationen{C_RESET}",
-                f"  {C_BOLD_CYAN}[Leertaste]{C_RESET}   Datei auswählen oder Markierung aufheben",
-                f"  {C_BOLD_CYAN}[a]{C_RESET}           Alle sichtbaren Dateien auswählen",
-                f"  {C_BOLD_CYAN}[n]{C_RESET}           Neue Datei oder neuen Ordner erstellen",
-                f"  {C_BOLD_CYAN}[r]{C_RESET}           Ausgewähltes Element umbenennen",
-                f"  {C_BOLD_CYAN}[d]{C_RESET}           In den Papierkorb verschieben",
-                f"  {C_BOLD_CYAN}[y]{C_RESET}           Ausgewählte Dateien kopieren",
-                f"  {C_BOLD_CYAN}[x]{C_RESET}           Ausgewählte Dateien ausschneiden",
-                f"  {C_BOLD_CYAN}[p]{C_RESET}           Zwischenablage in aktuellen Ordner einfügen",
-                f"  {C_BOLD_CYAN}[z]{C_RESET}           ZIP-Archiv aus Auswahl erstellen",
-                f"  {C_BOLD_CYAN}[e]{C_RESET}           ZIP-Archiv entpacken",
-                f"  {C_BOLD_CYAN}[u]{C_RESET}           Letzte Dateiaktion rückgängig machen",
-                f"  {C_BOLD_CYAN}[e]{C_RESET}           In Nano bearbeiten",
-                f"  {C_BOLD_CYAN}[o]{C_RESET}           In Vim bearbeiten",
+                f"Dateioperationen",
+                f"  [Leertaste]   Datei auswählen oder Markierung aufheben",
+                f"  [a]           Alle sichtbaren Dateien auswählen",
+                f"  [n]           Neue Datei oder neuen Ordner erstellen",
+                f"  [r]           Ausgewähltes Element umbenennen",
+                f"  [d]           In den Papierkorb verschieben",
+                f"  [y]           Ausgewählte Dateien kopieren",
+                f"  [x]           Ausgewählte Dateien ausschneiden",
+                f"  [p]           Zwischenablage in aktuellen Ordner einfügen",
+                f"  [z]           ZIP-Archiv aus Auswahl erstellen",
+                f"  [e]           ZIP-Archiv entpacken",
+                f"  [o]           Im Editor bearbeiten",
+                f"  [u]           Letzte Dateiaktion rückgängig machen",
                 "",
-                f"{C_BOLD_BLUE}Verwaltung{C_RESET}",
-                f"  {C_BOLD_CYAN}[m]{C_RESET}           Einstellungen und Farbschema öffnen",
-                f"  {C_BOLD_CYAN}[q]{C_RESET}           EasyDateien beenden",
+                f"Verwaltung",
+                f"  [m]           Einstellungen und Farbschema öffnen",
+                f"  [q]           EasyDateien beenden",
                 "",
-                f"{C_GRAY}[ESC / q] Zurück{C_RESET}",
+                f"[ESC / q] Zurück",
             ]
             border_overhead = (1 if has_top_border else 0) + (1 if has_bottom_border else 0) + (1 if has_status_bar else 0) + 1
             max_box_h = max(6, term_rows - border_overhead - 2)
@@ -2150,37 +2442,37 @@ class EasyDateienApp:
         items_full = ["[←↑↓→] Navigieren", "[h] Hilfe", "[t] Konsole", "[m] Menü", "[q] Beenden"]
         w_full = sum(str_width(it) for it in items_full)
         if w_full + (len(items_full) - 1) * 1 <= avail_w:
-            return f"{C_GRAY}{distribute_options(items_full, avail_w)}{C_RESET}"
+            return f"{distribute_options(items_full, avail_w)}"
 
         # Stufe 2: 3 Optionen (Navigieren, Hilfe, Beenden)
         items_3 = ["[←↑↓→] Navigieren", "[h] Hilfe", "[q] Beenden"]
         w_3 = sum(str_width(it) for it in items_3)
         if w_3 + (len(items_3) - 1) * 1 <= avail_w:
-            return f"{C_GRAY}{distribute_options(items_3, avail_w)}{C_RESET}"
+            return f"{distribute_options(items_3, avail_w)}"
 
         # Stufe 3: 2 Optionen (Navigieren, Hilfe)
         items_2 = ["[←↑↓→] Navigieren", "[h] Hilfe"]
         w_2 = sum(str_width(it) for it in items_2)
         if w_2 + (len(items_2) - 1) * 1 <= avail_w:
-            return f"{C_GRAY}{distribute_options(items_2, avail_w)}{C_RESET}"
+            return f"{distribute_options(items_2, avail_w)}"
 
         # Stufe 4: Bei wenig Platz: "Nav" statt "Navigieren"
         items_short = ["[←↑↓→] Nav", "[h] Hilfe"]
         w_short = sum(str_width(it) for it in items_short)
         if w_short + (len(items_short) - 1) * 1 <= avail_w:
-            return f"{C_GRAY}{distribute_options(items_short, avail_w)}{C_RESET}"
+            return f"{distribute_options(items_short, avail_w)}"
 
         # Stufe 5: Nur Navigation kurz
         items_nav = ["[←↑↓→] Nav"]
         if str_width(items_nav[0]) <= avail_w:
-            return f"{C_GRAY}{distribute_options(items_nav, avail_w)}{C_RESET}"
+            return f"{distribute_options(items_nav, avail_w)}"
 
         # Stufe 6: Nur Pfeilsymbole
         items_arrows = ["[←↑↓→]"]
         if str_width(items_arrows[0]) <= avail_w:
-            return f"{C_GRAY}{distribute_options(items_arrows, avail_w)}{C_RESET}"
+            return f"{distribute_options(items_arrows, avail_w)}"
 
-        return f"{C_GRAY}Nav{C_RESET}"[:max(0, avail_w)]
+        return f"Nav"[:max(0, avail_w)]
 
     def handle_mouse_click(self, x: int, y: int) -> bool:
         if not self.last_layout:
@@ -3000,18 +3292,17 @@ class EasyDateienApp:
                 elif key == "e":
                     if self.items:
                         item = self.items[self.selected_idx]
-                        if not item.is_dir:
-                            if item.name.lower().endswith('.zip'):
-                                self.extract_zip_archive()
-                            else:
-                                self.open_in_editor(item, fd, old_settings, editor="nano")
+                        if not item.is_dir and item.name.lower().endswith('.zip'):
+                            self.extract_zip_archive()
                             needs_redraw = True
+                        elif not item.is_dir:
+                            self.set_status("Taste 'e' ist für ZIP-Entpacken reserviert", "warning")
                     continue
                 elif key == "o":
                     if self.items:
                         item = self.items[self.selected_idx]
                         if not item.is_dir:
-                            self.open_in_editor(item, fd, old_settings, editor="vim")
+                            self.open_in_editor(item, fd, old_settings)
                             needs_redraw = True
                     continue
                 elif key == "ENTER":

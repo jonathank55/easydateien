@@ -18,22 +18,22 @@ import re
 CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
-# Farbcodes nach optimi-Farbnorm
+# Farbcodes - Farben deaktiviert, nur Formatierungen (Fett, Kursiv, Invertiert) beibehalten
 C_RESET = "\033[0m"
 C_BOLD = "\033[1m"
 C_DIM = "\033[2m"
 C_ITALIC = "\033[3m"
-C_BLUE = "\033[0;34m"
-C_BOLD_BLUE = "\033[1;34m"
-C_CYAN = "\033[0;36m"
-C_BOLD_CYAN = "\033[1;36m"
-C_GREEN = "\033[0;32m"
-C_BOLD_GREEN = "\033[1;32m"
-C_YELLOW = "\033[1;33m"
-C_RED = "\033[0;31m"
-C_BOLD_RED = "\033[1;31m"
-C_MAGENTA = "\033[0;35m"
-C_GRAY = "\033[90m"
+C_BLUE = ""
+C_BOLD_BLUE = ""
+C_CYAN = ""
+C_BOLD_CYAN = ""
+C_GREEN = ""
+C_BOLD_GREEN = ""
+C_YELLOW = ""
+C_RED = ""
+C_BOLD_RED = ""
+C_MAGENTA = ""
+C_GRAY = ""
 C_INVERT = "\033[7m"
 
 DISABLE_AUTOWRAP = "\033[?7l"
@@ -56,37 +56,61 @@ DEFAULT_CONFIG = {
     "show_hidden": False,
 }
 
-KEYBINDING_ITEMS = [
-    ("up", "Cursor nach oben bewegen", "[↑]"),
-    ("down", "Cursor nach unten bewegen", "[↓]"),
-    ("left", "Übergeordnetes Verzeichnis öffnen", "[←]"),
-    ("right", "Ordner betreten", "[→]"),
-    ("page_up", "Seite nach oben blättern", "[Bild↑]"),
-    ("page_down", "Seite nach unten blättern", "[Bild↓]"),
-    ("open", "Systemweit mit Standardprogramm öffnen", "[Eingabe]"),
-    ("nano", "In Nano bearbeiten", "[e]"),
-    ("vim", "In Vim bearbeiten", "[o]"),
-    ("new", "Neue Datei oder neuen Ordner anlegen", "[n]"),
-    ("search", "Such- und Schnellfilter aktivieren", "[/]"),
-    ("sort", "Sortierkriterium umschalten", "[s]"),
-    ("select", "Auswahl des Elements umschalten", "[Leertaste]"),
-    ("select_all", "Alle sichtbaren Elemente auswählen", "[a]"),
-    ("rename", "Element umbenennen", "[r]"),
-    ("undo", "Letzte Dateiaktion rückgängig machen", "[u]"),
-    ("zip", "ZIP-Archiv aus Auswahl erstellen", "[z]"),
-    ("cut", "Auswahl zum Ausschneiden vormerken", "[x]"),
-    ("copy", "Auswahl in macOS-Zwischenablage kopieren", "[y]"),
-    ("paste", "Zwischenablage im Ordner einfügen", "[p]"),
-    ("copy_path", "Dateipfad in Zwischenablage kopieren", "[c]"),
-    ("trash", "In den Papierkorb verschieben", "[d]"),
-    ("toggle_hidden", "Versteckte Dateien ein- oder ausblenden", "[.]"),
-    ("menu", "Konfigurationsmenü öffnen", "[m]"),
-    ("goto", "Gehe-zu-Menü öffnen", "[g]"),
-    ("home", "Direkt zum Benutzerordner wechseln", "[~]"),
-    ("toggle_console", "Integrierte Konsole umschalten", "[t]"),
-    ("shell", "Interaktive Shell im Ordner öffnen", "[!]"),
-    ("esc", "Aktion abbrechen oder zurück", "[ESC]"),
-    ("quit", "EasyDateien beenden", "[q]"),
+# Zentrale Tastenbelegung (Single Source of Truth): Jede Zeile besteht aus
+# (Abschnitt, Aktions-ID, Anzeige, Tasten-Tokens, Beschreibung).
+# Der Dateimanager leitet daraus seinen Dispatch ab (Doppelbelegungen werden beim
+# Start abgelehnt); Hilfemenü (h) und Konfigurator zeigen exakt dieselbe Tabelle.
+KEY_BINDINGS = [
+    ("Navigation & Ansicht", "up", "↑ k", ("UP", "k"), "Cursor nach oben bewegen"),
+    ("Navigation & Ansicht", "down", "↓ j", ("DOWN", "j"), "Cursor nach unten bewegen"),
+    ("Navigation & Ansicht", "left", "←", ("LEFT",), "Übergeordneten Ordner öffnen"),
+    ("Navigation & Ansicht", "right", "→ l", ("RIGHT", "l"), "Ordner betreten"),
+    ("Navigation & Ansicht", "page_up", "Bild↑", ("PAGE_UP",), "10 Einträge nach oben blättern"),
+    ("Navigation & Ansicht", "page_down", "Bild↓", ("PAGE_DOWN",), "10 Einträge nach unten blättern"),
+    ("Navigation & Ansicht", "top", "Pos1", ("HOME",), "Zum Anfang der Liste springen"),
+    ("Navigation & Ansicht", "bottom", "Ende G", ("END", "G"), "Zum Ende der Liste springen"),
+    ("Navigation & Ansicht", "open", "Eingabe", ("ENTER",), "Mit Standardprogramm öffnen"),
+    ("Navigation & Ansicht", "goto", "g", ("g",), "Gehe zu (Schnellzugriff auf Ordner)"),
+    ("Navigation & Ansicht", "home", "~", ("~",), "Zum Benutzerordner springen"),
+    ("Navigation & Ansicht", "search", "/", ("/",), "Dateien nach Suchbegriff filtern"),
+    ("Navigation & Ansicht", "hidden", ".", (".",), "Versteckte Dateien ein-/ausblenden"),
+    ("Navigation & Ansicht", "sort", "s", ("s",), "Sortierung wechseln"),
+    ("Navigation & Ansicht", "console", "t", ("t",), "Integrierte Konsole öffnen/schließen"),
+    ("Navigation & Ansicht", "console_focus", "Tab", ("TAB", "SHIFT_TAB"), "Fokus auf die Konsole setzen"),
+    ("Navigation & Ansicht", "shell", "!", ("!", "$"), "Interaktive Shell im Ordner öffnen"),
+    ("Dateioperationen", "select", "Leertaste v", ("SPACE", " ", "v"), "Element markieren/Markierung aufheben"),
+    ("Dateioperationen", "select_all", "a", ("a",), "Alle sichtbaren Elemente markieren"),
+    ("Dateioperationen", "new", "n", ("n",), "Neue Datei oder Ordner (mit / am Ende)"),
+    ("Dateioperationen", "rename", "r", ("r",), "Element umbenennen"),
+    ("Dateioperationen", "trash", "d Entf", ("d", "DELETE"), "In den Papierkorb verschieben"),
+    ("Dateioperationen", "copy", "y", ("y",), "Auswahl kopieren"),
+    ("Dateioperationen", "cut", "x", ("x",), "Auswahl ausschneiden"),
+    ("Dateioperationen", "paste", "p", ("p",), "In aktuellen Ordner einfügen"),
+    ("Dateioperationen", "clear_clipboard", "X Y", ("X", "Y"), "Zwischenspeicher leeren"),
+    ("Dateioperationen", "copy_path", "c", ("c",), "Kopieren: cc Pfad · cf Name · cd Ordnerpfad"),
+    ("Dateioperationen", "zip", "z", ("z",), "ZIP-Archiv aus Auswahl erstellen"),
+    ("Dateioperationen", "extract", "e", ("e",), "ZIP-Archiv entpacken"),
+    ("Dateioperationen", "edit", "o", ("o",), "Im Editor bearbeiten"),
+    ("Dateioperationen", "undo", "u Strg+Z", ("u", "UNDO"), "Letzte Dateiaktion rückgängig machen"),
+    ("Verwaltung", "help", "h ?", ("h", "?"), "Diese Hilfe anzeigen"),
+    ("Verwaltung", "menu", "m", ("m",), "Einstellungen öffnen (u. a. Texteditor)"),
+    ("Verwaltung", "cancel", "ESC Strg+C", ("ESC", "CTRL_C"), "Konsole schließen, Filter/Auswahl aufheben"),
+    ("Verwaltung", "quit", "q", ("q",), "EasyDateien beenden"),
+]
+
+
+def build_keymap() -> dict:
+    """Erzeugt die Zuordnung Taste → Aktions-ID und lehnt Doppelbelegungen strikt ab."""
+    keymap = {}
+    for _section, action, _disp, keys, _desc in KEY_BINDINGS:
+        for k in keys:
+            if k in keymap:
+                raise ValueError(f"Tastenkonflikt: '{k}' ist doppelt belegt ({keymap[k]} / {action})")
+            keymap[k] = action
+    return keymap
+
+
+KEYBINDING_ITEMS = [(action, desc, f"[{disp}]") for _s, action, disp, _k, desc in KEY_BINDINGS] + [
     ("reset", "Auf Standardwerte zurücksetzen", "[Standard]"),
 ]
 
@@ -95,9 +119,30 @@ MAIN_MENU_ITEMS = [
     ("columns", "Spalten-Layout", "Ein"),
     ("mouse", "Mausunterstützung", "Ein"),
     ("hidden", "Versteckte Dateien anzeigen", "Aus"),
+    ("editor", "Texteditor (Taste o)", "nano"),
     ("keybindings", "Tastenbelegungen ansehen", "Öffnen"),
     ("reset", "Auf Standardwerte zurücksetzen", "Standard"),
 ]
+
+EDITOR_CHOICES = ["nano", "vim", "nvim", "micro", "hx", "emacs -nw"]
+
+
+def editor_command(cfg: dict) -> str:
+    """Liefert den konfigurierten Editor ohne %s-Platzhalter (z. B. 'nano')."""
+    tmpl = str(cfg.get("text_editor", "nano %s") or "nano %s")
+    cmd = tmpl.replace("%s", "").strip()
+    return cmd or "nano"
+
+
+def cycle_editor(cfg: dict, step: int = 1) -> str:
+    """Schaltet den Texteditor in der Konfiguration um und liefert den neuen Befehl."""
+    cur = editor_command(cfg)
+    choices = list(EDITOR_CHOICES)
+    if cur not in choices:
+        choices.insert(0, cur)
+    nxt = choices[(choices.index(cur) + step) % len(choices)]
+    cfg["text_editor"] = f"{nxt} %s"
+    return nxt
 
 def char_width(c: str) -> int:
     if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
@@ -190,6 +235,34 @@ def distribute_options(items: list, avail_w: int) -> str:
             parts.append(" " * gap_len)
 
     return "".join(parts)
+
+def fit_hints(items: list, avail_w: int) -> str:
+    """Passt Hilfe-Einträge maximal dynamisch in die Breite.
+
+    items: Liste aus str oder (voll, kurz, mini)-Tupeln in Prioritätsreihenfolge.
+    Reihenfolge der Strategien: alle Einträge in Volltext → kurz → mini; reicht der Platz
+    nicht, fallen die letzten Einträge weg und ein „…“ signalisiert die Auslassung.
+    """
+    if avail_w <= 0 or not items:
+        return ""
+    norm = []
+    for it in items:
+        if isinstance(it, (tuple, list)):
+            variants = [v for v in it if v]
+            while len(variants) < 3:
+                variants.append(variants[-1])
+            norm.append(tuple(variants[:3]))
+        else:
+            norm.append((it, it, it))
+    for n in range(len(norm), 0, -1):
+        for v in range(3):
+            cand = [norm[i][v] for i in range(n)]
+            if n < len(norm):
+                cand.append("…")
+            gap = 2 if v < 2 else 1
+            if sum(str_width(c) for c in cand) + gap * (len(cand) - 1) <= avail_w:
+                return distribute_options(cand, avail_w)
+    return truncate_to_width(norm[0][2], avail_w)
 
 def load_config() -> dict:
     cfg = dict(DEFAULT_CONFIG)
@@ -285,9 +358,9 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
 
     lines = []
     lines.append(f"╭{'─' * inner}╮")
-    t_styled = f"{C_BOLD_BLUE}{truncate_to_width(title, inner - 4)}{C_RESET}"
+    t_styled = f"{C_BOLD}{truncate_to_width(title, inner - 4)}{C_RESET}"
     lines.append(f"│  {pad_to_width(t_styled, inner - 2)}│")
-    s_styled = f"{C_GRAY}{truncate_to_width(subtitle, inner - 4)}{C_RESET}"
+    s_styled = truncate_to_width(subtitle, inner - 4)
     lines.append(f"│  {pad_to_width(s_styled, inner - 2)}│")
     lines.append(f"├{'─' * inner}┤")
 
@@ -297,11 +370,11 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         pfx = f"{C_BOLD}▸{C_RESET} " if is_sel else "  "
 
         if tag in ("[Ein]", "Ein"):
-            tag_colored = f"{C_BOLD_GREEN}{tag}{C_RESET}"
+            tag_colored = f"{C_BOLD}{tag}{C_RESET}"
         elif tag in ("[Aus]", "Aus"):
-            tag_colored = f"{C_GRAY}{tag}{C_RESET}"
+            tag_colored = tag
         elif tag:
-            tag_colored = f"{C_BOLD_CYAN}{tag}{C_RESET}"
+            tag_colored = tag
         else:
             tag_colored = ""
 
@@ -317,14 +390,11 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         lines.append(f"│{' ' * inner}│")
 
     lines.append(f"├{'─' * inner}┤")
-    if isinstance(footer, (list, tuple)):
-        f_items = list(footer)
-    else:
-        f_items = [x.strip() for x in re.split(r'\s{2,}', footer) if x.strip()] if footer else []
     avail_f_w = max(1, inner - 4)
-    if f_items:
-        f_distributed = distribute_options(f_items, avail_f_w)
-        f_styled = f"{C_GRAY}{f_distributed}{C_RESET}"
+    if isinstance(footer, (list, tuple)):
+        f_styled = fit_hints(list(footer), avail_f_w)
+    elif footer:
+        f_styled = truncate_to_width(footer, avail_f_w)
     else:
         f_styled = ""
     lines.append(f"│  {pad_to_width(f_styled, inner - 2)}│")
@@ -337,7 +407,7 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     sys.stdout.flush()
     return start, len(view_rows)
 
-def keybindings_menu(fd: int, new_zip: str = None):
+def keybindings_menu(fd: int):
     idx = 0
     while True:
         start, count = render_box(
@@ -345,7 +415,7 @@ def keybindings_menu(fd: int, new_zip: str = None):
             "Übersicht aller Tastenkombinationen und Befehle",
             KEYBINDING_ITEMS,
             idx,
-            "[←↑↓→] Navigieren  [ESC / q] Zurück"
+            [("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"), ("[ESC / q] Zurück", "[ESC] Zurück", "[ESC]")]
         )
         k = read_key(fd)
         if not k:
@@ -390,6 +460,8 @@ def main_menu(fd: int):
                 val = f"[{'Ein' if cfg.get('mouse_support', True) else 'Aus'}]"
             elif key == "hidden":
                 val = f"[{'Ein' if cfg.get('show_hidden', False) else 'Aus'}]"
+            elif key == "editor":
+                val = f"[{editor_command(cfg)}]"
             elif key == "keybindings":
                 val = "[Öffnen]"
             elif key == "reset":
@@ -398,7 +470,12 @@ def main_menu(fd: int):
                 val = ""
             rows.append((key, lbl, val))
 
-        footer_text = status_hint if status_hint else "[←↑↓→] Navigieren  [Eingabe] Ändern  [ESC] Zurück  [q] Beenden"
+        footer_text = status_hint if status_hint else [
+            ("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"),
+            ("[Eingabe / ←→] Ändern", "[Eingabe] Ändern", "[Eingabe]"),
+            ("[ESC] Zurück", "[ESC]", "[ESC]"),
+            ("[q] Beenden", "[q]", "[q]"),
+        ]
         start, count = render_box(
             "EASYDATEIEN KONFIGURATION",
             "Einstellungen verwalten und anpassen",
@@ -444,6 +521,9 @@ def main_menu(fd: int):
             elif act == "hidden":
                 cfg["show_hidden"] = not cfg.get("show_hidden", False)
                 save_config(cfg)
+            elif act == "editor":
+                cycle_editor(cfg, -1 if k == "LEFT" else 1)
+                save_config(cfg)
             elif act == "keybindings":
                 if k == "LEFT":
                     break
@@ -452,23 +532,25 @@ def main_menu(fd: int):
                     cfg = load_config()
             elif act == "reset":
                 if k != "LEFT":
-                    confirm = render_box(
+                    render_box(
                         "ZURÜCKSETZEN BESTÄTIGEN",
                         "Möchten Sie wirklich alle Einstellungen auf Standard zurücksetzen?",
                         [],
                         0,
-                        ["[y] Ja, zurücksetzen", "[n] Nein, abbrechen"]
+                        [("[y] Ja, zurücksetzen", "[y] Ja", "[y]"), ("[n] Nein, abbrechen", "[n] Nein", "[n]")]
                     )
-                    k2 = read_key(fd)
+                    k2 = ""
+                    while not k2:
+                        k2 = read_key(fd)
                     if k2 in ("y", "Y"):
                         cfg = dict(DEFAULT_CONFIG)
                         save_config(cfg)
-                        status_hint = f"{C_BOLD_GREEN}✓ Auf Standardwerte zurückgesetzt{C_RESET}"
+                        status_hint = f"{C_BOLD}✓ Auf Standardwerte zurückgesetzt{C_RESET}"
                     else:
                         status_hint = "Zurücksetzen abgebrochen"
     return cfg
 
-def run_konfigurator(standalone: bool = True, new_zip: str = None):
+def run_konfigurator(standalone: bool = True):
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     tty.setcbreak(fd, termios.TCSADRAIN)
@@ -485,15 +567,10 @@ def run_konfigurator(standalone: bool = True, new_zip: str = None):
         if standalone:
             sys.stdout.write("\033[?1006l\033[?1000l\033[?25h" + ENABLE_AUTOWRAP + "\033[?1049l")
             sys.stdout.flush()
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
         else:
             sys.stdout.write(ENABLE_AUTOWRAP)
             sys.stdout.flush()
-            # Nach dem Schließen des Konfigurators die neue Zip-Datei auswählen
-            if new_zip:
-                from easydateien import EasyDateienApp
-                app = EasyDateienApp()
-                app.change_directory(os.getcwd())
-                app.select_filename(new_zip)
 
 class SingleLineHelpFormatter(argparse.HelpFormatter):
     def _split_lines(self, text, width):
