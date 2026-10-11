@@ -65,11 +65,11 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
 
 - **Auswahldarstellung & macOS-Systemzwischenablage:**  
   - Auswahl: `*` (z. B. ` ▸*datei.txt`)  
-  - Ausschneiden (Cut): `x` (z. B. `  xdatei.txt`)  
+  - Ausschneiden (Cut): `×` (z. B. `  ×datei.txt`)  
   - Kopieren: `+` (z. B. `  +datei.txt`)  
   - `Space` / `v`: Datei oder Ordner markieren / abwählen (`*`)  
   - `a` / `V`: Alle sichtbaren Dateien auf einmal markieren oder abwählen  
-  - `x`: Markierte Dateien zum **Ausschneiden** vormerken (`x`)  
+  - `x`: Markierte Dateien zum **Ausschneiden** vormerken (`×`)  
   - `y` / `c`: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notizen eingefügt werden!  
   - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien). Existiert der Name bereits, erscheint eine Rückfrage (`y` ersetzen, `n` überspringen, `a` alle ersetzen; bei Kopien erhalten Duplikate bei Bedarf eine Nummerierung `(1)`).  
   - `Y` / `X`: Zwischenspeicher leeren  
@@ -235,7 +235,7 @@ Das Konfigurationsmenü speichert Änderungen sofort. Die Tasten `.` (versteckte
 | `z` | ZIP-Archiv aus Auswahl (bzw. Eintrag unter dem Cursor) erstellen |
 | `e` | Markiertes bzw. ausgewähltes ZIP-Archiv in einen neuen Ordner entpacken |
 | `y` / `c` | Auswahl in macOS-Zwischenablage kopieren (Finder-kompatibel) |
-| `x` | Auswahl ausschneiden (`x`-Markierung) |
+| `x` | Auswahl ausschneiden (`×`-Markierung) |
 | `p` | Zwischenablage im aktuellen Ordner einfügen |
 | `Y` / `X` | Zwischenspeicher leeren |
 | `c c` | Absoluten Dateipfad in die Zwischenablage kopieren |

@@ -2066,7 +2066,21 @@ class EasyDateienApp:
                 if p_idx < len(parent_items):
                     p_it = parent_items[p_idx]
                     is_act = (os.path.abspath(p_it.path) == os.path.abspath(self.current_dir))
-                    prefix_char = f"{C_BOLD}▸{C_RESET}  " if is_act else "   "
+                    if is_act:
+                        p_in_cut = (self.clipboard_mode == "cut" and p_it.path in self.clipboard_paths)
+                        p_in_copy = (self.clipboard_mode == "copy" and p_it.path in self.clipboard_paths)
+                        p_is_sel = p_it.path in self.selected_paths
+                        if p_in_cut:
+                            p_b_char = "×"
+                        elif p_in_copy:
+                            p_b_char = "+"
+                        elif p_is_sel:
+                            p_b_char = "*"
+                        else:
+                            p_b_char = " "
+                        prefix_char = f"{C_BOLD}▸{C_RESET}{p_b_char}"
+                    else:
+                        prefix_char = "   "
                     if w_left >= 26:
                         p_styled = format_entry_name(p_it, max(3, w_left - 13), bold=is_act)
                         txt_l = f"{prefix_char}{p_styled}"
@@ -2090,7 +2104,7 @@ class EasyDateienApp:
 
                 c_char = f"{C_BOLD}▸{C_RESET}" if is_cur else " "
                 if in_cut:
-                    b_char = "x"
+                    b_char = "×"
                 elif in_copy:
                     b_char = "+"
                 elif is_sel:
