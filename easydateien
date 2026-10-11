@@ -896,6 +896,8 @@ class EasyDateienApp:
         self.items: List[FileEntry] = []
         self.selected_idx: int = 0
         self.view_start: int = 0
+        # Merkt sich pro Verzeichnis die letzte Zeigerposition (nur Pfeiltasten-Navigation links/rechts)
+        self.dir_cursor_memory: Dict[str, int] = {}
         self.selected_paths: Set[str] = set()
         self.clipboard_paths: List[str] = []
         self.clipboard_mode: Optional[str] = None
@@ -3521,6 +3523,7 @@ class EasyDateienApp:
                         needs_redraw = True
                     continue
                 elif key in ("LEFT",):
+                    self.dir_cursor_memory[self.current_dir] = self.selected_idx
                     self.go_parent_directory()
                     needs_redraw = True
                     continue
@@ -3528,7 +3531,11 @@ class EasyDateienApp:
                     if self.items:
                         item = self.items[self.selected_idx]
                         if item.is_dir:
+                            self.dir_cursor_memory[self.current_dir] = self.selected_idx
                             self.change_directory(item.path)
+                            remembered_idx = self.dir_cursor_memory.get(self.current_dir)
+                            if remembered_idx is not None and self.items:
+                                self.selected_idx = max(0, min(remembered_idx, len(self.items) - 1))
                             needs_redraw = True
                     continue
                 elif key == "e":
