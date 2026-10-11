@@ -913,6 +913,7 @@ class EasyDateienApp:
         self.dialog_input: str = ""
         self.dialog_cursor: int = 0
         self.dialog_target_item: Optional[FileEntry] = None
+        self.pending_replace: Optional[dict] = None
         self.help_scroll_offset: int = 0
 
         self.last_click_time: float = 0.0
@@ -1372,6 +1373,40 @@ class EasyDateienApp:
         if not failed:
             self.set_status(f"{success} eingefügt", "success")
 
+    def _perform_replace(self, pr: dict):
+        """Führt das bestätigte Ersetzen eines vorhandenen Eintrags aus (Umbenennen bzw. Neuerstellen)."""
+        mode = pr.get("mode")
+        dest = pr.get("dest")
+        name = pr.get("name", "")
+        try:
+            if mode == "rename":
+                src = pr.get("src")
+                os.rename(src, dest)  # ersetzt eine vorhandene Datei bzw. einen leeren Ordner
+                desc = f"Umbenennen von {os.path.basename(src)} in {name}"
+                self.undo_stack.append(UndoAction("rename", desc, {"old_path": src, "new_path": dest}))
+                self.refresh_items(force=True)
+                self.select_filename(name)
+                self.set_status(f"Ersetzt: {name} (u = Rückgängig)", "success")
+            elif mode == "new":
+                if pr.get("is_dir_target") and os.path.isdir(dest):
+                    # Ordner vorhanden: nichts zu ersetzen
+                    self.set_status(f"Ordner existiert bereits: {name}", "info")
+                    return
+                if pr.get("is_dir_target"):
+                    os.makedirs(dest, exist_ok=True)
+                else:
+                    open(dest, "w").close()  # vorhandene Datei durch leere Datei ersetzen
+                self.refresh_items(force=True)
+                self.select_filename(name)
+                if pr.get("is_dir_target"):
+                    self.set_status(f"Ordner erstellt: {name} (u = Rückgängig)", "success")
+                    self.undo_stack.append(UndoAction("create", f"Erstellen von {name}", {"path": dest}))
+                else:
+                    # Inhalt der ersetzten Datei ist nicht wiederherstellbar: kein Rückgängig-Eintrag
+                    self.set_status(f"Datei ersetzt: {name}", "success")
+        except Exception as e:
+            self.set_status(f"Fehler beim Ersetzen: {e}", "error")
+
     @staticmethod
     def unique_path(directory: str, stem: str, suffix: str = "") -> str:
         """Liefert einen noch nicht vergebenen Pfad „stem suffix“, „stem (1) suffix“, …"""
@@ -1390,7 +1425,7 @@ class EasyDateienApp:
             return None
 
         # Filtere ungültige Pfade (z. B. Socket-Handles oder nicht existierende Dateien)
-        valid_targets = []
+        valid_entries = []
         for target in sorted(targets):
             if not os.path.exists(target):
                 self.set_status(f"Warnung: „{os.path.basename(target)}“ existiert nicht und wird übersprungen", "warning")
@@ -1398,7 +1433,17 @@ class EasyDateienApp:
             if stat.S_ISSOCK(os.stat(target).st_mode):
                 self.set_status(f"Warnung: „{os.path.basename(target)}“ ist ein Socket und wird übersprungen", "warning")
                 continue
-            valid_targets.append(target)
+            valid_entries.append(FileEntry(target, os.path.basename(target)))
+
+        # Gleiche Anordnung wie in der Dateiansicht, damit Archiv-Inhalt und Vorschau konsistent sortiert sind
+        valid_entries = arrange_entries(
+            valid_entries,
+            show_hidden=True,
+            sort_by=self.config.get("sort_by", "mtime"),
+            sort_reverse=self.config.get("sort_reverse", True),
+            sort_dir_first=self.config.get("sort_dir_first", True),
+        )
+        valid_targets = [e.path for e in valid_entries]
 
         if not valid_targets:
             self.set_status("Keine gültigen Dateien/Ordner zum Archivieren", "error")
@@ -1616,15 +1661,37 @@ class EasyDateienApp:
         return path
 
     def load_file_preview_lines(self, path: str, max_lines: int, wrap_width: Optional[int] = None) -> List[str]:
-        if self.cached_file_preview_path != path or not self.cached_file_preview_lines:
+        cfg = self.config
+        # Sortierparameter gehören zum Cache-Schlüssel, damit die Vorschau derselben Anordnung wie die Dateispalten folgt
+        sort_key = (path, cfg.get("sort_by", "mtime"), cfg.get("sort_reverse", True), cfg.get("sort_dir_first", True))
+        if (self.cached_file_preview_path != path or self.cached_file_preview_key != sort_key
+                or not self.cached_file_preview_lines):
             lines = []
             try:
                 if zipfile.is_zipfile(path):
                     with zipfile.ZipFile(path, "r") as zf:
                         infos = zf.infolist()
+                        zip_entries = []
+                        for info in infos:
+                            fe = FileEntry("", info.filename)
+                            fe.size = info.file_size
+                            fe.is_dir = info.is_dir()
+                            try:
+                                fe.mtime = time.mktime(info.date_time + (0, 0, -1))
+                            except (OverflowError, ValueError):
+                                fe.mtime = 0.0
+                            zip_entries.append(fe)
+                        # Gleiche Anordnung wie in den Dateispalten (versteckte Dateien eingeschlossen)
+                        zip_entries = arrange_entries(
+                            zip_entries,
+                            show_hidden=True,
+                            sort_by=cfg.get("sort_by", "mtime"),
+                            sort_reverse=cfg.get("sort_reverse", True),
+                            sort_dir_first=cfg.get("sort_dir_first", True),
+                        )
                         lines.append(f"Archiv-Inhalt ({len(infos)} Dateien):")
-                        for info in infos[:max_lines - 1]:
-                            lines.append(f"  {info.filename} ({format_size(info.file_size)})")
+                        for fe in zip_entries[:max_lines - 1]:
+                            lines.append(f"  {fe.name} ({format_size(fe.size)})")
                 else:
                     with open(path, "r", encoding="utf-8", errors="replace") as f:
                         for _ in range(max_lines * 3):  # Mehr Zeilen lesen, falls Umbruch aktiviert ist
@@ -1638,6 +1705,7 @@ class EasyDateienApp:
                 lines = ["[Binäre Datei oder nicht lesbar]"]
 
             self.cached_file_preview_path = path
+            self.cached_file_preview_key = sort_key
             self.cached_file_preview_lines = lines
 
         lines = self.cached_file_preview_lines
@@ -2390,6 +2458,28 @@ class EasyDateienApp:
                             st_line = pad_to_width(left_str, term_cols)
                     else:
                         st_line = " " * term_cols
+                elif self.active_dialog == "replace_confirm":
+                    pr = self.pending_replace or {}
+                    pr_name = pr.get("name", "")
+                    opts_full = ["[y] Ja", "[n] Nein"]
+                    opts_short = ["[y/n]"]
+                    opts_mini = ["[y/n]"]
+                    if sum(str_width(x) for x in opts_full) + 2 <= term_cols - 2:
+                        chosen_opts = opts_full
+                    elif sum(str_width(x) for x in opts_short) + 1 <= term_cols - 2:
+                        chosen_opts = opts_short
+                    else:
+                        chosen_opts = opts_mini
+                    opts_w = sum(str_width(x) for x in chosen_opts) + max(0, len(chosen_opts) - 1) if chosen_opts else 0
+                    avail_name = max(1, term_cols - 12 - opts_w)
+                    # Erhalte Dateiendung in Dialog
+                    t_trunc = truncate_name(pr_name, pr.get("is_dir_target", False), avail_name)
+                    left_str = f" „{t_trunc}“ ersetzen?"
+                    if chosen_opts:
+                        hints = " ".join(chosen_opts)
+                        st_line = pad_to_width(f"{left_str} {hints}", term_cols)
+                    else:
+                        st_line = pad_to_width(left_str, term_cols)
                 elif self.active_dialog == "goto_menu":
                     left_str = " Menü: Taste wählen"
                     avail_r = max(1, term_cols - str_width(left_str) - 1)
@@ -2733,6 +2823,10 @@ class EasyDateienApp:
                 self.conflicts_to_resolve = []
                 self.conflict_resolution = {}
                 self.set_status("Einfügen abgebrochen", "warning")
+            elif self.active_dialog == "replace_confirm":
+                self.active_dialog = None
+                self.pending_replace = None
+                self.set_status("Ersetzen abgebrochen", "warning")
             else:
                 self.active_dialog = None
                 self.dialog_input = ""
@@ -2865,6 +2959,23 @@ class EasyDateienApp:
                 self.set_status("Einfügen abgebrochen", "warning")
                 return True
 
+        if self.active_dialog == "replace_confirm":
+            pr = self.pending_replace
+            if not pr:
+                self.active_dialog = None
+                return True
+            if key in ("y", "Y"):
+                # Ersetzen bestätigen und ausführen
+                self.active_dialog = None
+                self.pending_replace = None
+                self._perform_replace(pr)
+            else:
+                # n und jede andere Taste: Ersetzen abbrechen
+                self.active_dialog = None
+                self.pending_replace = None
+                self.set_status("Ersetzen abgebrochen", "warning")
+            return True
+
         if self.active_dialog == "goto_menu":
             c = key.lower()
             self.active_dialog = None
@@ -2923,7 +3034,9 @@ class EasyDateienApp:
                     return True
                 new_path = os.path.join(self.current_dir, val)
                 if os.path.exists(new_path):
-                    self.set_status(f"Fehler: „{val}“ existiert bereits", "error")
+                    # Vorhandenen Eintrag ersetzen? (gleiche Bestätigung wie beim Einfügen)
+                    self.active_dialog = "replace_confirm"
+                    self.pending_replace = {"mode": "rename", "src": target_it.path, "dest": new_path, "name": val}
                     return True
                 try:
                     os.rename(target_it.path, new_path)
@@ -2944,7 +3057,9 @@ class EasyDateienApp:
                 clean_name = val.rstrip("/")
                 target_p = os.path.join(self.current_dir, clean_name)
                 if os.path.exists(target_p):
-                    self.set_status(f"Fehler: „{clean_name}“ existiert bereits", "error")
+                    # Vorhandenen Eintrag ersetzen? (gleiche Bestätigung wie beim Einfügen)
+                    self.active_dialog = "replace_confirm"
+                    self.pending_replace = {"mode": "new", "src": None, "dest": target_p, "name": clean_name, "is_dir_target": is_dir_target}
                     return True
                 try:
                     if is_dir_target:
