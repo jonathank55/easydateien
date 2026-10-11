@@ -2230,7 +2230,7 @@ class EasyDateienApp:
                     left_str = f" {t_trunc} löschen?"
                     avail_right = max(0, term_cols - str_width(left_str) - 1)
                     if chosen_opts:
-                        hints = distribute_options(chosen_opts, avail_right)
+                        hints = " ".join(chosen_opts)
                         st_line = pad_to_width(f"{left_str} {hints}", term_cols)
                     else:
                         st_line = pad_to_width(left_str, term_cols)
@@ -2259,7 +2259,7 @@ class EasyDateienApp:
                         left_str = f" „{t_trunc}“ ersetzen?"
                         avail_right = max(0, term_cols - str_width(left_str) - 1)
                         if chosen_opts:
-                            hints = distribute_options(chosen_opts, avail_right)
+                            hints = " ".join(chosen_opts)
                             st_line = pad_to_width(f"{left_str} {hints}", term_cols)
                         else:
                             st_line = pad_to_width(left_str, term_cols)
