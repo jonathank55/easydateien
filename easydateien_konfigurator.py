@@ -51,9 +51,10 @@ DEFAULT_CONFIG = {
     "text_editor": "nano %s",
     "opener": "open %s",
     "sort_by": "mtime",
-    "sort_reverse": True,
+    "sort_reverse": False,
     "sort_dir_first": True,
     "show_hidden": False,
+    "keybindings": None,  # Wird mit Standardwerten gefüllt, wenn nicht vorhanden
 }
 
 # Zentrale Tastenbelegung (Single Source of Truth): Jede Zeile besteht aus
@@ -61,48 +62,68 @@ DEFAULT_CONFIG = {
 # Der Dateimanager leitet daraus seinen Dispatch ab (Doppelbelegungen werden beim
 # Start abgelehnt); Hilfemenü (h) und Konfigurator zeigen exakt dieselbe Tabelle.
 KEY_BINDINGS = [
-    ("Navigation & Ansicht", "up", "↑ k", ("UP", "k"), "Cursor nach oben bewegen"),
-    ("Navigation & Ansicht", "down", "↓ j", ("DOWN", "j"), "Cursor nach unten bewegen"),
-    ("Navigation & Ansicht", "left", "←", ("LEFT",), "Übergeordneten Ordner öffnen"),
-    ("Navigation & Ansicht", "right", "→ l", ("RIGHT", "l"), "Ordner betreten"),
-    ("Navigation & Ansicht", "page_up", "Bild↑", ("PAGE_UP",), "10 Einträge nach oben blättern"),
-    ("Navigation & Ansicht", "page_down", "Bild↓", ("PAGE_DOWN",), "10 Einträge nach unten blättern"),
-    ("Navigation & Ansicht", "top", "Pos1", ("HOME",), "Zum Anfang der Liste springen"),
-    ("Navigation & Ansicht", "bottom", "Ende G", ("END", "G"), "Zum Ende der Liste springen"),
-    ("Navigation & Ansicht", "open", "Eingabe", ("ENTER",), "Mit Standardprogramm öffnen"),
-    ("Navigation & Ansicht", "goto", "g", ("g",), "Gehe zu (Schnellzugriff auf Ordner)"),
-    ("Navigation & Ansicht", "home", "~", ("~",), "Zum Benutzerordner springen"),
-    ("Navigation & Ansicht", "search", "/", ("/",), "Dateien nach Suchbegriff filtern"),
-    ("Navigation & Ansicht", "hidden", ".", (".",), "Versteckte Dateien ein-/ausblenden"),
-    ("Navigation & Ansicht", "sort", "s", ("s",), "Sortierung wechseln"),
-    ("Navigation & Ansicht", "console", "t", ("t",), "Integrierte Konsole öffnen/schließen"),
-    ("Navigation & Ansicht", "console_focus", "Tab", ("TAB", "SHIFT_TAB"), "Fokus auf die Konsole setzen"),
-    ("Navigation & Ansicht", "shell", "!", ("!", "$"), "Interaktive Shell im Ordner öffnen"),
-    ("Dateioperationen", "select", "Leertaste v", ("SPACE", " ", "v"), "Element markieren/Markierung aufheben"),
-    ("Dateioperationen", "select_all", "a", ("a",), "Alle sichtbaren Elemente markieren"),
-    ("Dateioperationen", "new", "n", ("n",), "Neue Datei oder Ordner (mit / am Ende)"),
-    ("Dateioperationen", "rename", "r", ("r",), "Element umbenennen"),
-    ("Dateioperationen", "trash", "d Entf", ("d", "DELETE"), "In den Papierkorb verschieben"),
-    ("Dateioperationen", "copy", "y", ("y",), "Auswahl kopieren"),
-    ("Dateioperationen", "cut", "x", ("x",), "Auswahl ausschneiden"),
-    ("Dateioperationen", "paste", "p", ("p",), "In aktuellen Ordner einfügen"),
-    ("Dateioperationen", "clear_clipboard", "X Y", ("X", "Y"), "Zwischenspeicher leeren"),
-    ("Dateioperationen", "copy_path", "c", ("c",), "Kopieren: cc Pfad · cf Name · cd Ordnerpfad"),
-    ("Dateioperationen", "zip", "z", ("z",), "ZIP-Archiv aus Auswahl erstellen"),
-    ("Dateioperationen", "extract", "e", ("e",), "ZIP-Archiv entpacken"),
-    ("Dateioperationen", "edit", "o", ("o",), "Im Editor bearbeiten"),
-    ("Dateioperationen", "undo", "u Strg+Z", ("u", "UNDO"), "Letzte Dateiaktion rückgängig machen"),
-    ("Verwaltung", "help", "h ?", ("h", "?"), "Diese Hilfe anzeigen"),
-    ("Verwaltung", "menu", "m", ("m",), "Einstellungen öffnen (u. a. Texteditor)"),
-    ("Verwaltung", "cancel", "ESC Strg+C", ("ESC", "CTRL_C"), "Konsole schließen, Filter/Auswahl aufheben"),
-    ("Verwaltung", "quit", "q", ("q",), "EasyDateien beenden"),
+    ("Navigation & Ansicht", "up", "Nach oben", ("UP",), "Cursor nach oben bewegen"),
+    ("Navigation & Ansicht", "down", "Nach unten", ("DOWN",), "Cursor nach unten bewegen"),
+    ("Navigation & Ansicht", "left", "Zurück", ("LEFT",), "Übergeordneten Ordner öffnen"),
+    ("Navigation & Ansicht", "right", "Öffnen", ("RIGHT",), "Ordner betreten"),
+    ("Navigation & Ansicht", "page_up", "Seite hoch", ("PAGE_UP",), "10 Einträge nach oben blättern"),
+    ("Navigation & Ansicht", "page_down", "Seite runter", ("PAGE_DOWN",), "10 Einträge nach unten blättern"),
+    ("Navigation & Ansicht", "top", "Anfang", ("HOME",), "Zum Anfang der Liste springen"),
+    ("Navigation & Ansicht", "bottom", "Ende", ("END", "G"), "Zum Ende der Liste springen"),
+    ("Navigation & Ansicht", "open", "Auswählen", ("ENTER",), "Mit Standardprogramm öffnen"),
+    ("Navigation & Ansicht", "goto", "Gehe zu", ("g",), "Gehe zu (Schnellzugriff auf Ordner)"),
+    ("Navigation & Ansicht", "home", "Start", ("~",), "Zum Benutzerordner springen"),
+    ("Navigation & Ansicht", "search", "Suchen", ("/",), "Dateien nach Suchbegriff filtern"),
+    ("Navigation & Ansicht", "hidden", "Versteckt", (".",), "Versteckte Dateien ein-/ausblenden"),
+    ("Navigation & Ansicht", "sort", "Sortieren", ("s",), "Sortierung wechseln"),
+    ("Navigation & Ansicht", "console", "Konsole", ("t",), "Integrierte Konsole öffnen/schließen"),
+    ("Navigation & Ansicht", "console_focus", "Fokus", ("TAB", "SHIFT_TAB"), "Fokus auf die Konsole setzen"),
+    ("Navigation & Ansicht", "shell", "Shell", ("!", "$"), "Interaktive Shell im Ordner öffnen"),
+    ("Dateioperationen", "select", "Markieren", ("SPACE", " ", "v"), "Element markieren/Markierung aufheben"),
+    ("Dateioperationen", "select_all", "Alle", ("a",), "Alle sichtbaren Elemente markieren"),
+    ("Dateioperationen", "new", "Neu", ("n",), "Neue Datei oder Ordner (mit / am Ende)"),
+    ("Dateioperationen", "rename", "Umbenennen", ("r",), "Element umbenennen"),
+    ("Dateioperationen", "trash", "Löschen", ("d", "DELETE"), "In den Papierkorb verschieben"),
+    ("Dateioperationen", "copy", "Kopieren", ("y",), "Auswahl kopieren"),
+    ("Dateioperationen", "cut", "Ausschneiden", ("x",), "Auswahl ausschneiden"),
+    ("Dateioperationen", "paste", "Einfügen", ("p",), "In aktuellen Ordner einfügen"),
+    ("Dateioperationen", "clear_clipboard", "Leeren", ("X", "Y"), "Zwischenspeicher leeren"),
+    ("Dateioperationen", "copy_path", "Pfad", ("c",), "Kopieren: cc Pfad · cf Name · cd Ordnerpfad"),
+    ("Dateioperationen", "zip", "Zip", ("z",), "ZIP-Archiv aus Auswahl erstellen"),
+    ("Dateioperationen", "extract", "Entpacken", ("e",), "ZIP-Archiv entpacken"),
+    ("Dateioperationen", "edit", "Bearbeiten", ("o",), "Im Editor bearbeiten"),
+    ("Dateioperationen", "undo", "Rückgängig", ("u", "UNDO"), "Letzte Dateiaktion rückgängig machen"),
+    ("Verwaltung", "help", "Hilfe", ("h", "?"), "Diese Hilfe anzeigen"),
+    ("Verwaltung", "menu", "Menü", ("m",), "Einstellungen öffnen (u. a. Texteditor)"),
+    ("Verwaltung", "cancel", "Abbrechen", ("ESC", "CTRL_C"), "Konsole schließen, Filter/Auswahl aufheben"),
+    ("Verwaltung", "quit", "Beenden", ("q",), "EasyDateien beenden"),
 ]
 
 
-def build_keymap() -> dict:
+def get_keybindings_from_config(cfg: dict) -> list:
+    """Lädt die Tastenbelegungen aus der Konfiguration oder verwendet Standardwerte."""
+    custom_bindings = cfg.get("keybindings")
+    if custom_bindings is None:
+        return KEY_BINDINGS
+    # Wenn in der Konfiguration gespeichert (als Listen, weil JSON keine Tupel speichern kann),
+    # zurück in Tupel umwandeln
+    result = []
+    for item in custom_bindings:
+        if isinstance(item, list):
+            # Von JSON geladen: Listen von Listen
+            section, action, disp, keys, desc = item
+            result.append((section, action, disp, tuple(keys) if isinstance(keys, list) else keys, desc))
+        else:
+            # Schon Tupel
+            result.append(item)
+    return result
+
+
+def build_keymap(cfg: dict = None) -> dict:
     """Erzeugt die Zuordnung Taste → Aktions-ID und lehnt Doppelbelegungen strikt ab."""
+    bindings = get_keybindings_from_config(cfg) if cfg else KEY_BINDINGS
     keymap = {}
-    for _section, action, _disp, keys, _desc in KEY_BINDINGS:
+    for _section, action, _disp, keys, _desc in bindings:
         for k in keys:
             if k in keymap:
                 raise ValueError(f"Tastenkonflikt: '{k}' ist doppelt belegt ({keymap[k]} / {action})")
@@ -119,8 +140,9 @@ MAIN_MENU_ITEMS = [
     ("columns", "Spalten-Layout", "Ein"),
     ("mouse", "Mausunterstützung", "Ein"),
     ("hidden", "Versteckte Dateien anzeigen", "Aus"),
-    ("editor", "Texteditor", "nano"),
-    ("keybindings", "Tastenbelegungen ansehen", "Öffnen"),
+    ("sort", "Datei- und Ordneranordnung", "Öffnen"),
+    ("editor", "Editor", "nano"),
+    ("keybindings", "Tastenbelegungen", "Öffnen"),
     ("reset", "Auf Standardwerte zurücksetzen", "Standard"),
 ]
 
@@ -407,6 +429,208 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     sys.stdout.flush()
     return start, len(view_rows)
 
+def edit_keybindings_menu(fd: int):
+    """Interaktives Menü zum Anpassen der Tastenbelegungen."""
+    cfg = load_config()
+    
+    # Aktuelle Tastenbelegungen laden oder Standard verwenden
+    current_bindings = get_keybindings_from_config(cfg)
+    
+    # Umwandlung in eine bearbeitbare Struktur
+    # Jede Aktion: (Abschnitt, Aktions-ID, Anzeige, Tasten-Tokens, Beschreibung)
+    editable_bindings = list(current_bindings)
+    
+    idx = 0
+    status_hint = ""
+    
+    while True:
+        # Menüeinträge vorbereiten: (key, label, value)
+        binding_rows = []
+        for section, action, disp, keys, desc in editable_bindings:
+            keys_str = ", ".join(keys)
+            binding_rows.append((action, f"{section}: {disp}", f"[{keys_str}]"))
+        
+        binding_rows.append(("save", "Änderungen speichern", "[Speichern]"))
+        binding_rows.append(("reset", "Auf Standard zurücksetzen", "[Zurücksetzen]"))
+        binding_rows.append(("back", "Zurück", "[ESC]"))
+        
+        footer_text = status_hint if status_hint else [
+            ("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"),
+            ("[Eingabe] Bearbeiten", "[Eingabe] Ändern", "[Eingabe]"),
+            ("[ESC] Zurück", "[ESC] Zurück", "[ESC]")
+        ]
+        
+        start, count = render_box(
+            "TASTENBELEGUNGEN ANPASSEN",
+            "Tastenbelegungen für jede Aktion ändern",
+            binding_rows,
+            idx,
+            footer_text
+        )
+        
+        status_hint = ""
+        k = read_key(fd)
+        if not k:
+            continue
+            
+        if k in ("UP", "WHEEL_UP"):
+            idx = max(0, idx - 1)
+        elif k in ("DOWN", "WHEEL_DOWN"):
+            idx = min(len(binding_rows) - 1, idx + 1)
+        elif k in ("PAGE_UP",):
+            idx = max(0, idx - 8)
+        elif k in ("PAGE_DOWN",):
+            idx = min(len(binding_rows) - 1, idx + 8)
+        elif k in ("ESC", "q"):
+            break
+        elif k.startswith("CLICK:"):
+            try:
+                _, cx_s, cy_s = k.split(":")
+                row_i = int(cy_s) - 5
+                if 0 <= row_i < count:
+                    idx = start + row_i
+            except Exception:
+                pass
+            continue
+        
+        if k in ("ENTER", "SPACE", "RIGHT"):
+            selected_action = binding_rows[idx][0]
+            
+            if selected_action == "save":
+                # Tastenbelegungen in JSON-kompatible Listen umwandeln
+                json_bindings = []
+                for section, action, disp, keys, desc in editable_bindings:
+                    json_bindings.append([section, action, disp, list(keys), desc])
+                cfg["keybindings"] = json_bindings
+                if save_config(cfg):
+                    status_hint = f"{C_BOLD}✓ Tastenbelegungen gespeichert{C_RESET}"
+                else:
+                    status_hint = f"{C_BOLD}✗ Fehler beim Speichern{C_RESET}"
+            
+            elif selected_action == "reset":
+                # Zurück auf Standard
+                editable_bindings = list(KEY_BINDINGS)
+                status_hint = f"{C_BOLD}✓ Tastenbelegungen zurückgesetzt{C_RESET}"
+            
+            elif selected_action == "back":
+                break
+            
+            else:
+                # Tastenbelegung für diese Aktion bearbeiten
+                # Finde die Aktion in editable_bindings
+                for i, (section, action, disp, keys, desc) in enumerate(editable_bindings):
+                    if action == selected_action:
+                        # Zeige aktuell zugewiesene Tasten
+                        render_box(
+                            f"TASTEN FÜR '{disp}' ÄNDERN",
+                            "Drücken Sie die neue Taste oder Tastenkombination (ESC zum Abbrechen)",
+                            [],
+                            0,
+                            [("Aktuell:", ", ".join(keys), "")]
+                        )
+                        
+                        # Warten auf neue Tastenbelegung
+                        new_key = ""
+                        while True:
+                            key_press = read_key(fd)
+                            if key_press == "ESC":
+                                break
+                            elif key_press:
+                                new_key = key_press
+                                break
+                        
+                        if new_key:
+                            # Ersetze die Tastenbelegung
+                            editable_bindings[i] = (section, action, disp, [new_key], desc)
+                            status_hint = f"{C_BOLD}✓ '{disp}' auf [{new_key}] gesetzt{C_RESET}"
+                        break
+    
+
+def sort_menu(fd: int):
+    cfg = load_config()
+    idx = 0
+    status_hint = ""
+    
+    # Verfügbare Sortieroptionen
+    sort_options = [
+        ("name", "Name (alphabetisch)", "Nach Dateinamen sortieren"),
+        ("mtime", "Änderungsdatum", "Nach Modifikationszeit sortieren"),
+        ("atime", "Zugiffsdatum", "Nach Zugiffszeit sortieren"),
+        ("size", "Größe", "Nach Dateigröße sortieren"),
+        ("ext", "Endung", "Nach Dateiendung sortieren"),
+    ]
+    
+    while True:
+        # Aktuelle Einstellungen anzeigen
+        current_sort = cfg.get("sort_by", "mtime")
+        reverse_state = "Normal" if cfg.get("sort_reverse", False) else "Umgekehrt"
+        dir_first_state = "Ordner zuerst" if cfg.get("sort_dir_first", True) else "Gemischt"
+        
+        sort_rows = []
+        for key, lbl, _ in sort_options:
+            marker = "* " if key == current_sort else "  "
+            sort_rows.append((key, f"{marker}{lbl}", ""))
+        
+        # Zusätzliche Optionen für Sortierverhalten
+        sort_rows.append(("reverse", f"  Sortierreihenfolge: [{reverse_state}]", ""))
+        sort_rows.append(("dir_first", f"  Ordnerposition: [{dir_first_state}]", ""))
+        
+        footer_text = status_hint if status_hint else [
+            ("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"),
+            ("[Eingabe] Auswählen", "[Eingabe] Ändern", "[Eingabe]"),
+            ("[ESC] Zurück", "[ESC] Zurück", "[ESC]")
+        ]
+        
+        start, count = render_box(
+            "DATEI- UND ORDNERANORDNUNG",
+            "Sortierung und Anzeigereihenfolge festlegen",
+            [(r[0], r[1], r[2]) for r in sort_rows],
+            idx,
+            footer_text
+        )
+        
+        status_hint = ""
+        k = read_key(fd)
+        if not k:
+            continue
+            
+        if k in ("UP", "WHEEL_UP"):
+            idx = max(0, idx - 1)
+        elif k in ("DOWN", "WHEEL_DOWN"):
+            idx = min(len(sort_rows) - 1, idx + 1)
+        elif k in ("PAGE_UP",):
+            idx = max(0, idx - 8)
+        elif k in ("PAGE_DOWN",):
+            idx = min(len(sort_rows) - 1, idx + 8)
+        elif k in ("ESC", "q", "LEFT"):
+            break
+        elif k.startswith("CLICK:"):
+            try:
+                _, cx_s, cy_s = k.split(":")
+                row_i = int(cy_s) - 5
+                if 0 <= row_i < count:
+                    idx = start + row_i
+            except Exception:
+                pass
+            continue
+        
+        if k in ("ENTER", "SPACE", "RIGHT"):
+            selected_key = sort_rows[idx][0]
+            if selected_key in [s[0] for s in sort_options]:
+                # Sortierkriterium ändern
+                cfg["sort_by"] = selected_key
+                save_config(cfg)
+                status_hint = f"{C_BOLD}✓ Sortierung nach {sort_rows[idx][1].split('] ')[-1]}{C_RESET}"
+            elif selected_key == "reverse":
+                # Sortierreihenfolge umschalten
+                cfg["sort_reverse"] = not cfg.get("sort_reverse", True)
+                save_config(cfg)
+            elif selected_key == "dir_first":
+                # Ordner-zuerst-Einstellung umschalten
+                cfg["sort_dir_first"] = not cfg.get("sort_dir_first", True)
+                save_config(cfg)
+
+
 def keybindings_menu(fd: int):
     idx = 0
     while True:
@@ -460,6 +684,8 @@ def main_menu(fd: int):
                 val = f"[{'Ein' if cfg.get('mouse_support', True) else 'Aus'}]"
             elif key == "hidden":
                 val = f"[{'Ein' if cfg.get('show_hidden', False) else 'Aus'}]"
+            elif key == "sort":
+                val = "[Öffnen]"
             elif key == "editor":
                 val = f"[{editor_command(cfg)}]"
             elif key == "keybindings":
@@ -487,9 +713,9 @@ def main_menu(fd: int):
         k = read_key(fd)
         if not k:
             continue
-        if k in ("UP", "k", "WHEEL_UP"):
+        if k in ("UP", "WHEEL_UP"):
             idx = max(0, idx - 1)
-        elif k in ("DOWN", "j", "WHEEL_DOWN"):
+        elif k in ("DOWN", "WHEEL_DOWN"):
             idx = min(len(rows) - 1, idx + 1)
         elif k in ("ESC", "q"):
             break
@@ -524,11 +750,17 @@ def main_menu(fd: int):
             elif act == "editor":
                 cycle_editor(cfg, -1 if k == "LEFT" else 1)
                 save_config(cfg)
+            elif act == "sort":
+                if k == "LEFT":
+                    break
+                else:
+                    sort_menu(fd)
+                    cfg = load_config()
             elif act == "keybindings":
                 if k == "LEFT":
                     break
                 else:
-                    keybindings_menu(fd)
+                    edit_keybindings_menu(fd)
                     cfg = load_config()
             elif act == "reset":
                 if k != "LEFT":

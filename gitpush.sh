@@ -1,5 +1,4 @@
 cd ~/easydateien
 git add -A
-git status
-git commit
-git push origin main
+git commit -m "Aktualisiert"
+git push

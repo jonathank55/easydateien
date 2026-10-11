@@ -880,7 +880,7 @@ class EasyDateienApp:
     def __init__(self, initial_path: Optional[str] = None):
         self.current_dir = os.path.abspath(initial_path if initial_path else os.getcwd())
         self.config = self.load_config()
-        self.keymap: Dict[str, str] = build_keymap()
+        self.keymap: Dict[str, str] = build_keymap(self.config)
         self.items: List[FileEntry] = []
         self.selected_idx: int = 0
         self.view_start: int = 0
@@ -1059,6 +1059,8 @@ class EasyDateienApp:
         self._cur_stamp = self.dir_stamp(self.current_dir)
         raw = self.get_raw_entries(self.current_dir, fresh=True)
         self._cur_sig = listing_signature(raw)
+        # Cache löschen, um sicherzustellen, dass neue Sortieroptionen angewendet werden
+        self._arranged_cache.clear()
         self.items = self.get_arranged(self.current_dir, use_filter=True)
 
         if prev_path is not None:
