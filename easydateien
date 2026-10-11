@@ -1079,7 +1079,7 @@ class EasyDateienApp:
         raw = self.get_raw_entries(self.current_dir, fresh=True)
         self._cur_sig = listing_signature(raw)
         # Cache löschen, um sicherzustellen, dass neue Sortieroptionen angewendet werden
-        self._arranged_cache.clear()
+        self.clear_sort_caches()
         self.items = self.get_arranged(self.current_dir, use_filter=True)
 
         if prev_path is not None:
@@ -1589,12 +1589,21 @@ class EasyDateienApp:
         except Exception as e:
             self.set_status(f"Fehler bei Rückgängig: {e}", "error")
 
+    def clear_sort_caches(self):
+        """Löscht alle Caches, die von den Sortierparametern abhängen."""
+        self.cached_parent_dir = None
+        self.cached_parent_items = []
+        self.cached_child_path = None
+        self.cached_child_items = []
+        self._arranged_cache.clear()
+
     def toggle_sort(self):
         modes = ["mtime", "name", "size", "ext"]
         cur = self.config.get("sort_by", "mtime")
         nxt = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "mtime"
         self.config["sort_by"] = nxt
         desc = {"mtime": "Datum", "name": "Name", "size": "Größe", "ext": "Dateityp"}
+        self.clear_sort_caches()
         self.refresh_items(force=True)
         self.set_status(f"Sortierung: {desc.get(nxt, nxt)}", "info")
 
@@ -1990,7 +1999,13 @@ class EasyDateienApp:
                 if self.cached_parent_dir == parent_path and self.cached_parent_items:
                     parent_items = self.cached_parent_items
                 else:
-                    parent_items = scan_directory(parent_path, show_hidden=self.config.get("show_hidden", False))
+                    parent_items = scan_directory(
+                        parent_path,
+                        show_hidden=self.config.get("show_hidden", False),
+                        sort_by=self.config.get("sort_by", "mtime"),
+                        sort_reverse=self.config.get("sort_reverse", True),
+                        sort_dir_first=self.config.get("sort_dir_first", True)
+                    )
                     self.cached_parent_dir = parent_path
                     self.cached_parent_items = parent_items
                 for i, pit in enumerate(parent_items):
@@ -2007,7 +2022,13 @@ class EasyDateienApp:
             if self.cached_child_path == cur_item.path and self.cached_child_items:
                 child_items = self.cached_child_items
             else:
-                child_items = scan_directory(cur_item.path, show_hidden=self.config.get("show_hidden", False))
+                child_items = scan_directory(
+                    cur_item.path,
+                    show_hidden=self.config.get("show_hidden", False),
+                    sort_by=self.config.get("sort_by", "mtime"),
+                    sort_reverse=self.config.get("sort_reverse", True),
+                    sort_dir_first=self.config.get("sort_dir_first", True)
+                )
                 self.cached_child_path = cur_item.path
                 self.cached_child_items = child_items
 
