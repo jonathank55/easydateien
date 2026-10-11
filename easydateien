@@ -185,6 +185,19 @@ def truncate_name(name: str, is_dir: bool, max_w: int) -> str:
         head = take_width(stem, keep)
         if head:
             return f"{head}…{suffix}"
+    # Falls keep < 1, versuche trotzdem das Suffix zu behalten
+    if suffix and is_dir:
+        # Für Ordner: immer versuchen, mindestens ein Zeichen + "…/" oder ".../" zu zeigen
+        # wenn max_w zu klein ist, zeige mindestens ".../" oder kürzer
+        if max_w >= 2:
+            # Versuche, mindestens ein Zeichen vom Namen zu behalten
+            first_char = take_width(name, 1)
+            if first_char and max_w >= 3:
+                return f"{first_char}…{suffix}"
+            elif max_w >= 2:
+                return f"…{suffix}"
+        elif max_w == 1:
+            return suffix
     return truncate_to_width(full, max_w)
 
 def render_input_field(text: str, cursor: int, width: int) -> str:
