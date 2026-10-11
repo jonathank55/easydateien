@@ -2155,11 +2155,8 @@ class EasyDateienApp:
                     if r < len(card):
                         cell_right = pad_to_width(card[r], w_right)
                     elif r == len(card) and fm_rows >= 10:
-                        # Trennlinie geht komplett durch: alle Spalten von Rand zu Rand
+                        # Trennlinie nur in der rechten Spalte (Trenner vor der Vorschau)
                         cell_right = "─" * w_right
-                        cell_mid = "─" * w_mid
-                        if not (active_console and console_pos == "links"):
-                            cell_left = "─" * w_left
                         sep_row = True
                     elif r == len(card) + 1 and fm_rows >= 10:
                         cell_right = pad_to_width(f" Vorschau", w_right)
@@ -2176,16 +2173,13 @@ class EasyDateienApp:
                 cell_right = ""
 
             if sep_row:
-                # Trennlinie kreuzt die Spaltentrenner: Kreuzungspunkte als ┼ statt │
-                d_l = set(cell_left) == {"─"}
-                d_m = set(cell_mid) == {"─"}
-                d_r = set(cell_right) == {"─"}
-                j_edge_l = "┼" if d_l else "│"
-                j_edge_r = "┼" if d_r else "│"
-                j_in_lm = "┼" if (d_l or d_m) else "│"
-                j_in_mr = "┼" if (d_m or d_r) else "│"
-                g_lm = "──" if (d_l or d_m) else "  "
-                g_mr = "──" if (d_m or d_r) else "  "
+                # Trennlinie nur in der rechten Spalte: links mit ├ an den
+                # Spaltentrenner angebunden, rechts ┤ am äusseren Rand
+                j_edge_l = "│"
+                j_edge_r = "┤"
+                j_in_lm = "│"
+                j_in_mr = "├"
+                g_lm = g_mr = "  "
             else:
                 j_edge_l = j_edge_r = j_in_lm = j_in_mr = "│"
                 g_lm = g_mr = "  "
