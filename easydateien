@@ -2645,7 +2645,9 @@ class EasyDateienApp:
                 for b_idx, bl in enumerate(box_lines):
                     r_pos = start_y + b_idx
                     if 0 <= r_pos < len(all_lines):
-                        all_lines[r_pos] = replace_ansi_range(all_lines[r_pos], start_x, bl, box_w, term_cols)
+                        # C_RESET am Zeilenanfang: aktives Fett der überlagerten Zeile
+                        # darf nicht in das Hilfe-Menü übernommen werden
+                        all_lines[r_pos] = replace_ansi_range(all_lines[r_pos], start_x, f"{C_RESET}{bl}", box_w, term_cols)
 
         return all_lines[:term_rows]
 
