@@ -1693,7 +1693,14 @@ class EasyDateienApp:
         cfg = self.config
         # Sortierparameter gehören zum Cache-Schlüssel, damit die Vorschau derselben Anordnung wie die Dateispalten folgt
         sort_key = (path, cfg.get("sort_by", "mtime"), cfg.get("sort_reverse", True), cfg.get("sort_dir_first", True))
-        if (self.cached_file_preview_path != path or self.cached_file_preview_key != sort_key
+        # Änderungstempel der Datei: bei Inhaltsänderung (z. B. externer Editor) wird die Vorschau neu geladen
+        try:
+            st = os.stat(path)
+            file_stamp: Optional[Tuple[int, int]] = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            file_stamp = None
+        cache_key = (sort_key, file_stamp)
+        if (self.cached_file_preview_path != path or self.cached_file_preview_key != cache_key
                 or not self.cached_file_preview_lines):
             lines = []
             try:
@@ -1737,7 +1744,7 @@ class EasyDateienApp:
                 lines = ["[Binäre Datei oder nicht lesbar]"]
 
             self.cached_file_preview_path = path
-            self.cached_file_preview_key = sort_key
+            self.cached_file_preview_key = cache_key
             self.cached_file_preview_lines = lines
 
         lines = self.cached_file_preview_lines
@@ -2294,10 +2301,8 @@ class EasyDateienApp:
                         # Trennlinie nur in der rechten Spalte (Trenner vor der Vorschau)
                         cell_right = "─" * w_right
                         sep_row = True
-                    elif r == len(card) + 1 and fm_rows >= 10:
-                        cell_right = pad_to_width(f" Vorschau", w_right)
                     else:
-                        p_line_idx = r - (len(card) + 2) if fm_rows >= 10 else -1
+                        p_line_idx = r - (len(card) + 1) if fm_rows >= 10 else -1
                         if 0 <= p_line_idx < len(preview_lines):
                             p_txt = preview_lines[p_line_idx]
                             cell_right = pad_to_width(f" {truncate_to_width(p_txt, max(2, w_right - 1))}", w_right)
