@@ -2329,10 +2329,10 @@ class EasyDateienApp:
         if has_status_bar:
             if self.active_dialog:
                 if self.active_dialog == "rename":
-                    inp_txt = self.dialog_input
-                    c_pos = self.dialog_cursor
-                    disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    left_str = f" Umbenennen: {disp_inp}"
+                    label = " Umbenennen: "
+                    inp_w = max(1, term_cols - str_width(label))
+                    disp_inp = render_input_field(self.dialog_input, self.dialog_cursor, inp_w)
+                    left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Bestätigen", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
@@ -2347,10 +2347,10 @@ class EasyDateienApp:
                         hints = ""
                     st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "new":
-                    inp_txt = self.dialog_input
-                    c_pos = self.dialog_cursor
-                    disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    left_str = f" Neu erstellen: {disp_inp}"
+                    label = " Neu erstellen: "
+                    inp_w = max(1, term_cols - str_width(label))
+                    disp_inp = render_input_field(self.dialog_input, self.dialog_cursor, inp_w)
+                    left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Erstellen", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
@@ -2365,10 +2365,10 @@ class EasyDateienApp:
                         hints = ""
                     st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "search":
-                    inp_txt = self.dialog_input
-                    c_pos = self.dialog_cursor
-                    disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    left_str = f" Filtern/Suche: {disp_inp}"
+                    label = " Filtern/Suche: "
+                    inp_w = max(1, term_cols - str_width(label))
+                    disp_inp = render_input_field(self.dialog_input, self.dialog_cursor, inp_w)
+                    left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Filtern", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
@@ -2383,10 +2383,10 @@ class EasyDateienApp:
                         hints = ""
                     st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "goto_path":
-                    inp_txt = self.dialog_input
-                    c_pos = self.dialog_cursor
-                    disp_inp = inp_txt[:c_pos] + f"{C_INVERT}{inp_txt[c_pos] if c_pos < len(inp_txt) else ' '}{C_RESET}" + inp_txt[c_pos+1:]
-                    left_str = f" Pfad: {disp_inp}"
+                    label = " Pfad: "
+                    inp_w = max(1, term_cols - str_width(label))
+                    disp_inp = render_input_field(self.dialog_input, self.dialog_cursor, inp_w)
+                    left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Wechseln", "[ESC] Zurück"]
                     opts_short = ["[Eingabe]", "[ESC]"]
