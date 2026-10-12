@@ -1263,9 +1263,11 @@ class EasyDateienApp:
             return
         cur_p = self.items[self.selected_idx].path
         if self.clipboard_mode == "cut" and not self.selected_paths and cur_p in self.clipboard_paths:
+            # Toggle: Vormerkung zurück in die Auswahl übernehmen (wieder mit "*" markiert)
+            self.selected_paths.update(self.clipboard_paths)
             self.clipboard_mode = None
             self.clipboard_paths = []
-            self.set_status("Ausschneiden aufgehoben")
+            self.set_status(f"Auswahl: {len(self.selected_paths)}")
             return
         targets = list(self.selected_paths) if self.selected_paths else [cur_p]
         self.clipboard_mode = "cut"
@@ -1279,9 +1281,11 @@ class EasyDateienApp:
             return
         cur_p = self.items[self.selected_idx].path
         if self.clipboard_mode == "copy" and not self.selected_paths and cur_p in self.clipboard_paths:
+            # Toggle: Vormerkung zurück in die Auswahl übernehmen (wieder mit "*" markiert)
+            self.selected_paths.update(self.clipboard_paths)
             self.clipboard_mode = None
             self.clipboard_paths = []
-            self.set_status("Kopieren aufgehoben")
+            self.set_status(f"Auswahl: {len(self.selected_paths)}")
             return
         targets = list(self.selected_paths) if self.selected_paths else [cur_p]
         self.clipboard_mode = "copy"
