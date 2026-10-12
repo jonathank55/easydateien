@@ -1262,17 +1262,29 @@ class EasyDateienApp:
         if not self.items:
             return
         cur_p = self.items[self.selected_idx].path
-        if self.clipboard_mode == "cut" and not self.selected_paths and cur_p in self.clipboard_paths:
+        if self.selected_paths:
+            # Auswahl zur Vormerkung hinzufügen; bestehende Vormerkung bleibt erhalten (ohne ESC wird nichts aufgehoben)
+            targets = list(self.clipboard_paths)
+            for p in self.selected_paths:
+                if p not in targets:
+                    targets.append(p)
+            self.selected_paths.clear()
+        elif self.clipboard_mode == "cut" and cur_p in self.clipboard_paths:
             # Toggle: Vormerkung zurück in die Auswahl übernehmen (wieder mit "*" markiert)
             self.selected_paths.update(self.clipboard_paths)
             self.clipboard_mode = None
             self.clipboard_paths = []
             self.set_status(f"Auswahl: {len(self.selected_paths)}")
             return
-        targets = list(self.selected_paths) if self.selected_paths else [cur_p]
+        elif self.clipboard_paths:
+            # Zeiger-Datei zur Vormerkung hinzufügen statt die Vormerkung zu ersetzen
+            targets = list(self.clipboard_paths)
+            if cur_p not in targets:
+                targets.append(cur_p)
+        else:
+            targets = [cur_p]
         self.clipboard_mode = "cut"
         self.clipboard_paths = targets
-        self.selected_paths.clear()
         sync_to_macos_clipboard(targets)
         self.set_status(f"{len(targets)} ausgeschnitten (p = einfügen)", "warning")
 
@@ -1280,17 +1292,29 @@ class EasyDateienApp:
         if not self.items:
             return
         cur_p = self.items[self.selected_idx].path
-        if self.clipboard_mode == "copy" and not self.selected_paths and cur_p in self.clipboard_paths:
+        if self.selected_paths:
+            # Auswahl zur Vormerkung hinzufügen; bestehende Vormerkung bleibt erhalten (ohne ESC wird nichts aufgehoben)
+            targets = list(self.clipboard_paths)
+            for p in self.selected_paths:
+                if p not in targets:
+                    targets.append(p)
+            self.selected_paths.clear()
+        elif self.clipboard_mode == "copy" and cur_p in self.clipboard_paths:
             # Toggle: Vormerkung zurück in die Auswahl übernehmen (wieder mit "*" markiert)
             self.selected_paths.update(self.clipboard_paths)
             self.clipboard_mode = None
             self.clipboard_paths = []
             self.set_status(f"Auswahl: {len(self.selected_paths)}")
             return
-        targets = list(self.selected_paths) if self.selected_paths else [cur_p]
+        elif self.clipboard_paths:
+            # Zeiger-Datei zur Vormerkung hinzufügen statt die Vormerkung zu ersetzen
+            targets = list(self.clipboard_paths)
+            if cur_p not in targets:
+                targets.append(cur_p)
+        else:
+            targets = [cur_p]
         self.clipboard_mode = "copy"
         self.clipboard_paths = targets
-        self.selected_paths.clear()
         sync_to_macos_clipboard(targets)
         self.set_status(f"{len(targets)} kopiert (Cmd+V im Finder, p hier)", "success")
 
