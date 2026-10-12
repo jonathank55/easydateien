@@ -2154,9 +2154,9 @@ class EasyDateienApp:
                     else:
                         prefix_char = f" {p_b_char}"
                     if w_left >= 26:
-                        p_styled = format_entry_name(p_it, max(3, w_left - 13), bold=is_act)
+                        p_styled = format_entry_name(p_it, max(3, w_left - 2), bold=is_act)
                         txt_l = f"{prefix_char}{p_styled}"
-                        cell_left = pad_to_width(txt_l, w_left - 10) + " " * 10
+                        cell_left = pad_to_width(txt_l, w_left)
                     else:
                         p_styled = format_entry_name(p_it, max(2, w_left - 3), bold=is_act)
                         txt_l = f"{prefix_char}{p_styled}"
@@ -2188,12 +2188,17 @@ class EasyDateienApp:
                 prefix_len = 3
                 s_str = format_size(it.size) if not it.is_dir else ""
 
-                if w_mid >= 26:
+                if w_mid >= 26 and s_str:
                     avail_n = max(3, w_mid - prefix_len - 10)
                     n_styled = format_entry_name(it, avail_n, bold=is_cur)
-                    s_part = f"  {s_str:>8}" if s_str else " " * 10
+                    s_part = f"  {s_str:>8}"
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid - 10) + s_part
+                elif w_mid >= 26:
+                    avail_n = max(3, w_mid - prefix_len)
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur)
+                    l_part = f"{prefix_str}{n_styled}"
+                    cell_mid = pad_to_width(l_part, w_mid)
                 else:
                     avail_n = max(2, w_mid - prefix_len)
                     n_styled = format_entry_name(it, avail_n, bold=is_cur)
@@ -2222,11 +2227,15 @@ class EasyDateienApp:
                             c_b_char = "*"
                         else:
                             c_b_char = " "
-                        if w_right >= 26:
+                        if w_right >= 26 and c_size:
                             name_w = max(3, w_right - 13)
                             c_styled = format_entry_name(c_it, name_w, bold=False)
-                            s_part = f"  {c_size:>8}" if c_size else " " * 10
+                            s_part = f"  {c_size:>8}"
                             cell_right = pad_to_width(f" {c_b_char}{c_styled}", w_right - 10) + s_part
+                        elif w_right >= 26:
+                            name_w = max(3, w_right - 2)
+                            c_styled = format_entry_name(c_it, name_w, bold=False)
+                            cell_right = pad_to_width(f" {c_b_char}{c_styled}", w_right)
                         else:
                             name_w = max(3, w_right - 3)
                             c_styled = format_entry_name(c_it, name_w, bold=False)
@@ -2332,6 +2341,8 @@ class EasyDateienApp:
                     label = " Umbenennen: "
                     inp_w = max(1, term_cols - str_width(label))
                     disp_inp = render_input_field(self.dialog_input, self.dialog_cursor, inp_w)
+                    field_w = min(str_width(safe_text(self.dialog_input)) + 1, inp_w)
+                    disp_inp = pad_to_width(disp_inp, field_w)
                     left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Bestätigen", "[ESC] Zurück"]
@@ -2350,6 +2361,8 @@ class EasyDateienApp:
                     label = " Neu erstellen: "
                     inp_w = max(1, term_cols - str_width(label))
                     disp_inp = render_input_field(self.dialog_input, self.dialog_cursor, inp_w)
+                    field_w = min(str_width(safe_text(self.dialog_input)) + 1, inp_w)
+                    disp_inp = pad_to_width(disp_inp, field_w)
                     left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Erstellen", "[ESC] Zurück"]
@@ -2368,6 +2381,8 @@ class EasyDateienApp:
                     label = " Filtern/Suche: "
                     inp_w = max(1, term_cols - str_width(label))
                     disp_inp = render_input_field(self.dialog_input, self.dialog_cursor, inp_w)
+                    field_w = min(str_width(safe_text(self.dialog_input)) + 1, inp_w)
+                    disp_inp = pad_to_width(disp_inp, field_w)
                     left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Filtern", "[ESC] Zurück"]
@@ -2386,6 +2401,8 @@ class EasyDateienApp:
                     label = " Pfad: "
                     inp_w = max(1, term_cols - str_width(label))
                     disp_inp = render_input_field(self.dialog_input, self.dialog_cursor, inp_w)
+                    field_w = min(str_width(safe_text(self.dialog_input)) + 1, inp_w)
+                    disp_inp = pad_to_width(disp_inp, field_w)
                     left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
                     opts_full = ["[Eingabe] Wechseln", "[ESC] Zurück"]
