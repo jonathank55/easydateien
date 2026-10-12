@@ -71,8 +71,8 @@ KEY_BINDINGS = [
     ("Navigation & Ansicht", "right", "Öffnen", ("RIGHT",), "Ordner betreten"),
     ("Navigation & Ansicht", "page_up", "Seite hoch", ("PAGE_UP",), "10 Einträge nach oben blättern"),
     ("Navigation & Ansicht", "page_down", "Seite runter", ("PAGE_DOWN",), "10 Einträge nach unten blättern"),
-    ("Navigation & Ansicht", "top", "Anfang", ("HOME",), "Zum Anfang der Liste springen"),
-    ("Navigation & Ansicht", "bottom", "Ende", ("END", "G"), "Zum Ende der Liste springen"),
+    ("Navigation & Ansicht", "top", "Anfang", ("j",), "Zum Anfang der Liste springen"),
+    ("Navigation & Ansicht", "bottom", "Ende", ("k",), "Zum Ende der Liste springen"),
     ("Navigation & Ansicht", "open", "Auswählen", ("ENTER",), "Mit Standardprogramm öffnen"),
     ("Navigation & Ansicht", "goto", "Gehe zu", ("g",), "Gehe zu (Schnellzugriff auf Ordner)"),
     ("Navigation & Ansicht", "home", "Start", ("~",), "Zum Benutzerordner springen"),
@@ -80,27 +80,33 @@ KEY_BINDINGS = [
     ("Navigation & Ansicht", "hidden", "Versteckt", (".",), "Versteckte Dateien ein-/ausblenden"),
     ("Navigation & Ansicht", "sort", "Sortieren", ("s",), "Sortierung wechseln"),
     ("Navigation & Ansicht", "console", "Konsole", ("t",), "Integrierte Konsole öffnen/schließen"),
-    ("Navigation & Ansicht", "console_focus", "Fokus", ("TAB", "SHIFT_TAB"), "Fokus auf die Konsole setzen"),
-    ("Navigation & Ansicht", "shell", "Shell", ("!", "$"), "Interaktive Shell im Ordner öffnen"),
-    ("Dateioperationen", "select", "Markieren", ("SPACE", " ", "v"), "Element markieren/Markierung aufheben"),
+    ("Navigation & Ansicht", "console_focus", "Fokus", ("TAB",), "Fokus auf die Konsole setzen"),
+    ("Dateioperationen", "select", "Markieren", ("SPACE",), "Element markieren/Markierung aufheben"),
     ("Dateioperationen", "select_all", "Alle", ("a",), "Alle sichtbaren Elemente markieren"),
     ("Dateioperationen", "new", "Neu", ("n",), "Neue Datei oder Ordner (mit / am Ende)"),
     ("Dateioperationen", "rename", "Umbenennen", ("r",), "Element umbenennen"),
-    ("Dateioperationen", "trash", "Löschen", ("d", "DELETE"), "In den Papierkorb verschieben"),
-    ("Dateioperationen", "copy", "Kopieren", ("y",), "Auswahl kopieren"),
+    ("Dateioperationen", "trash", "Löschen", ("d",), "In den Papierkorb verschieben"),
+    ("Dateioperationen", "copy", "Kopieren", ("c",), "Auswahl kopieren"),
     ("Dateioperationen", "cut", "Ausschneiden", ("x",), "Auswahl ausschneiden"),
     ("Dateioperationen", "paste", "Einfügen", ("p",), "In aktuellen Ordner einfügen"),
-    ("Dateioperationen", "clear_clipboard", "Leeren", ("X", "Y"), "Zwischenspeicher leeren"),
     ("Dateioperationen", "copy_path", "Pfad", ("c",), "Kopieren: cc Pfad · cf Name · cd Ordnerpfad"),
     ("Dateioperationen", "zip", "Zip", ("z",), "ZIP-Archiv aus Auswahl erstellen"),
     ("Dateioperationen", "extract", "Entpacken", ("e",), "ZIP-Archiv entpacken"),
     ("Dateioperationen", "edit", "Bearbeiten", ("o",), "Im Editor bearbeiten"),
-    ("Dateioperationen", "undo", "Rückgängig", ("u", "UNDO"), "Letzte Dateiaktion rückgängig machen"),
-    ("Verwaltung", "help", "Hilfe", ("h", "?"), "Diese Hilfe anzeigen"),
+    ("Dateioperationen", "undo", "Rückgängig", ("u",), "Letzte Dateiaktion rückgängig machen"),
+    ("Verwaltung", "help", "Hilfe", ("h",), "Diese Hilfe anzeigen"),
     ("Verwaltung", "menu", "Menü", ("m",), "Einstellungen öffnen (u. a. Texteditor)"),
     ("Verwaltung", "cancel", "Abbrechen", ("ESC", "CTRL_C"), "Konsole schließen, Filter/Auswahl aufheben"),
     ("Verwaltung", "quit", "Beenden", ("q",), "EasyDateien beenden"),
 ]
+
+# Chord-Aktionen: Die Aktion nutzt ihre Taste als Präfix einer Tastenfolge
+# (z. B. Pfad: "c" gefolgt von c/f/d). Die Einzeltaste selbst bleibt der Aktion
+# zugeordnet, die sie allein auslöst (hier "c" = Kopieren), sodass die geteilte
+# Taste keine Doppelbelegung darstellt.
+CHORD_ACTIONS = {
+    "copy_path": ("c", ("cc", "cf", "cd")),
+}
 
 
 def get_keybindings_from_config(cfg: dict) -> list:
@@ -127,7 +133,15 @@ def build_keymap(cfg: dict = None) -> dict:
     bindings = get_keybindings_from_config(cfg) if cfg else KEY_BINDINGS
     keymap = {}
     for _section, action, _disp, keys, _desc in bindings:
-        for k in keys:
+        chord = CHORD_ACTIONS.get(action)
+        if chord and chord[0] in keys:
+            # Chord-Aktion: Die Präfix-Einzeltaste zählt nicht als eigene Belegung
+            # (sie gehört der Aktion, die sie allein auslöst); die vollständigen
+            # Tastenfolgen belegen diese Aktion.
+            eff_keys = tuple(k for k in keys if k != chord[0]) + chord[1]
+        else:
+            eff_keys = keys
+        for k in eff_keys:
             if k in keymap:
                 raise ValueError(f"Tastenkonflikt: '{k}' ist doppelt belegt ({keymap[k]} / {action})")
             keymap[k] = action
@@ -446,18 +460,25 @@ def edit_keybindings_menu(fd: int):
     # Umwandlung in eine bearbeitbare Struktur
     # Jede Aktion: (Abschnitt, Aktions-ID, Anzeige, Tasten-Tokens, Beschreibung)
     editable_bindings = list(current_bindings)
-    
+
+    def save_editable_bindings():
+        # Wird automatisch ausgeführt, sobald das Menü geschlossen wird
+        json_bindings = []
+        for section, action, disp, keys, desc in editable_bindings:
+            json_bindings.append([section, action, disp, list(keys), desc])
+        cfg["keybindings"] = json_bindings
+        save_config(cfg)
+
     idx = 0
     status_hint = ""
-    
+
     while True:
         # Menüeinträge vorbereiten: (key, label, value)
         binding_rows = []
         for section, action, disp, keys, desc in editable_bindings:
             keys_str = ", ".join(keys)
             binding_rows.append((action, f"{section}: {disp}", f"[{keys_str}]"))
-        
-        binding_rows.append(("save", "Änderungen speichern", "[Speichern]"))
+
         binding_rows.append(("reset", "Auf Standard zurücksetzen", "[Zurücksetzen]"))
         binding_rows.append(("back", "Zurück", "[ESC]"))
         
@@ -489,6 +510,7 @@ def edit_keybindings_menu(fd: int):
         elif k in ("PAGE_DOWN",):
             idx = min(len(binding_rows) - 1, idx + 8)
         elif k in ("ESC", "q"):
+            save_editable_bindings()
             break
         elif k.startswith("CLICK:"):
             try:
@@ -502,24 +524,14 @@ def edit_keybindings_menu(fd: int):
         
         if k in ("ENTER", "SPACE", "RIGHT"):
             selected_action = binding_rows[idx][0]
-            
-            if selected_action == "save":
-                # Tastenbelegungen in JSON-kompatible Listen umwandeln
-                json_bindings = []
-                for section, action, disp, keys, desc in editable_bindings:
-                    json_bindings.append([section, action, disp, list(keys), desc])
-                cfg["keybindings"] = json_bindings
-                if save_config(cfg):
-                    status_hint = f"{C_BOLD}✓ Tastenbelegungen gespeichert{C_RESET}"
-                else:
-                    status_hint = f"{C_BOLD}✗ Fehler beim Speichern{C_RESET}"
-            
-            elif selected_action == "reset":
+
+            if selected_action == "reset":
                 # Zurück auf Standard
                 editable_bindings = list(KEY_BINDINGS)
                 status_hint = f"{C_BOLD}✓ Tastenbelegungen zurückgesetzt{C_RESET}"
-            
+
             elif selected_action == "back":
+                save_editable_bindings()
                 break
             
             else:

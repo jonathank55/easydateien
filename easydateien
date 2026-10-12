@@ -2648,7 +2648,6 @@ class EasyDateienApp:
                 f"  [.]           Versteckte Dateien ein- und ausblenden",
                 f"  [s]           Sortierung wechseln",
                 f"  [t]           Integrierte Terminal-Konsole öffnen",
-                f"  [!]           Interaktive Shell im Ordner öffnen",
                 "",
                 f"Dateioperationen",
                 f"  [Leertaste]   Datei auswählen oder Markierung aufheben",
@@ -2656,7 +2655,7 @@ class EasyDateienApp:
                 f"  [n]           Neue Datei oder neuen Ordner erstellen",
                 f"  [r]           Ausgewähltes Element umbenennen",
                 f"  [d]           In den Papierkorb verschieben",
-                f"  [y]           Ausgewählte Dateien kopieren",
+                f"  [c]           Ausgewählte Dateien kopieren (cc/cf/cd: Pfad/Name/Ordner kopieren)",
                 f"  [x]           Ausgewählte Dateien ausschneiden",
                 f"  [p]           Zwischenablage in aktuellen Ordner einfügen",
                 f"  [z]           ZIP-Archiv aus Auswahl erstellen",
@@ -3294,7 +3293,7 @@ class EasyDateienApp:
                             self.console_focused = False
                             
                         needs_redraw = True
-                    elif key in ("TAB", "SHIFT_TAB"):
+                    elif key == "TAB":
                         self.console_focused = False
                         
                         needs_redraw = True
@@ -3450,7 +3449,7 @@ class EasyDateienApp:
                         needs_redraw = True
                     continue
 
-                if key in ("Z", "u", "UNDO"):
+                if key == "u":
                     self.undo_last_action()
                     needs_redraw = True
                     continue
@@ -3480,7 +3479,7 @@ class EasyDateienApp:
                         continue
                     continue
 
-                if key in ("TAB", "SHIFT_TAB"):
+                if key == "TAB":
                     if self.show_console:
                         self.console_focused = True
                         
@@ -3490,7 +3489,7 @@ class EasyDateienApp:
                         needs_redraw = True
                     continue
 
-                if key in ("h", "?"):
+                if key == "h":
                     self.active_dialog = "help_menu"
                     self.help_scroll_offset = 0
                     needs_redraw = True
@@ -3498,26 +3497,6 @@ class EasyDateienApp:
 
                 if key == "t":
                     self.toggle_console()
-                    needs_redraw = True
-                    continue
-
-                if key in ("!", "$"):
-                    user_shell, env = get_shell_environment()
-                    self.set_mouse_tracking(False)
-                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-                    sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
-                    sys.stdout.flush()
-                    try:
-                        subprocess.run([user_shell, "-l"], cwd=self.current_dir, env=env)
-                    except Exception:
-                        pass
-                    finally:
-                        tty.setcbreak(fd, termios.TCSADRAIN)
-                        sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
-                        self.sync_mouse_state()
-                        sys.stdout.write("\033[2J\033[3J\033[H")
-                        sys.stdout.flush()
-                        self.refresh_items(force=True)
                     needs_redraw = True
                     continue
 
@@ -3551,12 +3530,12 @@ class EasyDateienApp:
                     needs_redraw = True
                     continue
 
-                if key in ("UP", "k"):
+                if key == "UP":
                     if self.items:
                         self.selected_idx = max(0, self.selected_idx - 1)
                         needs_redraw = True
                     continue
-                elif key in ("DOWN", "j"):
+                elif key == "DOWN":
                     if self.items:
                         self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1)
                         needs_redraw = True
@@ -3576,7 +3555,7 @@ class EasyDateienApp:
                     self.go_parent_directory()
                     needs_redraw = True
                     continue
-                elif key in ("RIGHT", "l"):
+                elif key == "RIGHT":
                     if self.items:
                         item = self.items[self.selected_idx]
                         if item.is_dir:
@@ -3655,10 +3634,6 @@ class EasyDateienApp:
                     self.copy_selection()
                     needs_redraw = True
                     continue
-                elif key == "y":
-                    self.copy_selection()
-                    needs_redraw = True
-                    continue
                 elif key == "x":
                     self.cut_selection()
                     needs_redraw = True
@@ -3667,21 +3642,15 @@ class EasyDateienApp:
                     self.paste_clipboard()
                     needs_redraw = True
                     continue
-                elif key in ("Y", "X"):
-                    self.clipboard_mode = None
-                    self.clipboard_paths = []
-                    self.set_status("Zwischenspeicher geleert")
-                    needs_redraw = True
-                    continue
-                elif key in (" ", "SPACE", "v"):
+                elif key == "SPACE":
                     self.toggle_select()
                     needs_redraw = True
                     continue
-                elif key in ("V", "a"):
+                elif key == "a":
                     self.toggle_select_all()
                     needs_redraw = True
                     continue
-                elif key in ("d", "D", "DELETE"):
+                elif key == "d":
                     if self.items or self.selected_paths:
                         self.active_dialog = "trash_confirm"
                         needs_redraw = True
@@ -3693,7 +3662,7 @@ class EasyDateienApp:
                     self.set_status(f"Versteckte Dateien: {'Ein' if new_h else 'Aus'}")
                     needs_redraw = True
                     continue
-                elif key in ("m", "C"):
+                elif key == "m":
                     try:
                         from easydateien_konfigurator import run_konfigurator
                         new_cfg = run_konfigurator(standalone=False)
@@ -3718,16 +3687,16 @@ class EasyDateienApp:
                     self.set_status("Einstellungen übernommen", "success")
                     needs_redraw = True
                     continue
-                elif key in ("HOME",):
+                elif key == "j":
                     self.selected_idx = 0
                     needs_redraw = True
                     continue
-                elif key in ("END", "G"):
+                elif key == "k":
                     if self.items:
                         self.selected_idx = len(self.items) - 1
                         needs_redraw = True
                     continue
-                elif key in ("q", "Q"):
+                elif key == "q":
                     break
         finally:
             self.set_mouse_tracking(False)
