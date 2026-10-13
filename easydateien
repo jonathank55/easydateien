@@ -3019,7 +3019,12 @@ class EasyDateienApp:
                     self.set_status("Umbenennen abgebrochen")
                     return True
                 new_path = os.path.join(self.current_dir, val)
-                if os.path.exists(new_path):
+                # Auf case-insensitiven Dateisystemen (macOS) ist der neue Name
+                # scheinbar "vorhanden", obwohl es dieselbe Datei ist (z. B. nur
+                # Gross/Kleinschreibung geaendert). Ersetzungs-Dialog nur bei
+                # einer ANDEREN Datei; identische Pfade sind ein reines Rename.
+                same_file = os.path.abspath(new_path) == os.path.abspath(target_it.path)
+                if os.path.exists(new_path) and not same_file:
                     # Vorhandenen Eintrag ersetzen? (gleiche Bestätigung wie beim Einfügen)
                     self.active_dialog = "replace_confirm"
                     self.pending_replace = {"mode": "rename", "src": target_it.path, "dest": new_path, "name": val}
