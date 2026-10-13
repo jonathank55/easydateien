@@ -310,7 +310,7 @@ def edit_keybindings_menu(fd: int):
             click = clicked_row(k, start, count)
             if click is not None:
                 idx = click
-            continue
+                continue
 
         if k in ("ENTER", "SPACE", "RIGHT"):
             selected_action = binding_rows[idx][0]
@@ -420,7 +420,7 @@ def sort_menu(fd: int):
             click = clicked_row(k, start, count)
             if click is not None:
                 idx = click
-            continue
+                continue
 
         if k in ("ENTER", "SPACE", "RIGHT"):
             selected_key = sort_rows[idx][0]
@@ -466,7 +466,7 @@ def keybindings_menu(fd: int):
             click = clicked_row(k, start, count)
             if click is not None:
                 idx = click
-            continue
+                continue
         if k in ("ENTER", "SPACE"):
             act = KEYBINDING_ITEMS[idx][0]
             if act == "reset":
@@ -542,7 +542,7 @@ def main_menu(fd: int):
             click = clicked_row(k, start, count)
             if click is not None:
                 idx = click
-            continue
+                continue
 
         if k in ("ENTER", "SPACE", "RIGHT", "LEFT"):
             act = rows[idx][0]
