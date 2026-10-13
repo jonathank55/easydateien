@@ -263,7 +263,8 @@ Das Konfigurationsmenü speichert Änderungen sofort. Die Tasten `.` (versteckte
 | `Tab` | Fokus auf integrierte Konsole setzen (oder Konsole öffnen) |
 | `h` | Hilfe mit Tastenübersicht öffnen |
 | `m` | Konfigurationsmenü öffnen |
-| `ESC` / `Strg C` | Konsole schließen, Filter aufheben oder Auswahl/Zwischenspeicher leeren (in dieser Reihenfolge) |
+| `ESC` | Konsole schließen, Filter aufheben, Auswahl/Zwischenspeicher leeren (in dieser Reihenfolge) |
+| `Strg C` | Konsoleneingabe leeren; interaktive Befehle beenden |
 | `q` | EasyDateien beenden |
 
 ### Konsolen-Modus (Konsole im Fokus)

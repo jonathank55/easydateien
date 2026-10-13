@@ -257,7 +257,8 @@ KEY_BINDINGS = [
     ("Dateioperationen", "undo", "Rückgängig", ("u",), "Letzte Dateiaktion rückgängig machen"),
     ("Verwaltung", "help", "Hilfe", ("h",), "Diese Hilfe anzeigen"),
     ("Verwaltung", "menu", "Menü", ("m",), "Einstellungen öffnen (u. a. Texteditor)"),
-    ("Verwaltung", "cancel", "Abbrechen", ("CTRL_C",), "Konsole schließen, Filter aufheben"),
+    ("Verwaltung", "cancel", "Abbrechen", ("ESC",), "Konsole schließen, Filter aufheben, Auswahl leeren"),
+    ("Verwaltung", "cancel_cmd", "Abbrechen (Eingabe)", ("CTRL_C",), "Konsoleneingabe leeren, interaktive Befehle beenden"),
     ("Verwaltung", "quit", "Beenden", ("q",), "EasyDateien beenden"),
 ]
 
