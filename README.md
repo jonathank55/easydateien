@@ -86,7 +86,7 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
 
 - **Interaktives Konfigurationsmenü (`m`):**  
   Interaktiver Konfigurator (Navigation mit `↑`/`↓`, Ändern mit `Enter`/`Space`/`←`/`→`, Zurück mit `ESC`/`q`; Änderungen werden sofort gespeichert):
-  - Trennungslinien-Stil (`alle`, `vertikal`, `horizontal`, `außen`, `keine`)
+  - Trennungslinien sind immer vollständig aktiviert (alle Rahmen- und Spaltenlinien)
   - Spalten-Layout (`Ein` / `Aus`)
   - Mausunterstützung (`Ein` / `Aus`)
   - Versteckte Dateien anzeigen (`Ein` / `Aus`)
@@ -189,7 +189,7 @@ Die Konfiguration wird im standardisierten JSON-Format gespeichert. Fehlende Sch
 
 ```json
 {
-  "divider_style": "alle",
+
   "columns_enabled": true,
   "esc_to_quit": false,
   "mouse_support": true,
@@ -206,7 +206,7 @@ Die Konfiguration wird im standardisierten JSON-Format gespeichert. Fehlende Sch
 
 | Schlüssel | Standard | Bedeutung |
 | :--- | :--- | :--- |
-| `divider_style` | `"alle"` | Trennlinien: `alle`, `vertikal`, `außen`, `horizontal`, `keine` |
+
 | `columns_enabled` | `true` | Mehrspaltiges Layout (Miller-Columns) ein/aus |
 | `esc_to_quit` | `false` | Reserviert; wird von der aktuellen Version nicht ausgewertet (Beenden: `q`) |
 | `mouse_support` | `true` | Mausunterstützung ein/aus |

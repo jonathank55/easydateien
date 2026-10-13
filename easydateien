@@ -1953,12 +1953,9 @@ class EasyDateienApp:
         has_dialog = bool(self.active_dialog)
         has_status_bar = (term_rows >= 4)
 
-        div_style = self.config.get("divider_style", "alle").lower()
-        if div_style not in ("alle", "vertikal", "außen", "horizontal", "keine"):
-            div_style = "alle"
-
-        has_top_border = (div_style in ("alle", "vertikal", "außen", "horizontal")) and (term_rows >= 4)
-        has_bottom_border = (div_style in ("alle", "vertikal", "außen", "horizontal")) and (term_rows >= 4)
+        div_style = "alle"
+        has_top_border = term_rows >= 4
+        has_bottom_border = term_rows >= 4
 
         consumed = 1
         if has_top_border:
@@ -2002,7 +1999,7 @@ class EasyDateienApp:
 
         eff_cols = self.get_effective_columns(term_cols)
 
-        if div_style in ("alle", "vertikal"):
+        if True:
             if eff_cols == 3:
                 avail = max(10, term_cols - 4)
                 w_left = max(6, int(avail * 0.22))
@@ -2026,26 +2023,7 @@ class EasyDateienApp:
                 top_line = f"╭{'─' * w_mid}╮"
                 bot_line = f"╰{'─' * w_mid}╯"
                 mid_sep  = f"├{'─' * w_mid}┤"
-        elif div_style == "außen":
-            inner_w = max(4, term_cols - 2)
-            top_line = f"╭{'─' * inner_w}╮"
-            bot_line = f"╰{'─' * inner_w}╯"
-            mid_sep  = f"├{'─' * inner_w}┤"
-            if eff_cols == 3:
-                avail = max(10, inner_w - 4)
-                w_left = max(6, int(avail * 0.22))
-                w_right = max(10, int(avail * 0.33))
-                w_mid = avail - w_left - w_right
-            elif eff_cols == 2:
-                avail = max(8, inner_w - 2)
-                w_left = max(6, int(avail * 0.30))
-                w_right = 0
-                w_mid = avail - w_left
-            else:
-                w_mid = inner_w
-                w_left = 0
-                w_right = 0
-        elif div_style == "horizontal":
+        elif False:
             top_line = "─" * term_cols
             bot_line = "─" * term_cols
             mid_sep  = "─" * term_cols
@@ -2303,27 +2281,13 @@ class EasyDateienApp:
                 j_edge_l = j_edge_r = j_in_lm = j_in_mr = "│"
                 g_lm = g_mr = "  "
 
-            if div_style in ("alle", "vertikal"):
+            if True:
                 if eff_cols == 3:
                     row_line = f"{j_edge_l}{cell_left}{j_in_lm}{cell_mid}{j_in_mr}{cell_right}{j_edge_r}"
                 elif eff_cols == 2:
                     row_line = f"│{cell_left}│{cell_mid}│"
                 else:
                     row_line = f"│{cell_mid}│"
-            elif div_style == "außen":
-                if eff_cols == 3:
-                    row_line = f"{j_edge_l}{cell_left}{g_lm}{cell_mid}{g_mr}{cell_right}{j_edge_r}"
-                elif eff_cols == 2:
-                    row_line = f"│{cell_left}  {cell_mid}│"
-                else:
-                    row_line = f"│{cell_mid}│"
-            else:
-                if eff_cols == 3:
-                    row_line = f"{cell_left}{g_lm}{cell_mid}{g_mr}{cell_right}"
-                elif eff_cols == 2:
-                    row_line = f"{cell_left}  {cell_mid}"
-                else:
-                    row_line = f"{cell_mid}"
 
             file_lines.append(pad_to_width(row_line, term_cols))
 
@@ -2334,15 +2298,15 @@ class EasyDateienApp:
 
         if active_console and console_pos == "unten" and console_h > 0:
             all_lines.append(pad_to_width(mid_sep, term_cols))
-            inner_cw = max(4, term_cols - 2 if div_style in ("alle", "vertikal", "außen") else term_cols)
+            inner_cw = max(4, term_cols - 2)
             c_lines = self.get_console_display_lines(inner_cw, console_h)
             for cl in c_lines:
-                if div_style in ("alle", "vertikal", "außen"):
+                if True:
                     all_lines.append(f"│{cl}│")
                 else:
                     all_lines.append(pad_to_width(cl, term_cols))
             if has_bottom_border:
-                c_bot = f"╰{'─' * (term_cols - 2)}╯" if div_style in ("alle", "vertikal", "außen") else ("─" * term_cols if div_style == "horizontal" else "")
+                c_bot = f"╰{'─' * (term_cols - 2)}╯"
                 if c_bot:
                     all_lines.append(pad_to_width(c_bot, term_cols))
         elif has_bottom_border and bot_line:

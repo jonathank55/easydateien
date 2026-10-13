@@ -48,7 +48,6 @@ KEYBINDING_ITEMS = [(action, desc, f"[{disp}]") for _s, action, disp, _k, desc i
 ]
 
 MAIN_MENU_ITEMS = [
-    ("divider", "Trennungslinien", "alle"),
     ("columns", "Spalten-Layout", "ein"),
     ("mouse", "Mausunterstützung", "ein"),
     ("hidden", "Versteckte Dateien anzeigen", "aus"),
@@ -477,7 +476,6 @@ def keybindings_menu(fd: int):
 # Datengesteuerte Wertanzeige des Hauptmenüs: Jede Option bestimmt ihren
 # angezeigten Wert über eine Funktion; neue Optionen erfordern genau eine Zeile.
 MENU_VALUE_RENDERERS = {
-    "divider": lambda cfg: f"[{cfg.get('divider_style', 'alle')}]",
     "columns": lambda cfg: f"[{'ein' if cfg.get('columns_enabled', True) else 'aus'}]",
     "mouse": lambda cfg: f"[{'ein' if cfg.get('mouse_support', True) else 'aus'}]",
     "hidden": lambda cfg: f"[{'ein' if cfg.get('show_hidden', False) else 'aus'}]",
@@ -492,7 +490,6 @@ MENU_VALUE_RENDERERS = {
 }
 
 # Umschalt- und Rotationsaktionen des Hauptmenüs (datengetrieben)
-_DIVIDER_STYLES = ["alle", "vertikal", "horizontal", "außen", "keine"]
 _CONSOLE_POSITIONS = ["unten", "rechts", "links"]
 
 
@@ -546,9 +543,6 @@ def main_menu(fd: int):
 
         if k in ("ENTER", "SPACE", "RIGHT", "LEFT"):
             act = rows[idx][0]
-            if act == "divider":
-                _cycle_option(cfg, "divider_style", _DIVIDER_STYLES, -1 if k == "LEFT" else 1)
-                save_config(cfg)
             elif act == "columns":
                 _toggle_option(cfg, "columns_enabled", True)
                 save_config(cfg)

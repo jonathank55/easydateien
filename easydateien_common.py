@@ -46,7 +46,6 @@ ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 DEFAULT_CONFIG = {
-    "divider_style": "alle",
     "columns_enabled": True,
     "esc_to_quit": False,
     "mouse_support": False,
