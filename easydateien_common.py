@@ -257,7 +257,7 @@ KEY_BINDINGS = [
     ("Dateioperationen", "undo", "Rückgängig", ("u",), "Letzte Dateiaktion rückgängig machen"),
     ("Verwaltung", "help", "Hilfe", ("h",), "Diese Hilfe anzeigen"),
     ("Verwaltung", "menu", "Menü", ("m",), "Einstellungen öffnen (u. a. Texteditor)"),
-    ("Verwaltung", "cancel", "Abbrechen", ("ESC", "CTRL_C"), "Konsole schließen, Filter/Auswahl aufheben"),
+    ("Verwaltung", "cancel", "Abbrechen", ("ESC", "CTRL_C"), "Konsole schließen, Filter aufheben"),
     ("Verwaltung", "quit", "Beenden", ("q",), "EasyDateien beenden"),
 ]
 
@@ -279,7 +279,7 @@ KEY_LABELS = {
     "SPACE": "Leertaste",
     "TAB": "Tab",
     "ESC": "ESC",
-    "CTRL_C": "Strg+C",
+    "CTRL_C": "Strg + C",
     "PAGE_UP": "Bild\u2191",
     "PAGE_DOWN": "Bild\u2193",
 }
