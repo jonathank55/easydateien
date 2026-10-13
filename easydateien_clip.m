@@ -1,11 +1,41 @@
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 
+@interface ImageCache : NSObject
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSImage *> *cache;
++ (instancetype)sharedCache;
+- (NSImage *)cachedImageForPath:(NSString *)path;
+- (void)cacheImage:(NSImage *)image forPath:(NSString *)path;
+@end
+
+@implementation ImageCache
++ (instancetype)sharedCache {
+    static ImageCache *shared = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        shared = [[self alloc] init];
+        shared.cache = [NSMutableDictionary dictionary];
+    });
+    return shared;
+}
+
+- (NSImage *)cachedImageForPath:(NSString *)path {
+    return [self.cache objectForKey:path];
+}
+
+- (void)cacheImage:(NSImage *)image forPath:(NSString *)path {
+    if (image && path) {
+        [self.cache setObject:image forKey:path];
+    }
+}
+@end
+
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         if (argc < 2) return 1;
         NSString *action = [NSString stringWithUTF8String:argv[1]];
         NSPasteboard *pb = [NSPasteboard generalPasteboard];
+        ImageCache *imageCache = [ImageCache sharedCache];
 
         if ([action isEqualToString:@"set"] && argc > 2) {
             [pb clearContents];
@@ -25,11 +55,14 @@ int main(int argc, const char * argv[]) {
                         [ext isEqualToString:@"tiff"] || [ext isEqualToString:@"tif"] ||
                         [ext isEqualToString:@"webp"] || [ext isEqualToString:@"heic"] ||
                         [ext isEqualToString:@"bmp"]) {
-                        NSImage *img = [[NSImage alloc] initWithContentsOfFile:p];
-                        if (img) {
-                            hasImage = YES;
-                            firstImage = img;
+                        firstImage = [imageCache cachedImageForPath:p];
+                        if (!firstImage) {
+                            firstImage = [[NSImage alloc] initWithContentsOfFile:p];
+                            if (firstImage) {
+                                [imageCache cacheImage:firstImage forPath:p];
+                            }
                         }
+                        hasImage = (firstImage != nil);
                     }
                 }
             }
@@ -55,23 +88,18 @@ int main(int argc, const char * argv[]) {
                 }
             }
 
-            // Deklariere alle Typen gleichzeitig auf dem Pasteboard
             [pb declareTypes:types owner:nil];
 
-            // 1. NSFilenamesPboardType (PropertyList für Finder, WhatsApp, Discord, Slack, VSCode)
             [pb setPropertyList:paths forType:(NSPasteboardType)@"NSFilenamesPboardType"];
 
-            // 2. File URL (public.file-url für Mail, Safari, Finder)
             NSURL *firstUrl = [NSURL fileURLWithPath:paths[0]];
             if (firstUrl) {
                 [pb setString:[firstUrl absoluteString] forType:NSPasteboardTypeFileURL];
             }
 
-            // 3. Reiner Text (public.utf8-plain-text für Texteditoren und Terminals)
             NSString *allPaths = [paths componentsJoinedByString:@"\n"];
             [pb setString:allPaths forType:NSPasteboardTypeString];
 
-            // 4. Bilddaten (PNG und TIFF für Grafik- und Chat-Programme)
             if (pngData) {
                 [pb setData:pngData forType:NSPasteboardTypePNG];
             }
@@ -81,7 +109,6 @@ int main(int argc, const char * argv[]) {
 
             return 0;
         } else if ([action isEqualToString:@"get"]) {
-            // 1. Zuerst NSFilenamesPboardType prüfen
             id filenames = [pb propertyListForType:(NSPasteboardType)@"NSFilenamesPboardType"];
             if ([filenames isKindOfClass:[NSArray class]] && [filenames count] > 0) {
                 for (NSString *p in filenames) {
@@ -90,7 +117,6 @@ int main(int argc, const char * argv[]) {
                 return 0;
             }
 
-            // 2. NSURLs prüfen
             NSArray *classes = @[[NSURL class]];
             NSDictionary *options = @{NSPasteboardURLReadingFileURLsOnlyKey: @YES};
             NSArray *urls = [pb readObjectsForClasses:classes options:options];
@@ -101,7 +127,6 @@ int main(int argc, const char * argv[]) {
                 return 0;
             }
 
-            // 3. Plain Text prüfen
             NSString *str = [pb stringForType:NSPasteboardTypeString];
             if (str && [str length] > 0) {
                 printf("%s\n", [str UTF8String]);

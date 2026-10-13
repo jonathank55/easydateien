@@ -14,6 +14,7 @@ import shutil
 import argparse
 import unicodedata
 import re
+from functools import lru_cache
 
 CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
@@ -57,13 +58,9 @@ DEFAULT_CONFIG = {
     "sort_reverse": True,
     "sort_dir_first": True,
     "show_hidden": False,
-    "keybindings": None,  # Wird mit Standardwerten gefüllt, wenn nicht vorhanden
+    "keybindings": None,
 }
 
-# Zentrale Tastenbelegung (Single Source of Truth): Jede Zeile besteht aus
-# (Abschnitt, Aktions-ID, Anzeige, Tasten-Tokens, Beschreibung).
-# Der Dateimanager leitet daraus seinen Dispatch ab (Doppelbelegungen werden beim
-# Start abgelehnt); Hilfemenü (h) und Konfigurator zeigen exakt dieselbe Tabelle.
 KEY_BINDINGS = [
     ("Navigation & Ansicht", "up", "Nach oben", ("UP",), "Cursor nach oben bewegen"),
     ("Navigation & Ansicht", "down", "Nach unten", ("DOWN",), "Cursor nach unten bewegen"),
@@ -100,92 +97,20 @@ KEY_BINDINGS = [
     ("Verwaltung", "quit", "Beenden", ("q",), "EasyDateien beenden"),
 ]
 
-# Chord-Aktionen: Die Aktion nutzt ihre Taste als Präfix einer Tastenfolge
-# (z. B. Pfad: "c" gefolgt von c/f/d). Die Einzeltaste selbst bleibt der Aktion
-# zugeordnet, die sie allein auslöst (hier "c" = Kopieren), sodass die geteilte
-# Taste keine Doppelbelegung darstellt.
 CHORD_ACTIONS = {
     "copy_path": ("c", ("cc", "cf", "cd")),
 }
 
+# Cache für ANSI-Escape-Code-Entfernung
+@lru_cache(maxsize=1024)
+def strip_ansi(text: str) -> str:
+    return ANSI_ESCAPE_RE.sub("", text)
 
-def get_keybindings_from_config(cfg: dict) -> list:
-    """Lädt die Tastenbelegungen aus der Konfiguration oder verwendet Standardwerte."""
-    custom_bindings = cfg.get("keybindings")
-    if custom_bindings is None:
-        return KEY_BINDINGS
-    # Wenn in der Konfiguration gespeichert (als Listen, weil JSON keine Tupel speichern kann),
-    # zurück in Tupel umwandeln
-    result = []
-    for item in custom_bindings:
-        if isinstance(item, list):
-            # Von JSON geladen: Listen von Listen
-            section, action, disp, keys, desc = item
-            result.append((section, action, disp, tuple(keys) if isinstance(keys, list) else keys, desc))
-        else:
-            # Schon Tupel
-            result.append(item)
-    return result
-
-
-def build_keymap(cfg: dict = None) -> dict:
-    """Erzeugt die Zuordnung Taste → Aktions-ID und lehnt Doppelbelegungen strikt ab."""
-    bindings = get_keybindings_from_config(cfg) if cfg else KEY_BINDINGS
-    keymap = {}
-    for _section, action, _disp, keys, _desc in bindings:
-        chord = CHORD_ACTIONS.get(action)
-        if chord and chord[0] in keys:
-            # Chord-Aktion: Die Präfix-Einzeltaste zählt nicht als eigene Belegung
-            # (sie gehört der Aktion, die sie allein auslöst); die vollständigen
-            # Tastenfolgen belegen diese Aktion.
-            eff_keys = tuple(k for k in keys if k != chord[0]) + chord[1]
-        else:
-            eff_keys = keys
-        for k in eff_keys:
-            if k in keymap:
-                raise ValueError(f"Tastenkonflikt: '{k}' ist doppelt belegt ({keymap[k]} / {action})")
-            keymap[k] = action
-    return keymap
-
-
-KEYBINDING_ITEMS = [(action, desc, f"[{disp}]") for _s, action, disp, _k, desc in KEY_BINDINGS] + [
-    ("reset", "Auf Standardwerte zurücksetzen", "[standard]"),
-]
-
-MAIN_MENU_ITEMS = [
-    ("divider", "Trennungslinien", "alle"),
-    ("columns", "Spalten-Layout", "ein"),
-    ("mouse", "Mausunterstützung", "ein"),
-    ("hidden", "Versteckte Dateien anzeigen", "aus"),
-    ("console_always_visible", "Konsole immer eingeblendet", "aus"),
-    ("console_dynamic_height", "Dynamische Konsolenhöhe", "ein"),
-    ("console_position", "Konsolenposition", "unten"),
-    ("preview_wrap", "Vorschau-Umbruch", "ein"),
-    ("sort", "Datei- und Ordneranordnung", "öffnen"),
-    ("editor", "Editor", "nano"),
-    ("keybindings", "Tastenbelegungen", "öffnen"),
-    ("reset", "Auf Standardwerte zurücksetzen", "standard"),
-]
-
-EDITOR_CHOICES = ["nano", "vim", "nvim", "micro", "hx", "emacs -nw"]
-
-
-def editor_command(cfg: dict) -> str:
-    """Liefert den konfigurierten Editor ohne %s-Platzhalter (z. B. 'nano')."""
-    tmpl = str(cfg.get("text_editor", "nano %s") or "nano %s")
-    cmd = tmpl.replace("%s", "").strip()
-    return cmd or "nano"
-
-
-def cycle_editor(cfg: dict, step: int = 1) -> str:
-    """Schaltet den Texteditor in der Konfiguration um und liefert den neuen Befehl."""
-    cur = editor_command(cfg)
-    choices = list(EDITOR_CHOICES)
-    if cur not in choices:
-        choices.insert(0, cur)
-    nxt = choices[(choices.index(cur) + step) % len(choices)]
-    cfg["text_editor"] = f"{nxt} %s"
-    return nxt
+# Cache für String-Breitenberechnung
+@lru_cache(maxsize=1024)
+def str_width(text: str) -> int:
+    clean = strip_ansi(text)
+    return sum(char_width(c) for c in clean)
 
 def char_width(c: str) -> int:
     if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
@@ -198,12 +123,7 @@ def char_width(c: str) -> int:
         return 2
     return 1
 
-def str_width(text: str) -> int:
-    clean = ANSI_ESCAPE_RE.sub("", text)
-    return sum(char_width(c) for c in clean)
-
 def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
-    """Kürzt Text deterministisch auf die maximale visuelle Terminalbreite unter Erhalt von ANSI-Codes."""
     if max_w <= 0:
         return ""
     if str_width(text) <= max_w:
@@ -238,15 +158,14 @@ def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
 def pad_to_width(text: str, width: int, align: str = "left") -> str:
     w = str_width(text)
     if w > width:
-        clean = ANSI_ESCAPE_RE.sub("", text)
+        clean = strip_ansi(text)
         return truncate_to_width(clean, width)
     pad = " " * (width - w)
     return (pad + text) if align == "right" else (text + pad)
 
-def distribute_options(items: list, avail_w: int) -> str:
-    """Verteilt Optionen gleichmäßig über die gegebene Spaltenbreite."""
-    if not items or avail_w <= 0:
-        return ""
+# Cache für distribute_options
+@lru_cache(maxsize=64)
+def distribute_options_cached(items: tuple, avail_w: int) -> str:
     clean_items = [it.strip() for it in items if it and it.strip()]
     if not clean_items:
         return ""
@@ -279,13 +198,10 @@ def distribute_options(items: list, avail_w: int) -> str:
 
     return "".join(parts)
 
-def fit_hints(items: list, avail_w: int) -> str:
-    """Passt Hilfe-Einträge maximal dynamisch in die Breite.
+def distribute_options(items: list, avail_w: int) -> str:
+    return distribute_options_cached(tuple(items), avail_w)
 
-    items: Liste aus str oder (voll, kurz, mini)-Tupeln in Prioritätsreihenfolge.
-    Reihenfolge der Strategien: alle Einträge in Volltext → kurz → mini; reicht der Platz
-    nicht, fallen die letzten Einträge weg und ein „…“ signalisiert die Auslassung.
-    """
+def fit_hints(items: list, avail_w: int) -> str:
     if avail_w <= 0 or not items:
         return ""
     norm = []
@@ -306,6 +222,73 @@ def fit_hints(items: list, avail_w: int) -> str:
             if sum(str_width(c) for c in cand) + gap * (len(cand) - 1) <= avail_w:
                 return distribute_options(cand, avail_w)
     return truncate_to_width(norm[0][2], avail_w)
+
+def get_keybindings_from_config(cfg: dict) -> list:
+    """Lädt die Tastenbelegungen aus der Konfiguration oder verwendet Standardwerte."""
+    custom_bindings = cfg.get("keybindings")
+    if custom_bindings is None:
+        return KEY_BINDINGS
+    result = []
+    for item in custom_bindings:
+        if isinstance(item, list):
+            section, action, disp, keys, desc = item
+            result.append((section, action, disp, tuple(keys) if isinstance(keys, list) else keys, desc))
+        else:
+            result.append(item)
+    return result
+
+def build_keymap(cfg: dict = None) -> dict:
+    """Erzeugt die Zuordnung Taste → Aktions-ID und lehnt Doppelbelegungen strikt ab."""
+    bindings = get_keybindings_from_config(cfg) if cfg else KEY_BINDINGS
+    keymap = {}
+    for _section, action, _disp, keys, _desc in bindings:
+        chord = CHORD_ACTIONS.get(action)
+        if chord and chord[0] in keys:
+            eff_keys = tuple(k for k in keys if k != chord[0]) + chord[1]
+        else:
+            eff_keys = keys
+        for k in eff_keys:
+            if k in keymap:
+                raise ValueError(f"Tastenkonflikt: '{k}' ist doppelt belegt ({keymap[k]} / {action})")
+            keymap[k] = action
+    return keymap
+
+KEYBINDING_ITEMS = [(action, desc, f"[{disp}]") for _s, action, disp, _k, desc in KEY_BINDINGS] + [
+    ("reset", "Auf Standardwerte zurücksetzen", "[standard]"),
+]
+
+MAIN_MENU_ITEMS = [
+    ("divider", "Trennungslinien", "alle"),
+    ("columns", "Spalten-Layout", "ein"),
+    ("mouse", "Mausunterstützung", "ein"),
+    ("hidden", "Versteckte Dateien anzeigen", "aus"),
+    ("console_always_visible", "Konsole immer eingeblendet", "aus"),
+    ("console_dynamic_height", "Dynamische Konsolenhöhe", "ein"),
+    ("console_position", "Konsolenposition", "unten"),
+    ("preview_wrap", "Vorschau-Umbruch", "ein"),
+    ("sort", "Datei- und Ordneranordnung", "öffnen"),
+    ("editor", "Editor", "nano"),
+    ("keybindings", "Tastenbelegungen", "öffnen"),
+    ("reset", "Auf Standardwerte zurücksetzen", "standard"),
+]
+
+EDITOR_CHOICES = ["nano", "vim", "nvim", "micro", "hx", "emacs -nw"]
+
+def editor_command(cfg: dict) -> str:
+    """Liefert den konfigurierten Editor ohne %s-Platzhalter (z. B. 'nano')."""
+    tmpl = str(cfg.get("text_editor", "nano %s") or "nano %s")
+    cmd = tmpl.replace("%s", "").strip()
+    return cmd or "nano"
+
+def cycle_editor(cfg: dict, step: int = 1) -> str:
+    """Schaltet den Texteditor in der Konfiguration um und liefert den neuen Befehl."""
+    cur = editor_command(cfg)
+    choices = list(EDITOR_CHOICES)
+    if cur not in choices:
+        choices.insert(0, cur)
+    nxt = choices[(choices.index(cur) + step) % len(choices)]
+    cfg["text_editor"] = f"{nxt} %s"
+    return nxt
 
 def load_config() -> dict:
     cfg = dict(DEFAULT_CONFIG)
@@ -386,12 +369,72 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
     except Exception:
         return ""
 
+# Globale Variable für partielles Rendering
+_last_render_state = {
+    "start": 0,
+    "count": 0,
+    "rows": [],
+    "cur_idx": 0,
+    "term_cols": 0,
+    "term_rows": 0
+}
+
 def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str):
     term_cols, term_rows = shutil.get_terminal_size((80, 24))
     inner = max(4, term_cols - 2)
     fixed_h = 7
     avail_rows = max(1, term_rows - fixed_h)
 
+    # Prüfe, ob sich nur die Auswahl geändert hat (partielles Rendering)
+    if (_last_render_state["rows"] == rows and
+        _last_render_state["cur_idx"] != cur_idx and
+        _last_render_state["term_cols"] == term_cols and
+        _last_render_state["term_rows"] == term_rows):
+
+        # Nur die alte und neue Auswahl neu zeichnen
+        old_idx = _last_render_state["cur_idx"]
+        start = _last_render_state["start"]
+        count = _last_render_state["count"]
+
+        # Alte Auswahl zurücksetzen
+        if 0 <= old_idx - start < count:
+            i = old_idx - start
+            key, label, tag = rows[old_idx]
+            pfx = "  "
+            avail_lbl = max(2, inner - 4 - str_width(tag) - 2)
+            lbl_trunc = truncate_to_width(label, avail_lbl)
+            pad_len = max(1, inner - 2 - str_width(pfx) - str_width(lbl_trunc) - str_width(tag))
+            content_row = f" {pfx}{lbl_trunc}{' ' * pad_len}{tag} "
+            sys.stdout.write(f"\033[{5 + i};1H\033[2K│{pad_to_width(content_row, inner)}│")
+
+        # Neue Auswahl zeichnen
+        if 0 <= cur_idx - start < count:
+            i = cur_idx - start
+            key, label, tag = rows[cur_idx]
+            pfx = f"{C_BOLD}▸{C_RESET} "
+            if tag in ("[Ein]", "Ein"):
+                tag_colored = f"{C_BOLD}{tag}{C_RESET}"
+            elif tag in ("[Aus]", "Aus"):
+                tag_colored = tag
+            else:
+                tag_colored = tag
+            avail_lbl = max(2, inner - 4 - str_width(tag) - 2)
+            lbl_trunc = truncate_to_width(label, avail_lbl)
+            lbl_styled = f"{C_BOLD}{lbl_trunc}{C_RESET}"
+            pad_len = max(1, inner - 2 - str_width(pfx) - str_width(lbl_trunc) - str_width(tag))
+            content_row = f" {pfx}{lbl_styled}{' ' * pad_len}{tag_colored} "
+            sys.stdout.write(f"\033[{5 + i};1H\033[2K│{pad_to_width(content_row, inner)}│")
+            sys.stdout.flush()
+
+        _last_render_state.update({
+            "cur_idx": cur_idx,
+            "rows": rows,
+            "term_cols": term_cols,
+            "term_rows": term_rows
+        })
+        return start, count
+
+    # Vollständiges Rendering (falls sich Layout oder Inhalt geändert hat)
     if len(rows) > avail_rows:
         start = max(0, min(cur_idx - avail_rows // 2, len(rows) - avail_rows))
         view_rows = rows[start: start + avail_rows]
@@ -408,18 +451,15 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     lines.append(f"├{'─' * inner}┤")
 
     for i, (key, label, tag) in enumerate(view_rows):
-        actual_idx = start + i
-        is_sel = (actual_idx == cur_idx)
+        is_sel = (start + i == cur_idx)
         pfx = f"{C_BOLD}▸{C_RESET} " if is_sel else "  "
 
         if tag in ("[Ein]", "Ein"):
             tag_colored = f"{C_BOLD}{tag}{C_RESET}"
         elif tag in ("[Aus]", "Aus"):
             tag_colored = tag
-        elif tag:
-            tag_colored = tag
         else:
-            tag_colored = ""
+            tag_colored = tag
 
         avail_lbl = max(2, inner - 4 - str_width(tag) - 2)
         lbl_trunc = truncate_to_width(label, avail_lbl)
@@ -448,21 +488,25 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         out.append(f"\033[{r_i+1};1H\033[2K{l}")
     sys.stdout.write("".join(out))
     sys.stdout.flush()
+
+    _last_render_state.update({
+        "start": start,
+        "count": len(view_rows),
+        "rows": rows,
+        "cur_idx": cur_idx,
+        "term_cols": term_cols,
+        "term_rows": term_rows
+    })
     return start, len(view_rows)
 
 def edit_keybindings_menu(fd: int):
     """Interaktives Menü zum Anpassen der Tastenbelegungen."""
     cfg = load_config()
-    
-    # Aktuelle Tastenbelegungen laden oder Standard verwenden
+
     current_bindings = get_keybindings_from_config(cfg)
-    
-    # Umwandlung in eine bearbeitbare Struktur
-    # Jede Aktion: (Abschnitt, Aktions-ID, Anzeige, Tasten-Tokens, Beschreibung)
     editable_bindings = list(current_bindings)
 
     def save_editable_bindings():
-        # Wird automatisch ausgeführt, sobald das Menü geschlossen wird
         json_bindings = []
         for section, action, disp, keys, desc in editable_bindings:
             json_bindings.append([section, action, disp, list(keys), desc])
@@ -473,7 +517,6 @@ def edit_keybindings_menu(fd: int):
     status_hint = ""
 
     while True:
-        # Menüeinträge vorbereiten: (key, label, value)
         binding_rows = []
         for section, action, disp, keys, desc in editable_bindings:
             keys_str = ", ".join(keys)
@@ -481,13 +524,13 @@ def edit_keybindings_menu(fd: int):
 
         binding_rows.append(("reset", "Auf Standard zurücksetzen", "[Zurücksetzen]"))
         binding_rows.append(("back", "Zurück", "[ESC]"))
-        
+
         footer_text = status_hint if status_hint else [
             ("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"),
             ("[Eingabe] Bearbeiten", "[Eingabe] Ändern", "[Eingabe]"),
             ("[ESC] Zurück", "[ESC] Zurück", "[ESC]")
         ]
-        
+
         start, count = render_box(
             "TASTENBELEGUNGEN ANPASSEN",
             "Tastenbelegungen für jede Aktion ändern",
@@ -495,12 +538,12 @@ def edit_keybindings_menu(fd: int):
             idx,
             footer_text
         )
-        
+
         status_hint = ""
         k = read_key(fd)
         if not k:
             continue
-            
+
         if k in ("UP", "WHEEL_UP"):
             idx = max(0, idx - 1)
         elif k in ("DOWN", "WHEEL_DOWN"):
@@ -521,25 +564,21 @@ def edit_keybindings_menu(fd: int):
             except Exception:
                 pass
             continue
-        
+
         if k in ("ENTER", "SPACE", "RIGHT"):
             selected_action = binding_rows[idx][0]
 
             if selected_action == "reset":
-                # Zurück auf Standard
                 editable_bindings = list(KEY_BINDINGS)
                 status_hint = f"{C_BOLD}✓ Tastenbelegungen zurückgesetzt{C_RESET}"
 
             elif selected_action == "back":
                 save_editable_bindings()
                 break
-            
+
             else:
-                # Tastenbelegung für diese Aktion bearbeiten
-                # Finde die Aktion in editable_bindings
                 for i, (section, action, disp, keys, desc) in enumerate(editable_bindings):
                     if action == selected_action:
-                        # Zeige aktuell zugewiesene Tasten
                         render_box(
                             f"TASTEN FÜR '{disp}' ÄNDERN",
                             "Drücken Sie die neue Taste oder Tastenkombination (ESC zum Abbrechen)",
@@ -547,8 +586,7 @@ def edit_keybindings_menu(fd: int):
                             0,
                             [("Aktuell:", ", ".join(keys), "")]
                         )
-                        
-                        # Warten auf neue Tastenbelegung
+
                         new_key = ""
                         while True:
                             key_press = read_key(fd)
@@ -557,20 +595,17 @@ def edit_keybindings_menu(fd: int):
                             elif key_press:
                                 new_key = key_press
                                 break
-                        
+
                         if new_key:
-                            # Ersetze die Tastenbelegung
                             editable_bindings[i] = (section, action, disp, [new_key], desc)
                             status_hint = f"{C_BOLD}✓ '{disp}' auf [{new_key}] gesetzt{C_RESET}"
                         break
-    
 
 def sort_menu(fd: int):
     cfg = load_config()
     idx = 0
     status_hint = ""
-    
-    # Verfügbare Sortieroptionen
+
     sort_options = [
         ("name", "Name (alphabetisch)", "Nach Dateinamen sortieren"),
         ("mtime", "Änderungsdatum", "Nach Modifikationszeit sortieren"),
@@ -578,28 +613,26 @@ def sort_menu(fd: int):
         ("size", "Größe", "Nach Dateigröße sortieren"),
         ("ext", "Endung", "Nach Dateiendung sortieren"),
     ]
-    
+
     while True:
-        # Aktuelle Einstellungen anzeigen
         current_sort = cfg.get("sort_by", "mtime")
         reverse_state = "normal" if cfg.get("sort_reverse", False) else "umgekehrt"
         dir_first_state = "ordner zuerst" if cfg.get("sort_dir_first", True) else "gemischt"
-        
+
         sort_rows = []
         for key, lbl, _ in sort_options:
             marker = "* " if key == current_sort else "  "
             sort_rows.append((key, f"{marker}{lbl}", ""))
-        
-        # Zusätzliche Optionen für Sortierverhalten
+
         sort_rows.append(("reverse", f"  Sortierreihenfolge: [{reverse_state}]", ""))
         sort_rows.append(("dir_first", f"  Ordnerposition: [{dir_first_state}]", ""))
-        
+
         footer_text = status_hint if status_hint else [
             ("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"),
             ("[Eingabe] Auswählen", "[Eingabe] Ändern", "[Eingabe]"),
             ("[ESC] Zurück", "[ESC] Zurück", "[ESC]")
         ]
-        
+
         start, count = render_box(
             "DATEI- UND ORDNERANORDNUNG",
             "Sortierung und Anzeigereihenfolge festlegen",
@@ -607,12 +640,12 @@ def sort_menu(fd: int):
             idx,
             footer_text
         )
-        
+
         status_hint = ""
         k = read_key(fd)
         if not k:
             continue
-            
+
         if k in ("UP", "WHEEL_UP"):
             idx = max(0, idx - 1)
         elif k in ("DOWN", "WHEEL_DOWN"):
@@ -632,23 +665,19 @@ def sort_menu(fd: int):
             except Exception:
                 pass
             continue
-        
+
         if k in ("ENTER", "SPACE", "RIGHT"):
             selected_key = sort_rows[idx][0]
             if selected_key in [s[0] for s in sort_options]:
-                # Sortierkriterium ändern
                 cfg["sort_by"] = selected_key
                 save_config(cfg)
                 status_hint = f"{C_BOLD}✓ Sortierung nach {sort_rows[idx][1].split('] ')[-1]}{C_RESET}"
             elif selected_key == "reverse":
-                # Sortierreihenfolge umschalten
                 cfg["sort_reverse"] = not cfg.get("sort_reverse", True)
                 save_config(cfg)
             elif selected_key == "dir_first":
-                # Ordner-zuerst-Einstellung umschalten
                 cfg["sort_dir_first"] = not cfg.get("sort_dir_first", True)
                 save_config(cfg)
-
 
 def keybindings_menu(fd: int):
     idx = 0
