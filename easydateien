@@ -2140,11 +2140,11 @@ class EasyDateienApp:
                         p_b_char = ""
                     prefix_char = f"{p_b_char}"
                     if w_left >= 26:
-                        p_styled = format_entry_name(p_it, max(3, w_left - 2), bold=is_act)
+                        p_styled = format_entry_name(p_it, max(3, w_left - 2), bold=is_act or p_in_cut or p_in_copy or p_is_sel)
                         txt_l = f"{prefix_char}{p_styled}"
                         cell_left = pad_to_width(txt_l, w_left)
                     else:
-                        p_styled = format_entry_name(p_it, max(2, w_left - 2), bold=is_act)
+                        p_styled = format_entry_name(p_it, max(2, w_left - 2), bold=is_act or p_in_cut or p_in_copy or p_is_sel)
                         txt_l = f"{prefix_char}{p_styled}"
                         cell_left = pad_to_width(txt_l, w_left)
                     if is_act:
@@ -2179,18 +2179,18 @@ class EasyDateienApp:
                 if w_mid >= 26 and s_str:
                     size_field = max(8, str_width(s_str))
                     avail_n = max(3, w_mid - prefix_len - 2 - size_field)
-                    n_styled = format_entry_name(it, avail_n, bold=is_cur)
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
                     s_part = f"  {s_str:>{size_field}}"
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid - 2 - size_field) + s_part
                 elif w_mid >= 26:
                     avail_n = max(3, w_mid - prefix_len)
-                    n_styled = format_entry_name(it, avail_n, bold=is_cur)
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid)
                 else:
                     avail_n = max(2, w_mid - prefix_len)
-                    n_styled = format_entry_name(it, avail_n, bold=is_cur)
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid)
             elif len(self.items) == 0 and r == 0:
@@ -2219,16 +2219,16 @@ class EasyDateienApp:
                         if w_right >= 26 and c_size:
                             c_field = max(8, str_width(c_size))
                             name_w = max(3, w_right - 5 - c_field)
-                            c_styled = format_entry_name(c_it, name_w, bold=False)
+                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
                             s_part = f"  {c_size:>{c_field}}"
                             cell_right = pad_to_width(f"{c_b_char}{c_styled}", w_right - 2 - c_field) + s_part
                         elif w_right >= 26:
                             name_w = max(3, w_right - 2)
-                            c_styled = format_entry_name(c_it, name_w, bold=False)
+                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
                             cell_right = pad_to_width(f"{c_b_char}{c_styled}", w_right)
                         else:
                             name_w = max(3, w_right - 2)
-                            c_styled = format_entry_name(c_it, name_w, bold=False)
+                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
                             cell_right = pad_to_width(f"{c_b_char}{c_styled}", w_right)
                     elif len(child_items) == 0 and r == 0:
                         cell_right = pad_to_width(f"(leer)", w_right)
