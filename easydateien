@@ -2137,8 +2137,8 @@ class EasyDateienApp:
                     elif p_is_sel:
                         p_b_char = f"{C_BOLD}*{C_RESET}"
                     else:
-                        p_b_char = " "
-                    prefix_char = f" {p_b_char}"
+                        p_b_char = ""
+                    prefix_char = f"{p_b_char}"
                     if w_left >= 26:
                         p_styled = format_entry_name(p_it, max(3, w_left - 2), bold=is_act)
                         txt_l = f"{prefix_char}{p_styled}"
@@ -2171,9 +2171,9 @@ class EasyDateienApp:
                 elif is_sel:
                     b_char = f"{C_BOLD}*{C_RESET}"
                 else:
-                    b_char = " "
-                prefix_str = f" {b_char}"
-                prefix_len = 2
+                    b_char = ""
+                prefix_str = f"{b_char}"
+                prefix_len = 1
                 s_str = format_size(it.size) if not it.is_dir else ""
 
                 if w_mid >= 26 and s_str:
@@ -2194,7 +2194,7 @@ class EasyDateienApp:
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid)
             elif len(self.items) == 0 and r == 0:
-                cell_mid = pad_to_width(f" (leer)", w_mid)
+                cell_mid = pad_to_width(f"(leer)", w_mid)
             else:
                 cell_mid = " " * w_mid
 
@@ -2215,23 +2215,23 @@ class EasyDateienApp:
                         elif c_is_sel:
                             c_b_char = f"{C_BOLD}*{C_RESET}"
                         else:
-                            c_b_char = " "
+                            c_b_char = ""
                         if w_right >= 26 and c_size:
                             c_field = max(8, str_width(c_size))
                             name_w = max(3, w_right - 5 - c_field)
                             c_styled = format_entry_name(c_it, name_w, bold=False)
                             s_part = f"  {c_size:>{c_field}}"
-                            cell_right = pad_to_width(f" {c_b_char}{c_styled}", w_right - 2 - c_field) + s_part
+                            cell_right = pad_to_width(f"{c_b_char}{c_styled}", w_right - 2 - c_field) + s_part
                         elif w_right >= 26:
                             name_w = max(3, w_right - 2)
                             c_styled = format_entry_name(c_it, name_w, bold=False)
-                            cell_right = pad_to_width(f" {c_b_char}{c_styled}", w_right)
+                            cell_right = pad_to_width(f"{c_b_char}{c_styled}", w_right)
                         else:
                             name_w = max(3, w_right - 2)
                             c_styled = format_entry_name(c_it, name_w, bold=False)
-                            cell_right = pad_to_width(f" {c_b_char}{c_styled}", w_right)
+                            cell_right = pad_to_width(f"{c_b_char}{c_styled}", w_right)
                     elif len(child_items) == 0 and r == 0:
-                        cell_right = pad_to_width(f" (leer)", w_right)
+                        cell_right = pad_to_width(f"(leer)", w_right)
                     else:
                         cell_right = " " * w_right
                 elif cur_item and not is_cur_dir:
@@ -2239,14 +2239,14 @@ class EasyDateienApp:
                     date_str = format_mtime(cur_item.mtime)
                     mode_str = cur_item.mode_str
                     card = [
-                        " Details",
-                        f" {'Typ:':<8}{truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 9))}",
-                        f" {'Größe:':<8}{truncate_to_width(size_str, max(3, w_right - 9))}",
-                        f" {'Datum:':<8}{truncate_to_width(date_str, max(3, w_right - 9))}",
-                        f" {'Rechte:':<8}{truncate_to_width(mode_str, max(3, w_right - 9))}",
+                        "Details",
+                        f"{'Typ:':<8}{truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 9))}",
+                        f"{'Größe:':<8}{truncate_to_width(size_str, max(3, w_right - 9))}",
+                        f"{'Datum:':<8}{truncate_to_width(date_str, max(3, w_right - 9))}",
+                        f"{'Rechte:':<8}{truncate_to_width(mode_str, max(3, w_right - 9))}",
                     ]
                     if cur_item.is_symlink:
-                        card.append(f" {'Ziel:':<8}{truncate_to_width(cur_item.symlink_target, max(3, w_right - 9))}")
+                        card.append(f"{'Ziel:':<8}{truncate_to_width(cur_item.symlink_target, max(3, w_right - 9))}")
 
                     if r < len(card):
                         cell_right = pad_to_width(card[r], w_right)
@@ -2258,7 +2258,7 @@ class EasyDateienApp:
                         p_line_idx = r - (len(card) + 1) if fm_rows >= 10 else -1
                         if 0 <= p_line_idx < len(preview_lines):
                             p_txt = preview_lines[p_line_idx]
-                            cell_right = pad_to_width(f" {truncate_to_width(p_txt, max(2, w_right - 1))}", w_right)
+                            cell_right = pad_to_width(f"{truncate_to_width(p_txt, max(2, w_right - 1))}", w_right)
                         else:
                             cell_right = " " * w_right
                 else:
