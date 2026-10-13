@@ -333,6 +333,14 @@ def get_keybindings_from_config(cfg: dict) -> list:
     # aufgefrischt (sonst würden alte Beschreibungstexte im Hilfemenü
     # eingefroren). Nicht mehr existierende Aktionen fallen weg.
     defaults_by_action = {b[1]: b for b in KEY_BINDINGS}
+    # Standard-Tasten reservieren: gehoert eine Taste im aktuellen Standard
+    # einer ANDEREN Aktion, gibt die gespeicherte Belegung sie ab (verhindert
+    # Doppelbelegungs-Konflikte, z. B. wenn frueher ESC+Strg C gemeinsam auf
+    # cancel lagen und Strg C jetzt cancel_cmd gehoert).
+    reserved = {}
+    for b in KEY_BINDINGS:
+        for k in b[3]:
+            reserved.setdefault(k, b[1])
     result = []
     for item in custom_bindings:
         if isinstance(item, list):
@@ -342,7 +350,8 @@ def get_keybindings_from_config(cfg: dict) -> list:
             section, action, disp, keys, desc = item
         cur = defaults_by_action.get(action)
         if cur is not None:
-            result.append((cur[0], action, cur[2], keys, cur[4]))
+            cleaned = tuple(k for k in keys if reserved.get(k, action) == action)
+            result.append((cur[0], action, cur[2], cleaned or cur[3], cur[4]))
     # Aktionen, die nur im aktuellen Code existieren, ergänzen
     known = {b[1] for b in result}
     for b in KEY_BINDINGS:
