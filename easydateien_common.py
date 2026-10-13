@@ -222,6 +222,7 @@ KEY_BINDINGS = [
     ("Navigation & Ansicht", "bottom", "Ende", ("k",), "Zum Ende der Liste springen"),
     ("Navigation & Ansicht", "open", "Auswählen", ("ENTER",), "Mit Standardprogramm öffnen"),
     ("Navigation & Ansicht", "goto", "Gehe zu", ("g",), "Gehe zu (Schnellzugriff auf Ordner)"),
+    ("Navigation & Ansicht", "mark_dir", "Merken", ("-",), "Aktuellen Ordner merken (g- springt zurück)"),
     ("Navigation & Ansicht", "home", "Start", ("~",), "Zum Benutzerordner springen"),
     ("Navigation & Ansicht", "search", "Suchen", ("/",), "Dateien nach Suchbegriff filtern"),
     ("Navigation & Ansicht", "hidden", "Versteckt", (".",), "Versteckte Dateien ein-/ausblenden"),

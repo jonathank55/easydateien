@@ -252,7 +252,8 @@ Das Konfigurationsmenü speichert Änderungen sofort. Die Tasten `.` (versteckte
 | `d` | In macOS-Papierkorb verschieben (Bestätigung mit `y` oder `Enter`, alles andere bricht ab) |
 | `o` | Datei im konfigurierten Texteditor bearbeiten (Standard `nano`, im Menü `m` änderbar) |
 | `.` | Versteckte Dateien ein- oder ausblenden; gilt für die laufende Sitzung |
-| `g` | Gehe-zu-Menü öffnen (`d` Downloads, `f` Dokumente, `h`/`~` Home, `t` Papierkorb, `i` Pfadeingabe, `p` Zwischenablage) |
+| `g` | Gehe-zu-Menü öffnen (`d` Downloads, `f` Dokumente, `-` gemerkter bzw. zuletzt verwendeter Ordner, `h`/`~` Home, `t` Papierkorb, `i` Pfadeingabe, `p` Zwischenablage) |
+| `-` | Aktuellen Ordner merken; mit `g` dann `-` (kurz: `g-`) jederzeit dorthin zurückspringen. Ohne gemerkten Ordner springt `g-` zum zuletzt verwendeten Ordner |
 | `~` | Direkt zum Benutzerordner (`~`) springen |
 | `j` | An den Anfang der Dateiliste springen |
 | `k` | An das Ende der Dateiliste springen |

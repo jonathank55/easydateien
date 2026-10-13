@@ -781,6 +781,7 @@ class EasyDateienApp:
         self.keymap: Dict[str, str] = build_keymap(self.config)
         self.keybindings = get_keybindings_from_config(self.config)
         self.last_visited_dir: Optional[str] = None
+        self.marked_dir: Optional[str] = None
         self.items: List[FileEntry] = []
         self.selected_idx: int = 0
         self.view_start: int = 0
@@ -2582,7 +2583,7 @@ class EasyDateienApp:
             goto_items = [
                 f"[d]  Downloads",
                 f"[f]  Dokumente",
-                f"[-]  Zuletzt verwendeter Ordner",
+                f"[-]  Gemerkter / zuletzt verwendeter Ordner",
                 f"[h]  Benutzerordner (~)",
                 f"[t]  Papierkorb",
                 f"[i]  Pfad manuell eingeben",
@@ -2974,12 +2975,13 @@ class EasyDateienApp:
                 self.change_directory(os.path.expanduser("~/Documents"))
                 self.set_status("Dokumente", "info")
             elif c in ("-", "_"):
-                target = self.last_visited_dir
+                target = self.marked_dir or self.last_visited_dir
                 if target and os.path.isdir(target):
                     self.change_directory(target)
-                    self.set_status(f"Gehe zu: {self.get_short_dir(target)}", "info")
+                    quelle = "gemerkter" if self.marked_dir else "zuletzt verwendeter"
+                    self.set_status(f"Gehe zu {quelle} Ordner: {self.get_short_dir(target)}", "info")
                 else:
-                    self.set_status("Kein zuletzt verwendeter Ordner verf\u00fcgbar", "warning")
+                    self.set_status("Kein gemerkter oder zuletzt verwendeter Ordner verfügbar", "warning")
             elif c in ("h", "~"):
                 self.change_directory(HOME_DIR)
                 self.set_status("Home (~)", "info")
@@ -3443,6 +3445,11 @@ class EasyDateienApp:
                     needs_redraw = True
                     continue
 
+                if key == "-":
+                    self.marked_dir = self.current_dir
+                    self.set_status(f"Ordner gemerkt: {self.get_short_dir(self.current_dir)} (g- springt zurück)", "success")
+                    needs_redraw = True
+                    continue
                 if key == "g":
                     self.active_dialog = "goto_menu"
                     needs_redraw = True
