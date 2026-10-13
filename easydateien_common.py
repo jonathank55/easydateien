@@ -327,17 +327,26 @@ def get_keybindings_from_config(cfg: dict) -> list:
     custom_bindings = cfg.get("keybindings")
     if custom_bindings is None:
         return KEY_BINDINGS
-    # Wenn in der Konfiguration gespeichert (als Listen, weil JSON keine Tupel speichern kann),
-    # zurück in Tupel umwandeln
+    # Gespeicherte Belegungen: Tasten bleiben individuell, aber Abschnitt,
+    # Anzeigename und Beschreibung werden stets vom aktuellen Code-Stand
+    # aufgefrischt (sonst würden alte Beschreibungstexte im Hilfemenü
+    # eingefroren). Nicht mehr existierende Aktionen fallen weg.
+    defaults_by_action = {b[1]: b for b in KEY_BINDINGS}
     result = []
     for item in custom_bindings:
         if isinstance(item, list):
-            # Von JSON geladen: Listen von Listen
             section, action, disp, keys, desc = item
-            result.append((section, action, disp, tuple(keys) if isinstance(keys, list) else keys, desc))
+            keys = tuple(keys) if isinstance(keys, list) else keys
         else:
-            # Schon Tupel
-            result.append(item)
+            section, action, disp, keys, desc = item
+        cur = defaults_by_action.get(action)
+        if cur is not None:
+            result.append((cur[0], action, cur[2], keys, cur[4]))
+    # Aktionen, die nur im aktuellen Code existieren, ergänzen
+    known = {b[1] for b in result}
+    for b in KEY_BINDINGS:
+        if b[1] not in known:
+            result.append(b)
     return result
 
 def build_keymap(cfg: dict = None) -> dict:
