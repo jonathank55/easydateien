@@ -2148,7 +2148,7 @@ class EasyDateienApp:
                         txt_l = f"{prefix_char}{p_styled}"
                         cell_left = pad_to_width(txt_l, w_left)
                     if is_act:
-                        cell_left = f"{C_INVERT}{ANSI_ESCAPE_RE.sub('', cell_left)}{C_RESET}"
+                        cell_left = f"{C_BOLD}{C_INVERT}{ANSI_ESCAPE_RE.sub('', cell_left)}{C_RESET}"
                 else:
                     cell_left = " " * w_left
             else:
@@ -2287,7 +2287,7 @@ class EasyDateienApp:
                     row_line = f"│{cell_mid}│"
 
             if is_cur_row and cell_mid:
-                inv_mid = f"{C_INVERT}{ANSI_ESCAPE_RE.sub('', cell_mid)}{C_RESET}"
+                inv_mid = f"{C_BOLD}{C_INVERT}{ANSI_ESCAPE_RE.sub('', cell_mid)}{C_RESET}"
                 row_line = row_line.replace(cell_mid, inv_mid, 1)
             file_lines.append(pad_to_width(row_line, term_cols))
 

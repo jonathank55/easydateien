@@ -204,7 +204,7 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         pad_len = max(1, inner - 2 - str_width(pfx) - str_width(lbl_trunc) - str_width(tag))
         content_row = f"{pfx}{lbl_styled}{' ' * pad_len}{tag_colored} "
         if is_sel:
-            content_row = f"{C_INVERT}{pad_to_width(ANSI_ESCAPE_RE.sub('', content_row), inner)}{C_RESET}"
+            content_row = f"{C_BOLD}{C_INVERT}{pad_to_width(ANSI_ESCAPE_RE.sub('', content_row), inner)}{C_RESET}"
         lines.append(f"│{pad_to_width(content_row, inner)}│")
 
     empty_needed = avail_rows - len(view_rows)
