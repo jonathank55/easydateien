@@ -279,7 +279,7 @@ KEY_LABELS = {
     "SPACE": "Leertaste",
     "TAB": "Tab",
     "ESC": "ESC",
-    "CTRL_C": "Strg + C",
+    "CTRL_C": "Strg C",
     "PAGE_UP": "Bild\u2191",
     "PAGE_DOWN": "Bild\u2193",
 }
