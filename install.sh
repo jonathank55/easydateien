@@ -15,7 +15,7 @@ set -e
 echo "=== Installation von EasyDateien ==="
 
 RAW_BASE="https://raw.githubusercontent.com/jonathank55/easydateien/main"
-PROGRAMM_DATEIEN=("easydateien" "easydateien_common.py" "easydateien_konfigurator.py" "config.example.json")
+PROGRAMM_DATEIEN=("easydateien" "easydateien_common.py" "easydateien_konfigurator.py" "config.json")
 
 # ---------------------------------------------------------------- Quelle ermitteln
 # Wurde das Skript aus einem vorhandenem Repository ausgeführt, liegt dieses
@@ -93,7 +93,7 @@ fi
 # 3. Standard-Konfiguration initialisieren, falls noch nicht vorhanden
 if [ ! -f "$CONFIG_DIR/config.json" ]; then
     echo "Erstelle Standard-Konfiguration in $CONFIG_DIR/config.json..."
-    cp "$SRC_DIR/config.example.json" "$CONFIG_DIR/config.json"
+    cp "$SRC_DIR/config.json" "$CONFIG_DIR/config.json"
 else
     echo "Bestehende Konfiguration in $CONFIG_DIR/config.json bleibt unberührt."
 fi

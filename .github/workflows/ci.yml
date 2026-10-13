@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  syntax-check:
+    name: Python-Syntax prüfen
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Syntaxprüfung aller Python-Dateien
+        run: |
+          set -e
+          failed=0
+          for f in *.py; do
+            [ -f "$f" ] || continue
+            if python3 -m py_compile "$f"; then
+              echo "OK: $f"
+            else
+              echo "FEHLER: $f"
+              failed=1
+            fi
+          done
+          exit $failed

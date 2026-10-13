@@ -255,6 +255,58 @@ CHORD_ACTIONS = {
     "copy_path": ("c", ("cc", "cf", "cd")),
 }
 
+# Anzeigenamen für Tasten-Tokens im Hilfemenü
+KEY_LABELS = {
+    "UP": "\u2191",
+    "DOWN": "\u2193",
+    "LEFT": "\u2190",
+    "RIGHT": "\u2192",
+    "ENTER": "Eingabe",
+    "SPACE": "Leertaste",
+    "TAB": "Tab",
+    "ESC": "ESC",
+    "CTRL_C": "Strg+C",
+    "PAGE_UP": "Bild\u2191",
+    "PAGE_DOWN": "Bild\u2193",
+}
+
+
+def format_keys(tokens) -> str:
+    """Formatiert Tasten-Tokens f\u00fcr die Anzeige im Hilfemen\u00fc."""
+    parts = []
+    for t in tokens:
+        if t in KEY_LABELS:
+            parts.append(KEY_LABELS[t])
+        else:
+            parts.append(t)
+    return " / ".join(parts)
+
+
+def build_help_items(bindings) -> list:
+    """Erzeugt die Hilfemen\u00fc-Zeilen dynamisch aus den aktuellen Tastenbelegungen."""
+    items = []
+    current_section = None
+    rows = []
+    for section, action, disp, keys, desc in bindings:
+        if section != current_section:
+            if current_section is not None:
+                rows.append(None)
+            rows.append((section, None))
+            current_section = section
+        rows.append((format_keys(keys), desc))
+    key_w = max((str_width(k) for k, d in (r for r in rows if r is not None) if d is not None), default=0)
+    for row in rows:
+        if row is None:
+            items.append("")
+        else:
+            k, d = row
+            if d is None:
+                items.append(k)
+            else:
+                pad = " " * max(1, key_w - str_width(k))
+                items.append(f"  [{k}]{pad}{d}")
+    return items
+
 
 def get_keybindings_from_config(cfg: dict) -> list:
     """Lädt die Tastenbelegungen aus der Konfiguration oder verwendet Standardwerte."""

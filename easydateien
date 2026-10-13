@@ -23,6 +23,8 @@ from typing import List, Dict, Set, Optional, Tuple
 
 from easydateien_common import (
     build_keymap,
+    build_help_items,
+    get_keybindings_from_config,
     load_config,
     ANSI_ESCAPE_RE,
     C_RESET,
@@ -777,6 +779,8 @@ class EasyDateienApp:
         self.current_dir = os.path.abspath(initial_path if initial_path else os.getcwd())
         self.config = self.load_config()
         self.keymap: Dict[str, str] = build_keymap(self.config)
+        self.keybindings = get_keybindings_from_config(self.config)
+        self.last_visited_dir: Optional[str] = None
         self.items: List[FileEntry] = []
         self.selected_idx: int = 0
         self.view_start: int = 0
@@ -1006,7 +1010,10 @@ class EasyDateienApp:
 
     def enter_directory(self, new_path: str):
         """Wechselt in einen Ordner und setzt Cursor, Ansicht und Filter zurück."""
-        self.current_dir = os.path.abspath(new_path)
+        new_path = os.path.abspath(new_path)
+        if new_path != self.current_dir:
+            self.last_visited_dir = self.current_dir
+        self.current_dir = new_path
         self.items = []
         self.selected_idx = 0
         self.view_start = 0
@@ -2575,6 +2582,7 @@ class EasyDateienApp:
             goto_items = [
                 f"[d]  Downloads",
                 f"[f]  Dokumente",
+                f"[-]  Zuletzt verwendeter Ordner",
                 f"[h]  Benutzerordner (~)",
                 f"[t]  Papierkorb",
                 f"[i]  Pfad manuell eingeben",
@@ -2596,36 +2604,7 @@ class EasyDateienApp:
                         all_lines[r_pos] = replace_ansi_range(all_lines[r_pos], start_x, bl, box_w, term_cols)
 
         elif self.active_dialog == "help_menu":
-            help_items = [
-                f"Navigation & Ansicht",
-                f"  [←↑↓→]        In Ordnern und Listen navigieren",
-                f"  [Eingabe]     Im Finder oder System öffnen",
-                f"  [g]           Gehe zu (Schnellzugriff auf Verzeichnisse)",
-                f"  [/]           Dateien nach Suchbegriff filtern",
-                f"  [.]           Versteckte Dateien ein- und ausblenden",
-                f"  [s]           Sortierung wechseln",
-                f"  [t]           Integrierte Terminal-Konsole öffnen",
-                "",
-                f"Dateioperationen",
-                f"  [Leertaste]   Datei auswählen oder Markierung aufheben",
-                f"  [a]           Alle sichtbaren Dateien auswählen",
-                f"  [n]           Neue Datei oder neuen Ordner erstellen",
-                f"  [r]           Ausgewähltes Element umbenennen",
-                f"  [d]           In den Papierkorb verschieben",
-                f"  [c]           Ausgewählte Dateien kopieren (cc/cf/cd: Pfad/Name/Ordner kopieren)",
-                f"  [x]           Ausgewählte Dateien ausschneiden",
-                f"  [p]           Zwischenablage in aktuellen Ordner einfügen",
-                f"  [z]           ZIP-Archiv aus Auswahl erstellen",
-                f"  [e]           ZIP-Archiv entpacken",
-                f"  [o]           Im Editor bearbeiten",
-                f"  [u]           Letzte Dateiaktion rückgängig machen",
-                "",
-                f"Verwaltung",
-                f"  [m]           Einstellungen und Farbschema öffnen",
-                f"  [q]           EasyDateien beenden",
-                "",
-                f"[ESC / q] Zurück",
-            ]
+            help_items = build_help_items(self.keybindings) + ["", "[ESC / q] Zurück"]
             border_overhead = (1 if has_top_border else 0) + (1 if has_bottom_border else 0) + (1 if has_status_bar else 0) + 1
             max_box_h = max(6, term_rows - border_overhead - 2)
             target_box_w = min(term_cols - 4, 72)
@@ -2994,6 +2973,13 @@ class EasyDateienApp:
             elif c == "f":
                 self.change_directory(os.path.expanduser("~/Documents"))
                 self.set_status("Dokumente", "info")
+            elif c in ("-", "_"):
+                target = self.last_visited_dir
+                if target and os.path.isdir(target):
+                    self.change_directory(target)
+                    self.set_status(f"Gehe zu: {self.get_short_dir(target)}", "info")
+                else:
+                    self.set_status("Kein zuletzt verwendeter Ordner verf\u00fcgbar", "warning")
             elif c in ("h", "~"):
                 self.change_directory(HOME_DIR)
                 self.set_status("Home (~)", "info")
