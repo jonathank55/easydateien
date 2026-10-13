@@ -189,7 +189,7 @@ def distribute_options(items, avail_w: int) -> str:
 
     return "".join(parts)
 
-def fit_hints(items, avail_w: int) -> str:
+def fit_hints(items, avail_w: int, ellipsis: bool = True) -> str:
     """Passt Hilfe-Einträge maximal dynamisch in die Breite.
 
     items: Liste aus str oder (voll, kurz, mini)-Tupeln in Prioritätsreihenfolge.
@@ -210,7 +210,7 @@ def fit_hints(items, avail_w: int) -> str:
     for n in range(len(norm), 0, -1):
         for v in range(3):
             cand = [norm[i][v] for i in range(n)]
-            if n < len(norm):
+            if n < len(norm) and ellipsis:
                 cand.append("…")
             gap = 2 if v < 2 else 1
             if sum(str_width(c) for c in cand) + gap * (len(cand) - 1) <= avail_w:

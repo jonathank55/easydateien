@@ -2189,7 +2189,7 @@ class EasyDateienApp:
                 s_str = format_size(it.size) if not it.is_dir else ""
                 avail = cell_inner_width(w_mid)
                 if s_str:
-                    size_field = max(8, str_width(s_str))
+                    size_field = str_width(s_str)
                     avail_n = max(3, avail - prefix_len - size_field - 1)
                     n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
                     n_w = str_width(ANSI_ESCAPE_RE.sub("", n_styled))
@@ -2223,7 +2223,7 @@ class EasyDateienApp:
                         else:
                             c_b_char = ""
                         if w_right >= 26 and c_size:
-                            c_field = max(8, str_width(c_size))
+                            c_field = str_width(c_size)
                             c_pre = f" {c_b_char} " if c_b_char else " "
                             name_w = max(3, w_right - str_width(c_pre) - c_field - 2)
                             c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)

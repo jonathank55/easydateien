@@ -196,7 +196,7 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         else:
             tag_colored = ""
 
-        avail_lbl = max(2, inner - str_width(tag) - 4)
+        avail_lbl = max(2, inner - str_width(tag) - 3)
         lbl_trunc = truncate_to_width(label, avail_lbl)
         lbl_styled = lbl_trunc
         content_row = f"{lbl_styled}{' ' * max(1, inner - 2 - str_width(lbl_trunc) - str_width(tag))}{tag_colored}"
@@ -213,7 +213,7 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     lines.append(f"├{'─' * inner}┤")
     avail_f_w = max(1, inner - 4)
     if isinstance(footer, (list, tuple)):
-        f_styled = fit_hints(list(footer), avail_f_w)
+        f_styled = fit_hints(list(footer), avail_f_w, ellipsis=False)
     elif footer:
         f_styled = truncate_to_width(footer, avail_f_w)
     else:
