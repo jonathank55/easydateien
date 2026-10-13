@@ -119,7 +119,7 @@ Das Skript
 
 - verlinkt `easydateien` und `easydateien_konfigurator.py` nach `~/.config/easydateien/`,
 - kompiliert (sofern `clang` vorhanden ist) das native macOS-Clipboard-Modul `easydateien_clip` nach `~/.config/easydateien/`,
-- legt `~/.config/easydateien/config.json` aus [`config.example.json`](config.example.json) an, falls noch keine Konfiguration existiert (eine vorhandene bleibt unberührt),
+- legt `~/.config/easydateien/config.json` aus [`config.json`](config.json) an, falls noch keine Konfiguration existiert (eine vorhandene bleibt unberührt),
 - erstellt die Symlinks `easydateien` und `ed` in `~/.local/bin/` bzw. `~/bin/` (je nachdem, welches Verzeichnis existiert; `~/.local/bin/` wird bei Bedarf angelegt und sollte im `PATH` liegen).
 
 Der Repository-Ordner muss nach der Installation bestehen bleiben, da die Symlinks darauf zeigen.
@@ -173,7 +173,7 @@ easydateien --config
 
 ## Konfigurationsdatei (`~/.config/easydateien/config.json`)
 
-Die Konfiguration wird im standardisierten JSON-Format gespeichert. Fehlende Schlüssel werden mit den hier gezeigten Standardwerten ergänzt (Vorlage: [`config.example.json`](config.example.json)):
+Die Konfiguration wird im standardisierten JSON-Format gespeichert. Fehlende Schlüssel werden mit den hier gezeigten Standardwerten ergänzt (Vorlage: [`config.json`](config.json)):
 
 ```json
 {
