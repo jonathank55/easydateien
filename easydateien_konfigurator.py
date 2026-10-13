@@ -179,15 +179,15 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     lines = []
     lines.append(f"╭{'─' * inner}╮")
     t_styled = f"{C_BOLD}{truncate_to_width(title, inner - 4)}{C_RESET}"
-    lines.append(f"│ {pad_to_width(t_styled, inner - 2)}│")
+    lines.append(f"│ {pad_to_width(t_styled, inner - 1)}│")
     s_styled = truncate_to_width(subtitle, inner - 4)
-    lines.append(f"│ {pad_to_width(s_styled, inner - 2)}│")
+    lines.append(f"│ {pad_to_width(s_styled, inner - 1)}│")
     lines.append(f"├{'─' * inner}┤")
 
     for i, (key, label, tag) in enumerate(view_rows):
         actual_idx = start + i
         is_sel = (actual_idx == cur_idx)
-        pfx = " "
+        pfx = ""
 
         if tag in ("[Ein]", "Ein"):
             tag_colored = f"{C_BOLD}{tag}{C_RESET}"
@@ -198,11 +198,10 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         else:
             tag_colored = ""
 
-        avail_lbl = max(2, inner - 4 - str_width(tag) - 2)
+        avail_lbl = max(2, inner - str_width(tag))
         lbl_trunc = truncate_to_width(label, avail_lbl)
         lbl_styled = lbl_trunc
-        pad_len = max(1, inner - 2 - str_width(pfx) - str_width(lbl_trunc) - str_width(tag))
-        content_row = f"{pfx}{lbl_styled}{' ' * pad_len}{tag_colored} "
+        content_row = f"{pfx}{lbl_styled}{' ' * max(0, inner - str_width(lbl_trunc) - str_width(tag))}{tag_colored}"
         if is_sel:
             content_row = f"{C_BOLD}{C_INVERT}{pad_to_width(ANSI_ESCAPE_RE.sub('', content_row), inner)}{C_RESET}"
         lines.append(f"│{pad_to_width(content_row, inner)}│")
@@ -219,7 +218,7 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         f_styled = truncate_to_width(footer, avail_f_w)
     else:
         f_styled = ""
-    lines.append(f"│ {pad_to_width(f_styled, inner - 2)}│")
+    lines.append(f"│ {pad_to_width(f_styled, inner - 1)}│")
     lines.append(f"╰{'─' * inner}╯")
 
     out = []
