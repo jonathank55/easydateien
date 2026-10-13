@@ -317,7 +317,7 @@ def build_help_items(bindings) -> list:
             if d is None:
                 items.append(k)
             else:
-                pad = " " * max(1, key_w - str_width(k))
+                pad = " " * (key_w - str_width(k) + 1)
                 items.append(f"  [{k}]{pad}{d}")
     return items
 
