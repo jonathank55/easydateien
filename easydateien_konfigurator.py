@@ -187,8 +187,6 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     for i, (key, label, tag) in enumerate(view_rows):
         actual_idx = start + i
         is_sel = (actual_idx == cur_idx)
-        pfx = ""
-
         if tag in ("[Ein]", "Ein"):
             tag_colored = f"{C_BOLD}{tag}{C_RESET}"
         elif tag in ("[Aus]", "Aus"):
@@ -198,13 +196,15 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         else:
             tag_colored = ""
 
-        avail_lbl = max(2, inner - str_width(tag))
+        avail_lbl = max(2, inner - str_width(tag) - 4)
         lbl_trunc = truncate_to_width(label, avail_lbl)
         lbl_styled = lbl_trunc
-        content_row = f"{pfx}{lbl_styled}{' ' * max(0, inner - str_width(lbl_trunc) - str_width(tag))}{tag_colored}"
+        content_row = f"{lbl_styled}{' ' * max(1, inner - 2 - str_width(lbl_trunc) - str_width(tag))}{tag_colored}"
         if is_sel:
-            content_row = f"{C_BOLD}{C_INVERT}{pad_to_width(ANSI_ESCAPE_RE.sub('', content_row), inner)}{C_RESET}"
-        lines.append(f"│{pad_to_width(content_row, inner)}│")
+            content_row = f"{C_BOLD}{C_INVERT} {pad_to_width(ANSI_ESCAPE_RE.sub('', content_row), inner - 2)} {C_RESET}"
+            lines.append(f"│{content_row}│")
+        else:
+            lines.append(f"│ {pad_to_width(content_row, inner - 2)} │")
 
     empty_needed = avail_rows - len(view_rows)
     for _ in range(empty_needed):
