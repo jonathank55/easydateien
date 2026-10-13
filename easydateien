@@ -325,11 +325,21 @@ def format_size(size_bytes: int) -> str:
             return f"{val:.1f} {unit}"
     return f"{val:.1f} PB"
 
-def format_mtime(mtime: float) -> str:
-    """Formatiert Änderungszeitpunkte lesbar."""
+def format_mtime(mtime: float, max_w: int = 17) -> str:
+    """Formatiert Änderungszeitpunkte lesbar; bei engem Platz
+    stufig auf Datum (ohne Uhrzeit) bzw. Jahr gekürzt — nie mitten im Wert."""
     try:
         dt = datetime.datetime.fromtimestamp(mtime)
-        return dt.strftime("%d.%m.%Y %H:%M")
+        full = dt.strftime("%d.%m.%Y %H:%M")
+        if str_width(full) <= max_w:
+            return full
+        date_only = dt.strftime("%d.%m.%Y")
+        if str_width(date_only) <= max_w:
+            return date_only
+        year = dt.strftime("%Y")
+        if str_width(year) <= max_w:
+            return year
+        return truncate_to_width(date_only, max_w)
     except Exception:
         return "---"
 
@@ -2239,20 +2249,20 @@ class EasyDateienApp:
                         cell_right = " " * w_right
                 elif cur_item and not is_cur_dir:
                     size_str = format_size(cur_item.size)
-                    date_str = format_mtime(cur_item.mtime)
+                    date_str = format_mtime(cur_item.mtime, max(6, w_right - 11))
                     mode_str = cur_item.mode_str
                     card = [
-                        f" {C_BOLD}Details{C_RESET}",
-                        f" {'Typ:':<8}{truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 9))}",
-                        f" {'Größe:':<8}{truncate_to_width(size_str, max(3, w_right - 9))}",
-                        f" {'Datum:':<8}{truncate_to_width(date_str, max(3, w_right - 9))}",
-                        f" {'Rechte:':<8}{truncate_to_width(mode_str, max(3, w_right - 9))}",
+                        f"{C_BOLD}Details{C_RESET}",
+                        f"{'Typ:':<9}{truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 11))}",
+                        f"{'Größe:':<9}{truncate_to_width(size_str, max(3, w_right - 11))}",
+                        f"{'Datum:':<9}{truncate_to_width(date_str, max(3, w_right - 11))}",
+                        f"{'Rechte:':<9}{truncate_to_width(mode_str, max(3, w_right - 11))}",
                     ]
                     if cur_item.is_symlink:
-                        card.append(f" {'Ziel:':<8}{truncate_to_width(cur_item.symlink_target, max(3, w_right - 9))}")
+                        card.append(f"{'Ziel:':<9}{truncate_to_width(cur_item.symlink_target, max(3, w_right - 11))}")
 
                     if r < len(card):
-                        cell_right = pad_to_width(card[r], w_right)
+                        cell_right = f" {pad_to_width(card[r], w_right - 2)} "
                     elif r == len(card) and fm_rows >= 10:
                         # Trennlinie nur in der rechten Spalte (Trenner vor der Vorschau)
                         cell_right = "─" * w_right
@@ -2261,7 +2271,7 @@ class EasyDateienApp:
                         p_line_idx = r - (len(card) + 1) if fm_rows >= 10 else -1
                         if 0 <= p_line_idx < len(preview_lines):
                             p_txt = preview_lines[p_line_idx]
-                            cell_right = pad_to_width(f" {truncate_to_width(p_txt, max(2, w_right - 2))}", w_right)
+                            cell_right = f" {pad_to_width(truncate_to_width(p_txt, max(2, w_right - 2)), w_right - 2)} "
                         else:
                             cell_right = " " * w_right
                 else:
