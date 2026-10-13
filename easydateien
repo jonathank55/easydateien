@@ -2138,7 +2138,7 @@ class EasyDateienApp:
                         p_b_char = f"{C_BOLD}*{C_RESET}"
                     else:
                         p_b_char = ""
-                    prefix_char = f"{p_b_char} "
+                    prefix_char = f" {p_b_char} " if p_b_char else " "
                     if w_left >= 26:
                         p_styled = format_entry_name(p_it, max(3, w_left - str_width(prefix_char) - 1), bold=is_act or p_in_cut or p_in_copy or p_is_sel)
                         txt_l = f"{prefix_char}{p_styled}"
@@ -2172,7 +2172,7 @@ class EasyDateienApp:
                     b_char = f"{C_BOLD}*{C_RESET}"
                 else:
                     b_char = ""
-                prefix_str = f"{b_char} "
+                prefix_str = f" {b_char} " if b_char else " "
                 prefix_len = str_width(prefix_str)
                 s_str = format_size(it.size) if not it.is_dir else ""
 
@@ -2184,15 +2184,15 @@ class EasyDateienApp:
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid - size_field - 2) + s_part
                 elif w_mid >= 26:
-                    avail_n = max(3, w_mid - prefix_len)
+                    avail_n = max(3, w_mid - prefix_len - 1)
                     n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid - 1) + " "
                 else:
-                    avail_n = max(2, w_mid - prefix_len)
+                    avail_n = max(2, w_mid - prefix_len - 1)
                     n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
                     l_part = f"{prefix_str}{n_styled}"
-                    cell_mid = pad_to_width(l_part, w_mid)
+                    cell_mid = pad_to_width(l_part, w_mid - 1) + " "
             elif len(self.items) == 0 and r == 0:
                 cell_mid = pad_to_width(f" (leer)", w_mid)
             else:
@@ -2218,18 +2218,18 @@ class EasyDateienApp:
                             c_b_char = ""
                         if w_right >= 26 and c_size:
                             c_field = max(8, str_width(c_size))
-                            c_pre = f"{c_b_char} " if c_b_char else " "
+                            c_pre = f" {c_b_char} " if c_b_char else " "
                             name_w = max(3, w_right - str_width(c_pre) - c_field - 2)
                             c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
                             s_part = f" {c_size:>{c_field}} "
                             cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - c_field - 2) + s_part
                         elif w_right >= 26:
-                            c_pre = f"{c_b_char} " if c_b_char else " "
+                            c_pre = f" {c_b_char} " if c_b_char else " "
                             name_w = max(3, w_right - str_width(c_pre) - 1)
                             c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
                             cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - 1) + " "
                         else:
-                            c_pre = f"{c_b_char} " if c_b_char else " "
+                            c_pre = f" {c_b_char} " if c_b_char else " "
                             name_w = max(3, w_right - str_width(c_pre) - 1)
                             c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
                             cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - 1) + " "
@@ -2242,7 +2242,7 @@ class EasyDateienApp:
                     date_str = format_mtime(cur_item.mtime)
                     mode_str = cur_item.mode_str
                     card = [
-                        f"{C_BOLD}Details{C_RESET}",
+                        f" {C_BOLD}Details{C_RESET}",
                         f" {'Typ:':<8}{truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 9))}",
                         f" {'Größe:':<8}{truncate_to_width(size_str, max(3, w_right - 9))}",
                         f" {'Datum:':<8}{truncate_to_width(date_str, max(3, w_right - 9))}",
