@@ -121,6 +121,21 @@ def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
         return f"{res_str}{C_RESET}{ellipsis}"
     return f"{res_str}{ellipsis}"
 
+def frame_cell(content: str, cell_w: int, pad: int = 1) -> str:
+    """Standardisiertes Zellen-Rendering: exakt `pad` Leerzeichen Abstand
+    zum linken und rechten Rand, Inhalt auf cell_w - 2*pad begrenzt.
+    ANSI-Codes im Inhalt bleiben erhalten; die Geometrie bleibt immer exakt."""
+    if cell_w <= 0:
+        return ""
+    inner = max(0, cell_w - 2 * pad)
+    return " " * pad + pad_to_width(content, inner) + " " * pad
+
+
+def cell_inner_width(cell_w: int, pad: int = 1) -> int:
+    """Verfuegbare Inhaltbreite einer Zelle nach Abzug der Rand-Abstaende."""
+    return max(0, cell_w - 2 * pad)
+
+
 def pad_to_width(text: str, width: int, align: str = "left") -> str:
     """Füllt formatierten Text exakt auf die gewünschte visuelle Terminalbreite auf."""
     if width <= 0:

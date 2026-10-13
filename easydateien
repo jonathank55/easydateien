@@ -25,6 +25,8 @@ from easydateien_common import (
     build_keymap,
     build_help_items,
     get_keybindings_from_config,
+    frame_cell,
+    cell_inner_width,
     load_config,
     ANSI_ESCAPE_RE,
     C_RESET,
@@ -658,7 +660,7 @@ def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
     """Rendert Name (und bei Links „ @ Ziel“ kursiv) exakt auf `width` Spalten.
 
     Der Name hat Vorrang: Ist er zu lang, wird er mit „…“ gekürzt, die Endung bzw. „/“ bleibt dahinter
-    erhalten. Nur verbleibender Platz wird für den (am Anfang mit „…“ gekürzten) Linkzielpfad genutzt.
+    erhalten. Der Linkzielpfad wird nur am Ende gekürzt (nie am Anfang).
     """
     if width <= 0:
         return ""
@@ -672,7 +674,7 @@ def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
     if it.is_symlink:
         target = safe_text(it.symlink_target)
         if target and name_w + 3 + 4 <= width:
-            tgt = truncate_left(target, width - name_w - 3)
+            tgt = truncate_to_width(target, max(3, width - name_w - 3))
             body = f"{styled(full_name)} @ {C_ITALIC}{tgt}{C_RESET}"
         elif name_w + 2 <= width:
             body = f"{styled(full_name)} @"
@@ -2182,29 +2184,23 @@ class EasyDateienApp:
                     b_char = f"{C_BOLD}*{C_RESET}"
                 else:
                     b_char = ""
-                prefix_str = f" {b_char} " if b_char else " "
+                prefix_str = f"{b_char} " if b_char else ""
                 prefix_len = str_width(prefix_str)
                 s_str = format_size(it.size) if not it.is_dir else ""
-
-                if w_mid >= 26 and s_str:
+                avail = cell_inner_width(w_mid)
+                if s_str:
                     size_field = max(8, str_width(s_str))
-                    avail_n = max(3, w_mid - prefix_len - 2 - size_field)
+                    avail_n = max(3, avail - prefix_len - size_field - 1)
                     n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
-                    s_part = f" {s_str:>{size_field}} "
-                    l_part = f"{prefix_str}{n_styled}"
-                    cell_mid = pad_to_width(l_part, w_mid - size_field - 2) + s_part
-                elif w_mid >= 26:
-                    avail_n = max(3, w_mid - prefix_len - 1)
-                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
-                    l_part = f"{prefix_str}{n_styled}"
-                    cell_mid = pad_to_width(l_part, w_mid - 1) + " "
+                    n_w = str_width(ANSI_ESCAPE_RE.sub("", n_styled))
+                    body = prefix_str + n_styled + " " * max(1, avail - prefix_len - n_w - size_field - 1)
+                    cell_mid = frame_cell(body + f"{s_str:>{size_field}}", w_mid)
                 else:
-                    avail_n = max(2, w_mid - prefix_len - 1)
+                    avail_n = max(2, avail - prefix_len)
                     n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
-                    l_part = f"{prefix_str}{n_styled}"
-                    cell_mid = pad_to_width(l_part, w_mid - 1) + " "
+                    cell_mid = frame_cell(prefix_str + n_styled, w_mid)
             elif len(self.items) == 0 and r == 0:
-                cell_mid = pad_to_width(f" (leer)", w_mid)
+                cell_mid = frame_cell("(leer)", w_mid)
             else:
                 cell_mid = " " * w_mid
 
