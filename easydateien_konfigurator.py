@@ -543,7 +543,7 @@ def main_menu(fd: int):
 
         if k in ("ENTER", "SPACE", "RIGHT", "LEFT"):
             act = rows[idx][0]
-            elif act == "columns":
+            if act == "columns":
                 _toggle_option(cfg, "columns_enabled", True)
                 save_config(cfg)
             elif act == "mouse":
