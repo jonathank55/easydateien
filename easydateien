@@ -3021,9 +3021,10 @@ class EasyDateienApp:
                 new_path = os.path.join(self.current_dir, val)
                 # Auf case-insensitiven Dateisystemen (macOS) ist der neue Name
                 # scheinbar "vorhanden", obwohl es dieselbe Datei ist (z. B. nur
-                # Gross/Kleinschreibung geaendert). Ersetzungs-Dialog nur bei
-                # einer ANDEREN Datei; identische Pfade sind ein reines Rename.
-                same_file = os.path.abspath(new_path) == os.path.abspath(target_it.path)
+                # Gross/Kleinschreibung geaendert). os.path.samefile prueft die
+                # Datei-Identitaet (Inode) statt des Pfadtexts und erkennt auch
+                # reine Case-Renames. Ersetzungs-Dialog nur bei einer ANDEREN Datei.
+                same_file = os.path.exists(new_path) and os.path.samefile(new_path, target_it.path)
                 if os.path.exists(new_path) and not same_file:
                     # Vorhandenen Eintrag ersetzen? (gleiche Bestätigung wie beim Einfügen)
                     self.active_dialog = "replace_confirm"
