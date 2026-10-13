@@ -31,3 +31,6 @@ jobs:
             fi
           done
           exit $failed
+
+      - name: Test-Suite ausführen
+        run: python3 run_tests.py
