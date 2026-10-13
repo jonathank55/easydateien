@@ -2,7 +2,7 @@
 #import <Foundation/Foundation.h>
 
 @interface ImageCache : NSObject
-@property (nonatomic, strong) NSMutableDictionary<NSString *, NSImage *> *cache;
+@property (atomic, strong) NSMutableDictionary<NSString *, NSImage *> *cache;
 + (instancetype)sharedCache;
 - (NSImage *)cachedImageForPath:(NSString *)path;
 - (void)cacheImage:(NSImage *)image forPath:(NSString *)path;
@@ -57,9 +57,11 @@ int main(int argc, const char * argv[]) {
                         [ext isEqualToString:@"bmp"]) {
                         firstImage = [imageCache cachedImageForPath:p];
                         if (!firstImage) {
-                            firstImage = [[NSImage alloc] initWithContentsOfFile:p];
-                            if (firstImage) {
-                                [imageCache cacheImage:firstImage forPath:p];
+                            if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
+                                firstImage = [[NSImage alloc] initWithContentsOfFile:p];
+                                if (firstImage) {
+                                    [imageCache cacheImage:firstImage forPath:p];
+                                }
                             }
                         }
                         hasImage = (firstImage != nil);
@@ -89,7 +91,6 @@ int main(int argc, const char * argv[]) {
             }
 
             [pb declareTypes:types owner:nil];
-
             [pb setPropertyList:paths forType:(NSPasteboardType)@"NSFilenamesPboardType"];
 
             NSURL *firstUrl = [NSURL fileURLWithPath:paths[0]];
