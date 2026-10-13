@@ -76,7 +76,7 @@ def char_width(c: str) -> int:
     if eaw in ("W", "F"):
         return 2
     cp = ord(c)
-    if (0x1F300 <= cp <= 0x1FAFF) or (0x2600 <= cp <= 0x27BF) or (0xFE00 <= cp <= 0xFE0F):
+    if 0x1F300 <= cp <= 0x1FAFF:
         return 2
     return 1
 
