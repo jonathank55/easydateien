@@ -17,8 +17,10 @@ import shutil
 import argparse
 
 from easydateien_common import (
+    ANSI_ESCAPE_RE,
     C_RESET,
     C_BOLD,
+    C_INVERT,
     DISABLE_AUTOWRAP,
     ENABLE_AUTOWRAP,
     DEFAULT_CONFIG,
@@ -48,7 +50,6 @@ KEYBINDING_ITEMS = [(action, desc, f"[{disp}]") for _s, action, disp, _k, desc i
 ]
 
 MAIN_MENU_ITEMS = [
-    ("columns", "Spalten-Layout", "ein"),
     ("mouse", "Mausunterstützung", "ein"),
     ("hidden", "Versteckte Dateien anzeigen", "aus"),
     ("console_always_visible", "Konsole immer eingeblendet", "aus"),
@@ -178,15 +179,15 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     lines = []
     lines.append(f"╭{'─' * inner}╮")
     t_styled = f"{C_BOLD}{truncate_to_width(title, inner - 4)}{C_RESET}"
-    lines.append(f"│  {pad_to_width(t_styled, inner - 2)}│")
+    lines.append(f"│ {pad_to_width(t_styled, inner - 2)}│")
     s_styled = truncate_to_width(subtitle, inner - 4)
-    lines.append(f"│  {pad_to_width(s_styled, inner - 2)}│")
+    lines.append(f"│ {pad_to_width(s_styled, inner - 2)}│")
     lines.append(f"├{'─' * inner}┤")
 
     for i, (key, label, tag) in enumerate(view_rows):
         actual_idx = start + i
         is_sel = (actual_idx == cur_idx)
-        pfx = f"{C_BOLD}▸{C_RESET} " if is_sel else "  "
+        pfx = " "
 
         if tag in ("[Ein]", "Ein"):
             tag_colored = f"{C_BOLD}{tag}{C_RESET}"
@@ -199,9 +200,11 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
 
         avail_lbl = max(2, inner - 4 - str_width(tag) - 2)
         lbl_trunc = truncate_to_width(label, avail_lbl)
-        lbl_styled = f"{C_BOLD}{lbl_trunc}{C_RESET}" if is_sel else lbl_trunc
+        lbl_styled = lbl_trunc
         pad_len = max(1, inner - 2 - str_width(pfx) - str_width(lbl_trunc) - str_width(tag))
-        content_row = f" {pfx}{lbl_styled}{' ' * pad_len}{tag_colored} "
+        content_row = f"{pfx}{lbl_styled}{' ' * pad_len}{tag_colored} "
+        if is_sel:
+            content_row = f"{C_INVERT}{pad_to_width(ANSI_ESCAPE_RE.sub('', content_row), inner)}{C_RESET}"
         lines.append(f"│{pad_to_width(content_row, inner)}│")
 
     empty_needed = avail_rows - len(view_rows)
@@ -216,7 +219,7 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         f_styled = truncate_to_width(footer, avail_f_w)
     else:
         f_styled = ""
-    lines.append(f"│  {pad_to_width(f_styled, inner - 2)}│")
+    lines.append(f"│ {pad_to_width(f_styled, inner - 2)}│")
     lines.append(f"╰{'─' * inner}╯")
 
     out = []
@@ -476,7 +479,6 @@ def keybindings_menu(fd: int):
 # Datengesteuerte Wertanzeige des Hauptmenüs: Jede Option bestimmt ihren
 # angezeigten Wert über eine Funktion; neue Optionen erfordern genau eine Zeile.
 MENU_VALUE_RENDERERS = {
-    "columns": lambda cfg: f"[{'ein' if cfg.get('columns_enabled', True) else 'aus'}]",
     "mouse": lambda cfg: f"[{'ein' if cfg.get('mouse_support', True) else 'aus'}]",
     "hidden": lambda cfg: f"[{'ein' if cfg.get('show_hidden', False) else 'aus'}]",
     "console_always_visible": lambda cfg: f"[{'ein' if cfg.get('console_always_visible', False) else 'aus'}]",
@@ -543,10 +545,7 @@ def main_menu(fd: int):
 
         if k in ("ENTER", "SPACE", "RIGHT", "LEFT"):
             act = rows[idx][0]
-            if act == "columns":
-                _toggle_option(cfg, "columns_enabled", True)
-                save_config(cfg)
-            elif act == "mouse":
+            if act == "mouse":
                 _toggle_option(cfg, "mouse_support", True)
                 save_config(cfg)
             elif act == "hidden":
