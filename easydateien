@@ -1223,6 +1223,7 @@ class EasyDateienApp:
         pasted_records = []
         failed = False
         is_cut = (self.clipboard_mode == "cut")
+        replaced_backups = []
 
         for src in sources:
             if not os.path.exists(src):
@@ -1243,9 +1244,18 @@ class EasyDateienApp:
                     c += 1
 
             try:
+                backup_path = None
+                if is_cut and os.path.lexists(dest) and os.path.abspath(src) != os.path.abspath(dest):
+                    backup_path = self._stash_existing(dest)
                 if is_cut:
-                    shutil.move(src, dest)
+                    try:
+                        shutil.move(src, dest)
+                    except Exception:
+                        self._restore_backup(backup_path, dest)
+                        raise
                     pasted_records.append((src, dest))
+                    if backup_path:
+                        replaced_backups.append((dest, backup_path))
                 else:
                     if os.path.isdir(src):
                         shutil.copytree(src, dest)
@@ -1261,7 +1271,7 @@ class EasyDateienApp:
 
         if pasted_records:
             desc = f"Einfügen von {len(pasted_records)} Element(en)"
-            self.undo_stack.append(UndoAction("paste", desc, {"is_cut": is_cut, "records": pasted_records}))
+            self.undo_stack.append(UndoAction("paste", desc, {"is_cut": is_cut, "records": pasted_records, "replaced_backups": replaced_backups}))
 
         if not failed:
             self.clipboard_mode = None
@@ -1280,9 +1290,14 @@ class EasyDateienApp:
         try:
             if mode == "rename":
                 src = pr.get("src")
-                os.rename(src, dest)  # ersetzt eine vorhandene Datei bzw. einen leeren Ordner
+                backup_path = self._stash_existing(dest)
+                try:
+                    os.rename(src, dest)  # ersetzt eine vorhandene Datei bzw. einen leeren Ordner
+                except Exception:
+                    self._restore_backup(backup_path, dest)
+                    raise
                 desc = f"Umbenennen von {os.path.basename(src)} in {name}"
-                self.undo_stack.append(UndoAction("rename", desc, {"old_path": src, "new_path": dest}))
+                self.undo_stack.append(UndoAction("rename", desc, {"old_path": src, "new_path": dest, "replaced_backup": backup_path}))
                 self.refresh_items(force=True)
                 self.select_filename(name)
                 self.set_status(f"Ersetzt: {name} (u = Rückgängig)", "success")
@@ -1291,20 +1306,57 @@ class EasyDateienApp:
                     # Ordner vorhanden: nichts zu ersetzen
                     self.set_status(f"Ordner existiert bereits: {name}", "info")
                     return
+                backup_path = None
                 if pr.get("is_dir_target"):
                     os.makedirs(dest, exist_ok=True)
                 else:
-                    open(dest, "w").close()  # vorhandene Datei durch leere Datei ersetzen
+                    backup_path = self._stash_existing(dest)
+                    try:
+                        open(dest, "w").close()  # vorhandene Datei durch leere Datei ersetzen
+                    except Exception:
+                        self._restore_backup(backup_path, dest)
+                        raise
                 self.refresh_items(force=True)
                 self.select_filename(name)
                 if pr.get("is_dir_target"):
                     self.set_status(f"Ordner erstellt: {name} (u = Rückgängig)", "success")
                     self.undo_stack.append(UndoAction("create", f"Erstellen von {name}", {"path": dest}))
                 else:
-                    # Inhalt der ersetzten Datei ist nicht wiederherstellbar: kein Rückgängig-Eintrag
-                    self.set_status(f"Datei ersetzt: {name}", "success")
+                    self.set_status(f"Datei ersetzt: {name} (u = Rückgängig)", "success")
+                    self.undo_stack.append(UndoAction("create", f"Ersetzen von {name}", {"path": dest, "replaced_backup": backup_path}))
         except Exception as e:
             self.set_status(f"Fehler beim Ersetzen: {e}", "error")
+
+    UNDO_BACKUP_DIR = os.path.join(CONFIG_DIR, "undo_backups")
+
+    def _stash_existing(self, path: str) -> Optional[str]:
+        """Sichert einen vorhandenen Pfad vor dem Ersetzen, damit das Rückgängigmachen ihn wiederherstellen kann."""
+        if not path or not os.path.lexists(path):
+            return None
+        os.makedirs(self.UNDO_BACKUP_DIR, exist_ok=True)
+        stem, ext = os.path.splitext(os.path.basename(path))
+        dest = os.path.join(self.UNDO_BACKUP_DIR, f"{stem}{ext}")
+        c = 1
+        while os.path.lexists(dest):
+            dest = os.path.join(self.UNDO_BACKUP_DIR, f"{stem}_{int(time.time())}_{c}{ext}")
+            c += 1
+        shutil.move(path, dest)
+        return dest
+
+    def _restore_backup(self, backup_path: Optional[str], original_path: str) -> bool:
+        """Stellt einen zuvor gesicherten Pfad an seiner ursprünglichen Stelle wieder her."""
+        if not backup_path or not os.path.lexists(backup_path):
+            return False
+        target = original_path
+        if os.path.lexists(target):
+            stem, ext = os.path.splitext(original_path)
+            c = 1
+            while os.path.lexists(target):
+                target = f"{stem}_wiederhergestellt_{c}{ext}"
+                c += 1
+        os.makedirs(os.path.dirname(original_path), exist_ok=True)
+        shutil.move(backup_path, target)
+        return True
 
     @staticmethod
     def unique_path(directory: str, stem: str, suffix: str = "") -> str:
@@ -1456,6 +1508,10 @@ class EasyDateienApp:
 
         action = self.undo_stack.pop()
         trash_dir = os.path.expanduser("~/.Trash")
+        try:
+            os.makedirs(trash_dir, exist_ok=True)
+        except OSError:
+            pass
 
         try:
             if action.action_type == "trash":
@@ -1480,9 +1536,13 @@ class EasyDateienApp:
                 new_p = action.data.get("new_path")
                 if new_p and os.path.exists(new_p) and not os.path.exists(old_p):
                     os.rename(new_p, old_p)
+                    restored = self._restore_backup(action.data.get("replaced_backup"), new_p)
                     self.refresh_items(force=True)
                     self.select_filename(os.path.basename(old_p))
-                    self.set_status(f"Rückgängig: Name in „{os.path.basename(old_p)}“ zurückgesetzt", "success")
+                    if restored:
+                        self.set_status(f"Rückgängig: Name in „{os.path.basename(old_p)}“ zurückgesetzt, ersetzte Datei wiederhergestellt", "success")
+                    else:
+                        self.set_status(f"Rückgängig: Name in „{os.path.basename(old_p)}“ zurückgesetzt", "success")
 
             elif action.action_type == "create":
                 p = action.data.get("path")
@@ -1494,8 +1554,12 @@ class EasyDateienApp:
                         dest_p = os.path.join(trash_dir, f"{stem}_{int(time.time())}_{c}{ext}")
                         c += 1
                     shutil.move(p, dest_p)
+                    restored = self._restore_backup(action.data.get("replaced_backup"), p)
                     self.refresh_items(force=True)
-                    self.set_status(f"Rückgängig: {os.path.basename(p)} gelöscht", "success")
+                    if restored:
+                        self.set_status(f"Rückgängig: {os.path.basename(p)} gelöscht, ersetzte Datei wiederhergestellt", "success")
+                    else:
+                        self.set_status(f"Rückgängig: {os.path.basename(p)} gelöscht", "success")
 
             elif action.action_type == "create_zip":
                 p = action.data.get("path")
@@ -1514,12 +1578,14 @@ class EasyDateienApp:
                 is_cut = action.data.get("is_cut", False)
                 records = action.data.get("records", [])
                 reverted = 0
+                backups = dict(action.data.get("replaced_backups", []))
                 for src_p, dest_p in records:
                     if dest_p and os.path.exists(dest_p):
                         if is_cut and src_p:
                             os.makedirs(os.path.dirname(src_p), exist_ok=True)
                             shutil.move(dest_p, src_p)
                             reverted += 1
+                            self._restore_backup(backups.get(dest_p), dest_p)
                         else:
                             trash_dest = os.path.join(trash_dir, os.path.basename(dest_p))
                             c = 1
