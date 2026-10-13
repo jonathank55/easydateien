@@ -2147,6 +2147,8 @@ class EasyDateienApp:
                         p_styled = format_entry_name(p_it, max(2, w_left - 2), bold=is_act)
                         txt_l = f"{prefix_char}{p_styled}"
                         cell_left = pad_to_width(txt_l, w_left)
+                    if is_act:
+                        cell_left = f"{C_INVERT}{ANSI_ESCAPE_RE.sub('', cell_left)}{C_RESET}"
                 else:
                     cell_left = " " * w_left
             else:
@@ -2177,18 +2179,18 @@ class EasyDateienApp:
                 if w_mid >= 26 and s_str:
                     size_field = max(8, str_width(s_str))
                     avail_n = max(3, w_mid - prefix_len - 2 - size_field)
-                    n_styled = format_entry_name(it, avail_n, bold=False)
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur)
                     s_part = f"  {s_str:>{size_field}}"
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid - 2 - size_field) + s_part
                 elif w_mid >= 26:
                     avail_n = max(3, w_mid - prefix_len)
-                    n_styled = format_entry_name(it, avail_n, bold=False)
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur)
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid)
                 else:
                     avail_n = max(2, w_mid - prefix_len)
-                    n_styled = format_entry_name(it, avail_n, bold=False)
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur)
                     l_part = f"{prefix_str}{n_styled}"
                     cell_mid = pad_to_width(l_part, w_mid)
             elif len(self.items) == 0 and r == 0:
@@ -2284,8 +2286,9 @@ class EasyDateienApp:
                 else:
                     row_line = f"│{cell_mid}│"
 
-            if is_cur_row:
-                row_line = f"{C_INVERT}{pad_to_width(ANSI_ESCAPE_RE.sub('', row_line), term_cols)}{C_RESET}"
+            if is_cur_row and cell_mid:
+                inv_mid = f"{C_INVERT}{ANSI_ESCAPE_RE.sub('', cell_mid)}{C_RESET}"
+                row_line = row_line.replace(cell_mid, inv_mid, 1)
             file_lines.append(pad_to_width(row_line, term_cols))
 
         all_lines = [header_line]
