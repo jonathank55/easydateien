@@ -101,7 +101,17 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
 
 ## Installation
 
-### Automatische Installation
+### Option 1: Ein-Zeilen-Installation (ohne Klon)
+
+Das Installationsskript kann direkt von GitHub ausgeführt werden — kein `git clone` nötig:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/jonathank55/easydateien/main/install.sh)
+```
+
+Das Skript lädt die Programmdateien selbstständig von GitHub herunter und installiert sie fest nach `~/.config/easydateien/`. Ein Repository-Ordner, der nach der Installation bestehen bleiben muss, entfällt bei dieser Variante.
+
+### Option 2: Installation aus dem geklonten Repository
 
 1. **Repository klonen:**
    ```bash
@@ -122,7 +132,8 @@ Das Skript
 - legt `~/.config/easydateien/config.json` aus [`config.json`](config.json) an, falls noch keine Konfiguration existiert (eine vorhandene bleibt unberührt),
 - erstellt die Symlinks `easydateien` und `ed` in `~/.local/bin/` bzw. `~/bin/` (je nachdem, welches Verzeichnis existiert; `~/.local/bin/` wird bei Bedarf angelegt und sollte im `PATH` liegen).
 
-Der Repository-Ordner muss nach der Installation bestehen bleiben, da die Symlinks darauf zeigen.
+> [!NOTE]
+> Bei der Installation aus dem geklonten Repository (Option 2) muss der Repository-Ordner nach der Installation bestehen bleiben, da die Symlinks darauf zeigen. Bei der Ein-Zeilen-Installation (Option 1) entfällt diese Einschränkung, da die Dateien fest nach `~/.config/easydateien/` kopiert werden.
 
 ### Voraussetzungen
 
