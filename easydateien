@@ -1216,8 +1216,12 @@ class EasyDateienApp:
         # Keine Konflikte - direkt einfügen
         self._perform_paste(sources)
 
-    def _perform_paste(self, sources: List[str]):
-        """Führt das eigentliche Einfügen durch, nachdem Konflikte aufgelöst wurden."""
+    def _perform_paste(self, sources: List[str], allow_replace: bool = False):
+        """Führt das eigentliche Einfügen durch, nachdem Konflikte aufgelöst wurden.
+
+        allow_replace=True wird nach bestätigter Ersetzungsanfrage übergeben: Vorhandene
+        Ziele werden dann gesichert und tatsächlich ersetzt statt mit „ (1)“ umzubenennen.
+        """
         success = 0
         last_name = ""
         pasted_records = []
@@ -1235,13 +1239,18 @@ class EasyDateienApp:
             if os.path.abspath(src) == os.path.abspath(dest) and is_cut:
                 continue
 
-            # Bei Kopieren: Füge Nummerierung hinzu, wenn Datei bereits existiert
-            if not is_cut and os.path.exists(dest):
-                base, ext = os.path.splitext(name)
-                c = 1
-                while os.path.exists(dest):
-                    dest = os.path.join(self.current_dir, f"{base} ({c}){ext}")
-                    c += 1
+            # Bei Kopieren: Füge Nummerierung hinzu, wenn Datei bereits existiert.
+            # Nur wenn der Ersetzungsdialog bestätigt wurde, wird wirklich ersetzt.
+            backup_dest = None
+            if not is_cut and os.path.lexists(dest):
+                if allow_replace:
+                    backup_dest = self._stash_existing(dest)
+                else:
+                    base, ext = os.path.splitext(name)
+                    c = 1
+                    while os.path.lexists(dest):
+                        dest = os.path.join(self.current_dir, f"{base} ({c}){ext}")
+                        c += 1
 
             try:
                 backup_path = None
@@ -1257,11 +1266,17 @@ class EasyDateienApp:
                     if backup_path:
                         replaced_backups.append((dest, backup_path))
                 else:
-                    if os.path.isdir(src):
-                        shutil.copytree(src, dest)
-                    else:
-                        shutil.copy2(src, dest)
+                    try:
+                        if os.path.isdir(src):
+                            shutil.copytree(src, dest)
+                        else:
+                            shutil.copy2(src, dest)
+                    except Exception:
+                        self._restore_backup(backup_dest, dest)
+                        raise
                     pasted_records.append((None, dest))
+                    if backup_dest:
+                        replaced_backups.append((dest, backup_dest))
                 success += 1
                 last_name = os.path.basename(dest)
             except Exception as e:
@@ -1595,6 +1610,7 @@ class EasyDateienApp:
                                 c += 1
                             shutil.move(dest_p, trash_dest)
                             reverted += 1
+                            self._restore_backup(backups.get(dest_p), dest_p)
                 self.refresh_items(force=True)
                 self.set_status(f"Rückgängig: Einfügen von {reverted} Element(en) zurückgesetzt", "success")
         except Exception as e:
@@ -2914,7 +2930,7 @@ class EasyDateienApp:
                                 filtered_sources.append(s)
                         else:
                             filtered_sources.append(s)
-                    self._perform_paste(filtered_sources)
+                    self._perform_paste(filtered_sources, allow_replace=True)
                 return True
             elif key in ("a", "A"):
                 # Alle Dateien ersetzen
@@ -2922,7 +2938,7 @@ class EasyDateienApp:
                     self.conflict_resolution[d] = "replace"
                 self.conflicts_to_resolve = []
                 sources = list(self.clipboard_paths) if self.clipboard_paths else get_macos_clipboard_files()
-                self._perform_paste(sources)
+                self._perform_paste(sources, allow_replace=True)
                 return True
             elif key in ("n", "N"):
                 # Aktuelle Datei überspringen
@@ -2942,7 +2958,7 @@ class EasyDateienApp:
                                 filtered_sources.append(s)
                         else:
                             filtered_sources.append(s)
-                    self._perform_paste(filtered_sources)
+                    self._perform_paste(filtered_sources, allow_replace=True)
                 return True
             else:
                 # Abbrechen
