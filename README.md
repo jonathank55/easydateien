@@ -78,6 +78,7 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
 - **Gehe-zu-Schnellnavigation (`g`):**  
   - `g d`: Downloads (`~/Downloads`)  
   - `g f`: Dokumente (`~/Documents`)  
+  - `g -`: Gemerkter Ordner — zuvor mit `-` gemerkt; ohne gemerkten Ordner springt `g -` zum zuletzt verwendeten Ordner  
   - `g h` / `~`: Benutzerordner (`~`)  
   - `g t`: Papierkorb (`~/.Trash`)  
   - `g i`: Pfad manuell eingeben  
