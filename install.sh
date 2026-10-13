@@ -98,6 +98,13 @@ else
     echo "Bestehende Konfiguration in $CONFIG_DIR/config.json bleibt unberührt."
 fi
 
+# Verwaiste Reste aus älteren Installationen entfernen (config.example.json
+# wurde zu config.json umbenannt; alte Kopien werden nicht mehr gelesen)
+if [ -f "$CONFIG_DIR/config.example.json" ]; then
+    rm -f "$CONFIG_DIR/config.example.json"
+    echo "Verwaiste Datei entfernt: $CONFIG_DIR/config.example.json"
+fi
+
 # 4. Ausführbares Programm verlinken
 for TARGET_BIN in "$HOME/.local/bin" "$HOME/bin"; do
     if [ -d "$TARGET_BIN" ]; then
