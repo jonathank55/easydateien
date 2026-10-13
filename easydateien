@@ -2579,8 +2579,6 @@ class EasyDateienApp:
                 f"[t] Papierkorb",
                 f"[i] Pfad manuell eingeben",
                 f"[p] Pfad aus Zwischenablage",
-                "",
-                f"[ESC / q] Zurück",
             ]
             target_w = min(term_cols - 4, 46)
             if target_w >= 24 and term_rows >= 8:
@@ -2596,7 +2594,7 @@ class EasyDateienApp:
                         all_lines[r_pos] = replace_ansi_range(all_lines[r_pos], start_x, bl, box_w, term_cols)
 
         elif self.active_dialog == "help_menu":
-            help_items = build_help_items(self.keybindings) + ["", "[ESC / q] Zurück"]
+            help_items = build_help_items(self.keybindings)
             border_overhead = (1 if has_top_border else 0) + (1 if has_bottom_border else 0) + (1 if has_status_bar else 0) + 1
             max_box_h = max(6, term_rows - border_overhead - 2)
             target_box_w = min(term_cols - 4, 72)
