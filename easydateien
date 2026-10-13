@@ -1010,8 +1010,11 @@ class EasyDateienApp:
         return changed
 
     def enter_directory(self, new_path: str):
-        """Wechselt in einen Ordner und setzt Cursor, Ansicht und Filter zurück."""
+        """Wechselt in einen Ordner und setzt Cursor, Ansicht und Filter zurück.
+        Eine zuvor gemerkte Zeigerposition des Zielordners wird wiederhergestellt."""
         new_path = os.path.abspath(new_path)
+        if new_path != self.current_dir:
+            self.dir_cursor_memory[self.current_dir] = self.selected_idx
         self.current_dir = new_path
         self.items = []
         self.selected_idx = 0
@@ -1019,6 +1022,9 @@ class EasyDateienApp:
         if self.filter_query:
             self.filter_query = ""
         self.refresh_items()
+        remembered_idx = self.dir_cursor_memory.get(self.current_dir)
+        if remembered_idx is not None and self.items:
+            self.selected_idx = max(0, min(remembered_idx, len(self.items) - 1))
 
     def touch_last_used_dir(self):
         """Merkt den aktuellen Ordner als 'zuletzt verwendet' — wird von Aktionen aufgerufen,

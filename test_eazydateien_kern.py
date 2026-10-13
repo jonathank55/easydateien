@@ -165,6 +165,23 @@ class TestAppKern(unittest.TestCase):
         self.app.handle_dialog_key("-", None)
         self.assertEqual(self.app.current_dir, self.dir_a)
 
+    def test_zeigerposition_wird_bei_g_sprung_wiederhergestellt(self):
+        for i, it in enumerate(self.app.items):
+            if it.name == "datei.txt":
+                self.app.selected_idx = i
+                break
+        self.app.marked_dir = self.dir_a
+        self.app.enter_directory(self.dir_b)
+        self.app.active_dialog = "goto_menu"
+        self.app.handle_dialog_key("-", None)
+        self.assertEqual(self.app.current_dir, self.dir_a)
+        self.assertEqual(self.app.items[self.app.selected_idx].name, "datei.txt")
+
+    def test_zeigerposition_wird_beim_verlassen_gespeichert(self):
+        self.app.selected_idx = 0
+        self.app.enter_directory(self.dir_b)
+        self.assertEqual(self.app.dir_cursor_memory.get(self.dir_a), 0)
+
     def test_gemerkter_ordner_gilt_bis_neues_merken(self):
         self.app.marked_dir = self.dir_a
         self.app.marked_dir = self.dir_b
