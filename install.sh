@@ -30,6 +30,7 @@ mkdir -p "$CONFIG_DIR"
 
 echo "Verlinke Programmdateien nach $CONFIG_DIR..."
 ln -sf "$SCRIPT_DIR/easydateien" "$CONFIG_DIR/easydateien"
+ln -sf "$SCRIPT_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_common.py"
 ln -sf "$SCRIPT_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
 chmod +x "$SCRIPT_DIR/easydateien" "$SCRIPT_DIR/easydateien_konfigurator.py"
 

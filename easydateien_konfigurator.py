@@ -2,256 +2,46 @@
 """
 EasyDateien Konfigurator — Interaktive Konfigurations-Engine für EasyDateien.
 Single-Source-of-Truth & optimi-Norm konform.
+
+Alle geteilten Grundlagen (Breitenlogik, Kürzung, Tastenbelegungen,
+Konfigurationsdatei) stammen aus easydateien_common; dieses Modul enthält
+ausschließlich die Menüführung des Konfigurators.
 """
 
 import os
 import sys
-import json
 import termios
 import tty
 import select
 import shutil
 import argparse
-import unicodedata
-import re
-from functools import lru_cache
 
-CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
-CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+from easydateien_common import (
+    C_RESET,
+    C_BOLD,
+    DISABLE_AUTOWRAP,
+    ENABLE_AUTOWRAP,
+    DEFAULT_CONFIG,
+    KEY_BINDINGS,
+    CHORD_ACTIONS,
+    get_keybindings_from_config,
+    build_keymap,
+    char_width,
+    str_width,
+    truncate_to_width,
+    pad_to_width,
+    distribute_options,
+    fit_hints,
+    load_config,
+    save_config,
+)
 
-# Farbcodes - Farben deaktiviert, nur Formatierungen (Fett, Kursiv, Invertiert) beibehalten
-C_RESET = "\033[0m"
-C_BOLD = "\033[1m"
-C_DIM = "\033[2m"
-C_ITALIC = "\033[3m"
-C_BLUE = ""
-C_BOLD_BLUE = ""
-C_CYAN = ""
-C_BOLD_CYAN = ""
-C_GREEN = ""
-C_BOLD_GREEN = ""
-C_YELLOW = ""
-C_RED = ""
-C_BOLD_RED = ""
-C_MAGENTA = ""
-C_GRAY = ""
-C_INVERT = "\033[7m"
-
-DISABLE_AUTOWRAP = "\033[?7l"
-ENABLE_AUTOWRAP = "\033[?7h"
-
-ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
-
-DEFAULT_CONFIG = {
-    "divider_style": "alle",
-    "columns_enabled": True,
-    "esc_to_quit": False,
-    "mouse_support": False,
-    "show_console": False,
-    "console_position": "unten",
-    "console_always_visible": True,
-    "console_dynamic_height": True,
-    "preview_wrap": True,
-    "text_editor": "nano %s",
-    "opener": "open %s",
-    "sort_by": "name",
-    "sort_reverse": True,
-    "sort_dir_first": True,
-    "show_hidden": False,
-    "keybindings": None,
-}
-
-KEY_BINDINGS = [
-    ("Navigation & Ansicht", "up", "Nach oben", ("UP",), "Cursor nach oben bewegen"),
-    ("Navigation & Ansicht", "down", "Nach unten", ("DOWN",), "Cursor nach unten bewegen"),
-    ("Navigation & Ansicht", "left", "Zurück", ("LEFT",), "Übergeordneten Ordner öffnen"),
-    ("Navigation & Ansicht", "right", "Öffnen", ("RIGHT",), "Ordner betreten"),
-    ("Navigation & Ansicht", "page_up", "Seite hoch", ("PAGE_UP",), "10 Einträge nach oben blättern"),
-    ("Navigation & Ansicht", "page_down", "Seite runter", ("PAGE_DOWN",), "10 Einträge nach unten blättern"),
-    ("Navigation & Ansicht", "top", "Anfang", ("j",), "Zum Anfang der Liste springen"),
-    ("Navigation & Ansicht", "bottom", "Ende", ("k",), "Zum Ende der Liste springen"),
-    ("Navigation & Ansicht", "open", "Auswählen", ("ENTER",), "Mit Standardprogramm öffnen"),
-    ("Navigation & Ansicht", "goto", "Gehe zu", ("g",), "Gehe zu (Schnellzugriff auf Ordner)"),
-    ("Navigation & Ansicht", "home", "Start", ("~",), "Zum Benutzerordner springen"),
-    ("Navigation & Ansicht", "search", "Suchen", ("/",), "Dateien nach Suchbegriff filtern"),
-    ("Navigation & Ansicht", "hidden", "Versteckt", (".",), "Versteckte Dateien ein-/ausblenden"),
-    ("Navigation & Ansicht", "sort", "Sortieren", ("s",), "Sortierung wechseln"),
-    ("Navigation & Ansicht", "console", "Konsole", ("t",), "Integrierte Konsole öffnen/schließen"),
-    ("Navigation & Ansicht", "console_focus", "Fokus", ("TAB",), "Fokus auf die Konsole setzen"),
-    ("Dateioperationen", "select", "Markieren", ("SPACE",), "Element markieren/Markierung aufheben"),
-    ("Dateioperationen", "select_all", "Alle", ("a",), "Alle sichtbaren Elemente markieren"),
-    ("Dateioperationen", "new", "Neu", ("n",), "Neue Datei oder Ordner (mit / am Ende)"),
-    ("Dateioperationen", "rename", "Umbenennen", ("r",), "Element umbenennen"),
-    ("Dateioperationen", "trash", "Löschen", ("d",), "In den Papierkorb verschieben"),
-    ("Dateioperationen", "copy", "Kopieren", ("c",), "Auswahl kopieren"),
-    ("Dateioperationen", "cut", "Ausschneiden", ("x",), "Auswahl ausschneiden"),
-    ("Dateioperationen", "paste", "Einfügen", ("p",), "In aktuellen Ordner einfügen"),
-    ("Dateioperationen", "copy_path", "Pfad", ("c",), "Kopieren: cc Pfad · cf Name · cd Ordnerpfad"),
-    ("Dateioperationen", "zip", "Zip", ("z",), "ZIP-Archiv aus Auswahl erstellen"),
-    ("Dateioperationen", "extract", "Entpacken", ("e",), "ZIP-Archiv entpacken"),
-    ("Dateioperationen", "edit", "Bearbeiten", ("o",), "Im Editor bearbeiten"),
-    ("Dateioperationen", "undo", "Rückgängig", ("u",), "Letzte Dateiaktion rückgängig machen"),
-    ("Verwaltung", "help", "Hilfe", ("h",), "Diese Hilfe anzeigen"),
-    ("Verwaltung", "menu", "Menü", ("m",), "Einstellungen öffnen (u. a. Texteditor)"),
-    ("Verwaltung", "cancel", "Abbrechen", ("ESC", "CTRL_C"), "Konsole schließen, Filter/Auswahl aufheben"),
-    ("Verwaltung", "quit", "Beenden", ("q",), "EasyDateien beenden"),
+# Kompatibilitäts-Re-Exports: Der Dateimanager und externe Aufrufe können diese
+# Namen weiterhin von hier importieren.
+__all__ = [
+    "KEY_BINDINGS", "build_keymap", "fit_hints", "CHORD_ACTIONS",
+    "load_config", "save_config", "DEFAULT_CONFIG", "run_konfigurator",
 ]
-
-CHORD_ACTIONS = {
-    "copy_path": ("c", ("cc", "cf", "cd")),
-}
-
-# Cache für ANSI-Escape-Code-Entfernung
-@lru_cache(maxsize=1024)
-def strip_ansi(text: str) -> str:
-    return ANSI_ESCAPE_RE.sub("", text)
-
-# Cache für String-Breitenberechnung
-@lru_cache(maxsize=1024)
-def str_width(text: str) -> int:
-    clean = strip_ansi(text)
-    return sum(char_width(c) for c in clean)
-
-def char_width(c: str) -> int:
-    if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
-        return 0
-    eaw = unicodedata.east_asian_width(c)
-    if eaw in ("W", "F"):
-        return 2
-    cp = ord(c)
-    if (0x1F300 <= cp <= 0x1FAFF) or (0x2600 <= cp <= 0x27BF) or (0xFE00 <= cp <= 0xFE0F):
-        return 2
-    return 1
-
-def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
-    if max_w <= 0:
-        return ""
-    if str_width(text) <= max_w:
-        return text
-    e_w = str_width(ellipsis)
-    target_w = max(0, max_w - e_w)
-    res = []
-    w = 0
-    i = 0
-    n = len(text)
-    has_ansi = False
-    while i < n:
-        if text[i] == "\x1b":
-            m = ANSI_ESCAPE_RE.match(text, i)
-            if m:
-                res.append(m.group(0))
-                has_ansi = True
-                i = m.end()
-                continue
-        c = text[i]
-        cw = char_width(c)
-        if w + cw > target_w:
-            break
-        res.append(c)
-        w += cw
-        i += 1
-    res_str = "".join(res)
-    if has_ansi:
-        return f"{res_str}{C_RESET}{ellipsis}"
-    return f"{res_str}{ellipsis}"
-
-def pad_to_width(text: str, width: int, align: str = "left") -> str:
-    w = str_width(text)
-    if w > width:
-        clean = strip_ansi(text)
-        return truncate_to_width(clean, width)
-    pad = " " * (width - w)
-    return (pad + text) if align == "right" else (text + pad)
-
-# Cache für distribute_options
-@lru_cache(maxsize=64)
-def distribute_options_cached(items: tuple, avail_w: int) -> str:
-    clean_items = [it.strip() for it in items if it and it.strip()]
-    if not clean_items:
-        return ""
-    if len(clean_items) == 1:
-        it = clean_items[0]
-        it_w = str_width(it)
-        if it_w > avail_w:
-            return truncate_to_width(it, avail_w)
-        return it
-
-    total_items_w = sum(str_width(it) for it in clean_items)
-    num_gaps = len(clean_items) - 1
-
-    if total_items_w + num_gaps > avail_w:
-        combined = " ".join(clean_items)
-        if str_width(combined) <= avail_w:
-            return combined
-        return truncate_to_width(combined, avail_w)
-
-    remaining_spaces = avail_w - total_items_w
-    base_gap = remaining_spaces // num_gaps
-    extra = remaining_spaces % num_gaps
-
-    parts = []
-    for i, it in enumerate(clean_items):
-        parts.append(it)
-        if i < num_gaps:
-            gap_len = base_gap + (1 if i < extra else 0)
-            parts.append(" " * gap_len)
-
-    return "".join(parts)
-
-def distribute_options(items: list, avail_w: int) -> str:
-    return distribute_options_cached(tuple(items), avail_w)
-
-def fit_hints(items: list, avail_w: int) -> str:
-    if avail_w <= 0 or not items:
-        return ""
-    norm = []
-    for it in items:
-        if isinstance(it, (tuple, list)):
-            variants = [v for v in it if v]
-            while len(variants) < 3:
-                variants.append(variants[-1])
-            norm.append(tuple(variants[:3]))
-        else:
-            norm.append((it, it, it))
-    for n in range(len(norm), 0, -1):
-        for v in range(3):
-            cand = [norm[i][v] for i in range(n)]
-            if n < len(norm):
-                cand.append("…")
-            gap = 2 if v < 2 else 1
-            if sum(str_width(c) for c in cand) + gap * (len(cand) - 1) <= avail_w:
-                return distribute_options(cand, avail_w)
-    return truncate_to_width(norm[0][2], avail_w)
-
-def get_keybindings_from_config(cfg: dict) -> list:
-    """Lädt die Tastenbelegungen aus der Konfiguration oder verwendet Standardwerte."""
-    custom_bindings = cfg.get("keybindings")
-    if custom_bindings is None:
-        return KEY_BINDINGS
-    result = []
-    for item in custom_bindings:
-        if isinstance(item, list):
-            section, action, disp, keys, desc = item
-            result.append((section, action, disp, tuple(keys) if isinstance(keys, list) else keys, desc))
-        else:
-            result.append(item)
-    return result
-
-def build_keymap(cfg: dict = None) -> dict:
-    """Erzeugt die Zuordnung Taste → Aktions-ID und lehnt Doppelbelegungen strikt ab."""
-    bindings = get_keybindings_from_config(cfg) if cfg else KEY_BINDINGS
-    keymap = {}
-    for _section, action, _disp, keys, _desc in bindings:
-        chord = CHORD_ACTIONS.get(action)
-        if chord and chord[0] in keys:
-            eff_keys = tuple(k for k in keys if k != chord[0]) + chord[1]
-        else:
-            eff_keys = keys
-        for k in eff_keys:
-            if k in keymap:
-                raise ValueError(f"Tastenkonflikt: '{k}' ist doppelt belegt ({keymap[k]} / {action})")
-            keymap[k] = action
-    return keymap
 
 KEYBINDING_ITEMS = [(action, desc, f"[{disp}]") for _s, action, disp, _k, desc in KEY_BINDINGS] + [
     ("reset", "Auf Standardwerte zurücksetzen", "[standard]"),
@@ -274,11 +64,13 @@ MAIN_MENU_ITEMS = [
 
 EDITOR_CHOICES = ["nano", "vim", "nvim", "micro", "hx", "emacs -nw"]
 
+
 def editor_command(cfg: dict) -> str:
     """Liefert den konfigurierten Editor ohne %s-Platzhalter (z. B. 'nano')."""
     tmpl = str(cfg.get("text_editor", "nano %s") or "nano %s")
     cmd = tmpl.replace("%s", "").strip()
     return cmd or "nano"
+
 
 def cycle_editor(cfg: dict, step: int = 1) -> str:
     """Schaltet den Texteditor in der Konfiguration um und liefert den neuen Befehl."""
@@ -290,23 +82,8 @@ def cycle_editor(cfg: dict, step: int = 1) -> str:
     cfg["text_editor"] = f"{nxt} %s"
     return nxt
 
-def load_config() -> dict:
-    cfg = dict(DEFAULT_CONFIG)
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                cfg.update(json.load(f))
-        except Exception:
-            pass
-    return cfg
-
-def save_config(cfg: dict):
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-
 def read_key(fd: int, timeout: float = 0.05) -> str:
+    """Liest Tastatur- und Maus-Events (vereinfachter Zeichensatz des Konfigurators)."""
     try:
         r, _, _ = select.select([fd], [], [], timeout)
         if not r:
@@ -369,15 +146,22 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
     except Exception:
         return ""
 
-# Globale Variable für partielles Rendering
-_last_render_state = {
-    "start": 0,
-    "count": 0,
-    "rows": [],
-    "cur_idx": 0,
-    "term_cols": 0,
-    "term_rows": 0
-}
+def clicked_row(k: str, start: int, count: int) -> "int | None":
+    """Liefert bei einem Mausklick den Index der geklickten Menüzeile, sonst None.
+
+    Der Menüinhalt beginnt in Zeile 6 des Terminalfensters (Rahmen und
+    Kopfzeile belegen die Zeilen 1 bis 5), daher Offset 5.
+    """
+    if not k.startswith("CLICK:"):
+        return None
+    try:
+        _, _cx_s, cy_s = k.split(":")
+        row_i = int(cy_s) - 5
+    except Exception:
+        return None
+    if 0 <= row_i < count:
+        return start + row_i
+    return None
 
 def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str):
     term_cols, term_rows = shutil.get_terminal_size((80, 24))
@@ -385,56 +169,6 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     fixed_h = 7
     avail_rows = max(1, term_rows - fixed_h)
 
-    # Prüfe, ob sich nur die Auswahl geändert hat (partielles Rendering)
-    if (_last_render_state["rows"] == rows and
-        _last_render_state["cur_idx"] != cur_idx and
-        _last_render_state["term_cols"] == term_cols and
-        _last_render_state["term_rows"] == term_rows):
-
-        # Nur die alte und neue Auswahl neu zeichnen
-        old_idx = _last_render_state["cur_idx"]
-        start = _last_render_state["start"]
-        count = _last_render_state["count"]
-
-        # Alte Auswahl zurücksetzen
-        if 0 <= old_idx - start < count:
-            i = old_idx - start
-            key, label, tag = rows[old_idx]
-            pfx = "  "
-            avail_lbl = max(2, inner - 4 - str_width(tag) - 2)
-            lbl_trunc = truncate_to_width(label, avail_lbl)
-            pad_len = max(1, inner - 2 - str_width(pfx) - str_width(lbl_trunc) - str_width(tag))
-            content_row = f" {pfx}{lbl_trunc}{' ' * pad_len}{tag} "
-            sys.stdout.write(f"\033[{5 + i};1H\033[2K│{pad_to_width(content_row, inner)}│")
-
-        # Neue Auswahl zeichnen
-        if 0 <= cur_idx - start < count:
-            i = cur_idx - start
-            key, label, tag = rows[cur_idx]
-            pfx = f"{C_BOLD}▸{C_RESET} "
-            if tag in ("[Ein]", "Ein"):
-                tag_colored = f"{C_BOLD}{tag}{C_RESET}"
-            elif tag in ("[Aus]", "Aus"):
-                tag_colored = tag
-            else:
-                tag_colored = tag
-            avail_lbl = max(2, inner - 4 - str_width(tag) - 2)
-            lbl_trunc = truncate_to_width(label, avail_lbl)
-            lbl_styled = f"{C_BOLD}{lbl_trunc}{C_RESET}"
-            pad_len = max(1, inner - 2 - str_width(pfx) - str_width(lbl_trunc) - str_width(tag))
-            content_row = f" {pfx}{lbl_styled}{' ' * pad_len}{tag_colored} "
-            sys.stdout.write(f"\033[{5 + i};1H\033[2K│{pad_to_width(content_row, inner)}│")
-            sys.stdout.flush()
-
-        _last_render_state.update({
-            "cur_idx": cur_idx,
-            "rows": rows,
-            "term_cols": term_cols,
-            "term_rows": term_rows
-        })
-        return start, count
-
-    # Vollständiges Rendering (falls sich Layout oder Inhalt geändert hat)
     if len(rows) > avail_rows:
         start = max(0, min(cur_idx - avail_rows // 2, len(rows) - avail_rows))
         view_rows = rows[start: start + avail_rows]
@@ -451,15 +185,18 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
     lines.append(f"├{'─' * inner}┤")
 
     for i, (key, label, tag) in enumerate(view_rows):
-        is_sel = (start + i == cur_idx)
+        actual_idx = start + i
+        is_sel = (actual_idx == cur_idx)
         pfx = f"{C_BOLD}▸{C_RESET} " if is_sel else "  "
 
         if tag in ("[Ein]", "Ein"):
             tag_colored = f"{C_BOLD}{tag}{C_RESET}"
         elif tag in ("[Aus]", "Aus"):
             tag_colored = tag
-        else:
+        elif tag:
             tag_colored = tag
+        else:
+            tag_colored = ""
 
         avail_lbl = max(2, inner - 4 - str_width(tag) - 2)
         lbl_trunc = truncate_to_width(label, avail_lbl)
@@ -488,35 +225,47 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         out.append(f"\033[{r_i+1};1H\033[2K{l}")
     sys.stdout.write("".join(out))
     sys.stdout.flush()
-
-    _last_render_state.update({
-        "start": start,
-        "count": len(view_rows),
-        "rows": rows,
-        "cur_idx": cur_idx,
-        "term_cols": term_cols,
-        "term_rows": term_rows
-    })
     return start, len(view_rows)
+
+def _bindings_valid(bindings: list) -> bool:
+    """Prüft eine Belegungsliste auf Doppelbelegungen, ohne die Konfiguration zu ändern."""
+    try:
+        build_keymap({"keybindings": [
+            [section, action, disp, list(keys), desc]
+            for section, action, disp, keys, desc in bindings
+        ]})
+        return True
+    except ValueError:
+        return False
 
 def edit_keybindings_menu(fd: int):
     """Interaktives Menü zum Anpassen der Tastenbelegungen."""
     cfg = load_config()
 
+    # Aktuelle Tastenbelegungen laden oder Standard verwenden
     current_bindings = get_keybindings_from_config(cfg)
+
+    # Umwandeln in eine bearbeitbare Struktur
+    # Jede Aktion: (Abschnitt, Aktions-ID, Anzeige, Tasten-Tokens, Beschreibung)
     editable_bindings = list(current_bindings)
 
-    def save_editable_bindings():
+    def save_editable_bindings() -> bool:
+        # Speichert nur, wenn die Belegungen konfliktfrei sind; ein Konflikt
+        # würde sonst den Start des Dateimanagers verhindern.
+        if not _bindings_valid(editable_bindings):
+            return False
         json_bindings = []
         for section, action, disp, keys, desc in editable_bindings:
             json_bindings.append([section, action, disp, list(keys), desc])
         cfg["keybindings"] = json_bindings
         save_config(cfg)
+        return True
 
     idx = 0
     status_hint = ""
 
     while True:
+        # Menüeinträge vorbereiten: (key, label, value)
         binding_rows = []
         for section, action, disp, keys, desc in editable_bindings:
             keys_str = ", ".join(keys)
@@ -553,30 +302,31 @@ def edit_keybindings_menu(fd: int):
         elif k in ("PAGE_DOWN",):
             idx = min(len(binding_rows) - 1, idx + 8)
         elif k in ("ESC", "q"):
-            save_editable_bindings()
+            if not save_editable_bindings():
+                status_hint = f"{C_BOLD}✗ Nicht gespeichert: Doppelte Taste wäre unbrauchbar{C_RESET}"
+                continue
             break
-        elif k.startswith("CLICK:"):
-            try:
-                _, cx_s, cy_s = k.split(":")
-                row_i = int(cy_s) - 5
-                if 0 <= row_i < count:
-                    idx = start + row_i
-            except Exception:
-                pass
+        else:
+            click = clicked_row(k, start, count)
+            if click is not None:
+                idx = click
             continue
 
         if k in ("ENTER", "SPACE", "RIGHT"):
             selected_action = binding_rows[idx][0]
 
             if selected_action == "reset":
+                # Zurück auf Standard
                 editable_bindings = list(KEY_BINDINGS)
                 status_hint = f"{C_BOLD}✓ Tastenbelegungen zurückgesetzt{C_RESET}"
 
             elif selected_action == "back":
-                save_editable_bindings()
+                if not save_editable_bindings():
+                    status_hint = f"{C_BOLD}✗ Nicht gespeichert: Doppelte Taste wäre unbrauchbar{C_RESET}"
                 break
 
             else:
+                # Tastenbelegung für diese Aktion bearbeiten
                 for i, (section, action, disp, keys, desc) in enumerate(editable_bindings):
                     if action == selected_action:
                         render_box(
@@ -587,6 +337,7 @@ def edit_keybindings_menu(fd: int):
                             [("Aktuell:", ", ".join(keys), "")]
                         )
 
+                        # Warten auf neue Tastenbelegung
                         new_key = ""
                         while True:
                             key_press = read_key(fd)
@@ -597,24 +348,32 @@ def edit_keybindings_menu(fd: int):
                                 break
 
                         if new_key:
-                            editable_bindings[i] = (section, action, disp, [new_key], desc)
-                            status_hint = f"{C_BOLD}✓ '{disp}' auf [{new_key}] gesetzt{C_RESET}"
+                            trial = list(editable_bindings)
+                            trial[i] = (section, action, disp, [new_key], desc)
+                            if _bindings_valid(trial):
+                                editable_bindings = trial
+                                status_hint = f"{C_BOLD}✓ '{disp}' auf [{new_key}] gesetzt{C_RESET}"
+                            else:
+                                status_hint = f"{C_BOLD}✗ [{new_key}] ist bereits belegt{C_RESET}"
                         break
+
 
 def sort_menu(fd: int):
     cfg = load_config()
     idx = 0
     status_hint = ""
 
+    # Verfügbare Sortieroptionen
     sort_options = [
         ("name", "Name (alphabetisch)", "Nach Dateinamen sortieren"),
         ("mtime", "Änderungsdatum", "Nach Modifikationszeit sortieren"),
-        ("atime", "Zugiffsdatum", "Nach Zugiffszeit sortieren"),
+        ("atime", "Zugangsdatum", "Nach Zugriffszeit sortieren"),
         ("size", "Größe", "Nach Dateigröße sortieren"),
         ("ext", "Endung", "Nach Dateiendung sortieren"),
     ]
 
     while True:
+        # Aktuelle Einstellungen anzeigen
         current_sort = cfg.get("sort_by", "mtime")
         reverse_state = "normal" if cfg.get("sort_reverse", False) else "umgekehrt"
         dir_first_state = "ordner zuerst" if cfg.get("sort_dir_first", True) else "gemischt"
@@ -624,6 +383,7 @@ def sort_menu(fd: int):
             marker = "* " if key == current_sort else "  "
             sort_rows.append((key, f"{marker}{lbl}", ""))
 
+        # Zusätzliche Optionen für Sortierverhalten
         sort_rows.append(("reverse", f"  Sortierreihenfolge: [{reverse_state}]", ""))
         sort_rows.append(("dir_first", f"  Ordnerposition: [{dir_first_state}]", ""))
 
@@ -656,28 +416,28 @@ def sort_menu(fd: int):
             idx = min(len(sort_rows) - 1, idx + 8)
         elif k in ("ESC", "q", "LEFT"):
             break
-        elif k.startswith("CLICK:"):
-            try:
-                _, cx_s, cy_s = k.split(":")
-                row_i = int(cy_s) - 5
-                if 0 <= row_i < count:
-                    idx = start + row_i
-            except Exception:
-                pass
+        else:
+            click = clicked_row(k, start, count)
+            if click is not None:
+                idx = click
             continue
 
         if k in ("ENTER", "SPACE", "RIGHT"):
             selected_key = sort_rows[idx][0]
             if selected_key in [s[0] for s in sort_options]:
+                # Sortierkriterium ändern
                 cfg["sort_by"] = selected_key
                 save_config(cfg)
                 status_hint = f"{C_BOLD}✓ Sortierung nach {sort_rows[idx][1].split('] ')[-1]}{C_RESET}"
             elif selected_key == "reverse":
+                # Sortierreihenfolge umschalten
                 cfg["sort_reverse"] = not cfg.get("sort_reverse", True)
                 save_config(cfg)
             elif selected_key == "dir_first":
+                # Ordner-zuerst-Einstellung umschalten
                 cfg["sort_dir_first"] = not cfg.get("sort_dir_first", True)
                 save_config(cfg)
+
 
 def keybindings_menu(fd: int):
     idx = 0
@@ -702,20 +462,49 @@ def keybindings_menu(fd: int):
             idx = min(len(KEYBINDING_ITEMS) - 1, idx + 8)
         elif k in ("ESC", "q", "LEFT"):
             break
-        elif k.startswith("CLICK:"):
-            try:
-                _, cx_s, cy_s = k.split(":")
-                row_i = int(cy_s) - 5
-                if 0 <= row_i < count:
-                    idx = start + row_i
-            except Exception:
-                pass
+        else:
+            click = clicked_row(k, start, count)
+            if click is not None:
+                idx = click
             continue
         if k in ("ENTER", "SPACE"):
             act = KEYBINDING_ITEMS[idx][0]
             if act == "reset":
                 save_config(dict(DEFAULT_CONFIG))
                 break
+
+
+# Datengesteuerte Wertanzeige des Hauptmenüs: Jede Option bestimmt ihren
+# angezeigten Wert über eine Funktion; neue Optionen erfordern genau eine Zeile.
+MENU_VALUE_RENDERERS = {
+    "divider": lambda cfg: f"[{cfg.get('divider_style', 'alle')}]",
+    "columns": lambda cfg: f"[{'ein' if cfg.get('columns_enabled', True) else 'aus'}]",
+    "mouse": lambda cfg: f"[{'ein' if cfg.get('mouse_support', True) else 'aus'}]",
+    "hidden": lambda cfg: f"[{'ein' if cfg.get('show_hidden', False) else 'aus'}]",
+    "console_always_visible": lambda cfg: f"[{'ein' if cfg.get('console_always_visible', False) else 'aus'}]",
+    "console_dynamic_height": lambda cfg: f"[{'ein' if cfg.get('console_dynamic_height', True) else 'aus'}]",
+    "console_position": lambda cfg: f"[{cfg.get('console_position', 'unten')}]",
+    "preview_wrap": lambda cfg: f"[{'ein' if cfg.get('preview_wrap', True) else 'aus'}]",
+    "sort": lambda cfg: "[öffnen]",
+    "editor": lambda cfg: f"[{editor_command(cfg)}]",
+    "keybindings": lambda cfg: "[öffnen]",
+    "reset": lambda cfg: "[standard]",
+}
+
+# Umschalt- und Rotationsaktionen des Hauptmenüs (datengetrieben)
+_DIVIDER_STYLES = ["alle", "vertikal", "horizontal", "außen", "keine"]
+_CONSOLE_POSITIONS = ["unten", "rechts", "links"]
+
+
+def _cycle_option(cfg: dict, key: str, options: list, step: int) -> None:
+    cur = cfg.get(key, options[0])
+    cur_i = options.index(cur) if cur in options else 0
+    cfg[key] = options[(cur_i + step) % len(options)]
+
+
+def _toggle_option(cfg: dict, key: str, default: bool) -> None:
+    cfg[key] = not cfg.get(key, default)
+
 
 def main_menu(fd: int):
     cfg = load_config()
@@ -724,33 +513,7 @@ def main_menu(fd: int):
     while True:
         rows = []
         for key, lbl, _ in MAIN_MENU_ITEMS:
-            if key == "divider":
-                val = f"[{cfg.get('divider_style', 'alle')}]"
-            elif key == "columns":
-                val = f"[{'ein' if cfg.get('columns_enabled', True) else 'aus'}]"
-            elif key == "mouse":
-                val = f"[{'ein' if cfg.get('mouse_support', True) else 'aus'}]"
-            elif key == "hidden":
-                val = f"[{'ein' if cfg.get('show_hidden', False) else 'aus'}]"
-            elif key == "console_always_visible":
-                val = f"[{'ein' if cfg.get('console_always_visible', False) else 'aus'}]"
-            elif key == "console_dynamic_height":
-                val = f"[{'ein' if cfg.get('console_dynamic_height', True) else 'aus'}]"
-            elif key == "console_position":
-                val = f"[{cfg.get('console_position', 'unten')}]"
-            elif key == "preview_wrap":
-                val = f"[{'ein' if cfg.get('preview_wrap', True) else 'aus'}]"
-            elif key == "sort":
-                val = "[öffnen]"
-            elif key == "editor":
-                val = f"[{editor_command(cfg)}]"
-            elif key == "keybindings":
-                val = "[öffnen]"
-            elif key == "reset":
-                val = "[standard]"
-            else:
-                val = ""
-            rows.append((key, lbl, val))
+            rows.append((key, lbl, MENU_VALUE_RENDERERS[key](cfg)))
 
         footer_text = status_hint if status_hint else [
             ("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"),
@@ -775,49 +538,37 @@ def main_menu(fd: int):
             idx = min(len(rows) - 1, idx + 1)
         elif k in ("ESC", "q"):
             break
-        elif k.startswith("CLICK:"):
-            try:
-                _, cx_s, cy_s = k.split(":")
-                row_i = int(cy_s) - 5
-                if 0 <= row_i < count:
-                    idx = start + row_i
-            except Exception:
-                pass
+        else:
+            click = clicked_row(k, start, count)
+            if click is not None:
+                idx = click
             continue
 
         if k in ("ENTER", "SPACE", "RIGHT", "LEFT"):
             act = rows[idx][0]
             if act == "divider":
-                opts = ["alle", "vertikal", "horizontal", "außen", "keine"]
-                cur = cfg.get("divider_style", "alle")
-                cur_i = opts.index(cur) if cur in opts else 0
-                step = -1 if k == "LEFT" else 1
-                cfg["divider_style"] = opts[(cur_i + step) % len(opts)]
+                _cycle_option(cfg, "divider_style", _DIVIDER_STYLES, -1 if k == "LEFT" else 1)
                 save_config(cfg)
             elif act == "columns":
-                cfg["columns_enabled"] = not cfg.get("columns_enabled", True)
+                _toggle_option(cfg, "columns_enabled", True)
                 save_config(cfg)
             elif act == "mouse":
-                cfg["mouse_support"] = not cfg.get("mouse_support", True)
+                _toggle_option(cfg, "mouse_support", True)
                 save_config(cfg)
             elif act == "hidden":
-                cfg["show_hidden"] = not cfg.get("show_hidden", False)
+                _toggle_option(cfg, "show_hidden", False)
                 save_config(cfg)
             elif act == "console_always_visible":
-                cfg["console_always_visible"] = not cfg.get("console_always_visible", False)
+                _toggle_option(cfg, "console_always_visible", False)
                 save_config(cfg)
             elif act == "console_dynamic_height":
-                cfg["console_dynamic_height"] = not cfg.get("console_dynamic_height", True)
+                _toggle_option(cfg, "console_dynamic_height", True)
                 save_config(cfg)
             elif act == "console_position":
-                opts = ["unten", "rechts", "links"]
-                cur = cfg.get("console_position", "unten")
-                cur_i = opts.index(cur) if cur in opts else 0
-                step = -1 if k == "LEFT" else 1
-                cfg["console_position"] = opts[(cur_i + step) % len(opts)]
+                _cycle_option(cfg, "console_position", _CONSOLE_POSITIONS, -1 if k == "LEFT" else 1)
                 save_config(cfg)
             elif act == "preview_wrap":
-                cfg["preview_wrap"] = not cfg.get("preview_wrap", True)
+                _toggle_option(cfg, "preview_wrap", True)
                 save_config(cfg)
             elif act == "editor":
                 cycle_editor(cfg, -1 if k == "LEFT" else 1)

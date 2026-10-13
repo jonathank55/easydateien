@@ -18,117 +18,33 @@ import zipfile
 import re
 import argparse
 import stat
-import json
-import unicodedata
-import functools
 import shlex
 from typing import List, Dict, Set, Optional, Tuple
 
-from easydateien_konfigurator import KEY_BINDINGS, build_keymap, fit_hints
+from easydateien_common import (
+    build_keymap,
+    load_config,
+    ANSI_ESCAPE_RE,
+    C_RESET,
+    C_BOLD,
+    C_ITALIC,
+    C_INVERT,
+    HIDE_CURSOR,
+    SHOW_CURSOR,
+    DISABLE_AUTOWRAP,
+    ENABLE_AUTOWRAP,
+    char_width,
+    str_width,
+    truncate_to_width,
+    pad_to_width,
+    safe_text,
+    distribute_options,
+)
 
 HOME_DIR = os.path.expanduser("~")
 CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
-CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 CLIP_HELPER_PATH = os.path.join(CONFIG_DIR, "easydateien_clip")
 
-# Farbcodes - Farben deaktiviert, nur Formatierungen (Fett, Kursiv, Invertiert) beibehalten
-C_RESET = "\033[0m"
-C_BOLD = "\033[1m"
-C_DIM = "\033[2m"
-C_ITALIC = "\033[3m"
-C_BLUE = ""
-C_BOLD_BLUE = ""
-C_CYAN = ""
-C_BOLD_CYAN = ""
-C_GREEN = ""
-C_BOLD_GREEN = ""
-C_YELLOW = ""
-C_RED = ""
-C_BOLD_RED = ""
-C_MAGENTA = ""
-C_GRAY = ""
-C_INVERT = "\033[7m"
-
-CLEAR_LINE = "\033[2K"
-HIDE_CURSOR = "\033[?25l"
-SHOW_CURSOR = "\033[?25h"
-DISABLE_AUTOWRAP = "\033[?7l"
-ENABLE_AUTOWRAP = "\033[?7h"
-
-ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
-
-@functools.lru_cache(maxsize=8192)
-def char_width(c: str) -> int:
-    """Ermittelt die visuelle Terminal-Spaltenbreite eines einzelnen Zeichens."""
-    if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
-        return 0
-    eaw = unicodedata.east_asian_width(c)
-    if eaw in ("W", "F"):
-        return 2
-    cp = ord(c)
-    if 0x1F300 <= cp <= 0x1FAFF:
-        return 2
-    return 1
-
-@functools.lru_cache(maxsize=32768)
-def str_width(text: str) -> int:
-    """Berechnet die tatsächliche sichtbare Spaltenbreite eines Textes ohne ANSI-Codes."""
-    if "\x1b" in text:
-        text = ANSI_ESCAPE_RE.sub("", text)
-    if text.isascii() and text.isprintable():
-        return len(text)
-    return sum(char_width(c) for c in text)
-
-@functools.lru_cache(maxsize=32768)
-def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
-    """Kürzt Text deterministisch auf die maximale visuelle Terminalbreite unter Erhalt von ANSI-Codes."""
-    if max_w <= 0:
-        return ""
-    if str_width(text) <= max_w:
-        return text
-    e_w = str_width(ellipsis)
-    target_w = max(0, max_w - e_w)
-    res = []
-    w = 0
-    i = 0
-    n = len(text)
-    has_ansi = False
-    while i < n:
-        if text[i] == "\x1b":
-            m = ANSI_ESCAPE_RE.match(text, i)
-            if m:
-                res.append(m.group(0))
-                has_ansi = True
-                i = m.end()
-                continue
-        c = text[i]
-        cw = char_width(c)
-        if w + cw > target_w:
-            break
-        res.append(c)
-        w += cw
-        i += 1
-    res_str = "".join(res)
-    return f"{res_str}{ellipsis}"
-
-def pad_to_width(text: str, width: int, align: str = "left") -> str:
-    """Füllt formatierten Text exakt auf die gewünschte visuelle Terminalbreite auf."""
-    if width <= 0:
-        return ""
-    w = str_width(text)
-    if w > width:
-        clean = ANSI_ESCAPE_RE.sub("", text)
-        text = truncate_to_width(clean, width)
-        w = str_width(text)
-    pad = " " * max(0, width - w)
-    return (pad + text) if align == "right" else (text + pad)
-
-_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
-
-@functools.lru_cache(maxsize=8192)
-def safe_text(text: str) -> str:
-    """Ersetzt Steuerzeichen in Dateinamen, damit sie das Layout nie zerstören können."""
-    return _CONTROL_CHARS_RE.sub("?", text)
 
 def take_width(text: str, max_w: int) -> str:
     """Liefert das längste Präfix von text, das höchstens max_w Spalten belegt."""
@@ -396,42 +312,6 @@ def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tupl
     res.append(bot_line)
     return res, box_w
 
-def distribute_options(items: List[str], avail_w: int) -> str:
-    """Verteilt Steuerungsoptionen gleichmäßig über die gegebene Breite (Space-Between / Justified)."""
-    if not items or avail_w <= 0:
-        return ""
-    clean_items = [it.strip() for it in items if it and it.strip()]
-    if not clean_items:
-        return ""
-    if len(clean_items) == 1:
-        it = clean_items[0]
-        it_w = str_width(it)
-        if it_w > avail_w:
-            return truncate_to_width(it, avail_w)
-        return it
-
-    total_items_w = sum(str_width(it) for it in clean_items)
-    num_gaps = len(clean_items) - 1
-
-    if total_items_w + num_gaps > avail_w:
-        combined = " ".join(clean_items)
-        if str_width(combined) <= avail_w:
-            return combined
-        return truncate_to_width(combined, avail_w)
-
-    remaining_spaces = avail_w - total_items_w
-    base_gap = remaining_spaces // num_gaps
-    extra = remaining_spaces % num_gaps
-
-    parts = []
-    for i, it in enumerate(clean_items):
-        parts.append(it)
-        if i < num_gaps:
-            gap_len = base_gap + (1 if i < extra else 0)
-            parts.append(" " * gap_len)
-
-    return "".join(parts)
-
 def format_size(size_bytes: int) -> str:
     """Formatiert Byte-Größen nach standardisierten Einheiten."""
     if size_bytes < 1024:
@@ -628,7 +508,7 @@ class UndoAction:
         self.data = data
 
 class FileEntry:
-    __slots__ = ("name", "path", "is_dir", "is_symlink", "is_exec", "size", "mtime", "ext", "mode_str", "symlink_target", "is_broken")
+    __slots__ = ("name", "path", "is_dir", "is_symlink", "is_exec", "size", "mtime", "atime", "ext", "mode_str", "symlink_target", "is_broken")
 
     def __init__(self, path: str, name: str, dir_entry: Optional["os.DirEntry"] = None):
         self.path = path
@@ -639,6 +519,7 @@ class FileEntry:
         self.is_exec = False
         self.size = 0
         self.mtime = 0.0
+        self.atime = 0.0
         self.mode_str = "----------"
         self.symlink_target = ""
         _, self.ext = os.path.splitext(name)
@@ -650,6 +531,7 @@ class FileEntry:
                 self.is_symlink = os.path.islink(path)
                 st = os.stat(path, follow_symlinks=False)
             self.mtime = st.st_mtime
+            self.atime = st.st_atime
             self.mode_str = stat.filemode(st.st_mode)
             self.size = st.st_size
             if self.is_symlink:
@@ -737,6 +619,8 @@ def arrange_entries(
         entries.sort(key=lambda e: (e.size, natural_key(e.name)), reverse=sort_reverse)
     elif sort_by == "ext":
         entries.sort(key=lambda e: (e.ext.lower(), natural_key(e.name)))
+    elif sort_by == "atime":
+        entries.sort(key=lambda e: (e.atime, natural_key(e.name)), reverse=sort_reverse)
     else:
         entries.sort(key=lambda e: (e.mtime, natural_key(e.name)), reverse=sort_reverse)
     if sort_dir_first:
@@ -1003,22 +887,8 @@ class EasyDateienApp:
         self.refresh_items()
 
     def load_config(self) -> dict:
-        cfg = {
-            "divider_style": "alle", "columns_enabled": True,
-            "esc_to_quit": False, "mouse_support": False, "show_console": False,
-            "console_position": "unten", "console_always_visible": True,
-            "console_dynamic_height": True, "preview_wrap": True,
-            "text_editor": "nano %s", "opener": "open %s",
-            "sort_by": "name", "sort_reverse": True, "sort_dir_first": True,
-            "show_hidden": False,
-        }
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    cfg.update(json.load(f))
-            except Exception:
-                pass
-        return cfg
+        """Delegiert an die zentrale Konfigurationslogik (Single Source of Truth)."""
+        return load_config()
 
     def set_status(self, msg: str, level: str = "info"):
         self.status_message = msg
