@@ -1012,8 +1012,6 @@ class EasyDateienApp:
     def enter_directory(self, new_path: str):
         """Wechselt in einen Ordner und setzt Cursor, Ansicht und Filter zurück."""
         new_path = os.path.abspath(new_path)
-        if new_path != self.current_dir:
-            self.last_visited_dir = self.current_dir
         self.current_dir = new_path
         self.items = []
         self.selected_idx = 0
@@ -1021,6 +1019,11 @@ class EasyDateienApp:
         if self.filter_query:
             self.filter_query = ""
         self.refresh_items()
+
+    def touch_last_used_dir(self):
+        """Merkt den aktuellen Ordner als 'zuletzt verwendet' — wird von Aktionen aufgerufen,
+        nicht von der reinen Navigation."""
+        self.last_visited_dir = self.current_dir
 
     def change_directory(self, new_path: str):
         if os.path.isdir(new_path):
@@ -1113,6 +1116,7 @@ class EasyDateienApp:
     def toggle_select(self):
         if not self.items:
             return
+        self.touch_last_used_dir()
         item = self.items[self.selected_idx]
         if item.path in self.selected_paths:
             self.selected_paths.remove(item.path)
@@ -1129,6 +1133,7 @@ class EasyDateienApp:
         all_paths = {it.path for it in self.items}
         if not all_paths:
             return
+        self.touch_last_used_dir()
         if self.selected_paths.issuperset(all_paths):
             self.selected_paths.clear()
             self.set_status("Auswahl aufgehoben")
@@ -1139,6 +1144,7 @@ class EasyDateienApp:
     def cut_selection(self):
         if not self.items:
             return
+        self.touch_last_used_dir()
         cur_p = self.items[self.selected_idx].path
         if self.selected_paths:
             # Auswahl zur Vormerkung hinzufügen; bestehende Vormerkung bleibt erhalten (ohne ESC wird nichts aufgehoben)
@@ -1169,6 +1175,7 @@ class EasyDateienApp:
     def copy_selection(self):
         if not self.items:
             return
+        self.touch_last_used_dir()
         cur_p = self.items[self.selected_idx].path
         if self.selected_paths:
             # Auswahl zur Vormerkung hinzufügen; bestehende Vormerkung bleibt erhalten (ohne ESC wird nichts aufgehoben)
@@ -1201,6 +1208,7 @@ class EasyDateienApp:
         if not sources:
             self.set_status("Zwischenablage leer", "warning")
             return
+        self.touch_last_used_dir()
 
         # Prüfe auf Konflikte und frage nach Ersetzung
         conflicts = []
@@ -1392,6 +1400,7 @@ class EasyDateienApp:
         return dest
 
     def create_zip_archive(self):
+        self.touch_last_used_dir()
         """Erstellt ein ZIP-Archiv aus der Auswahl (oder dem Eintrag unter dem Cursor) und springt darauf."""
         targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
         if not targets:
@@ -1478,6 +1487,7 @@ class EasyDateienApp:
         return dest
 
     def extract_zip_archive(self):
+        self.touch_last_used_dir()
         """Entpackt markierte bzw. das ausgewählte ZIP-Archiv in einen neuen Ordner und springt darauf."""
         if not self.items:
             self.set_status("Keine Datei ausgewählt", "warning")
@@ -1524,6 +1534,7 @@ class EasyDateienApp:
         return last_dir
 
     def undo_last_action(self):
+        self.touch_last_used_dir()
         """Macht die letzte Dateioperation (Löschen, Umbenennen, Erstellen, Einfügen, ZIP) rückgängig."""
         if not self.undo_stack:
             self.set_status("Nichts zum Rückgängigmachen vorhanden", "info")
@@ -1776,6 +1787,7 @@ class EasyDateienApp:
         self.console_cursor_idx = 0
         if not cmd:
             return
+        self.touch_last_used_dir()
         self.console_cmd_history.append(cmd)
         self.console_history_idx = len(self.console_cmd_history)
         self.console_output_lines.append(f"$ {cmd}")
@@ -2583,7 +2595,7 @@ class EasyDateienApp:
             goto_items = [
                 f"[d]  Downloads",
                 f"[f]  Dokumente",
-                f"[-]  Gemerkter / zuletzt verwendeter Ordner",
+                f"[-]  Gemerkter Ordner (Fallback: zuletzt verwendet)",
                 f"[h]  Benutzerordner (~)",
                 f"[t]  Papierkorb",
                 f"[i]  Pfad manuell eingeben",
@@ -2978,7 +2990,7 @@ class EasyDateienApp:
                 target = self.marked_dir or self.last_visited_dir
                 if target and os.path.isdir(target):
                     self.change_directory(target)
-                    quelle = "gemerkter" if self.marked_dir else "zuletzt verwendeter"
+                    quelle = "gemerkten" if self.marked_dir else "zuletzt verwendeten"
                     self.set_status(f"Gehe zu {quelle} Ordner: {self.get_short_dir(target)}", "info")
                 else:
                     self.set_status("Kein gemerkter oder zuletzt verwendeter Ordner verfügbar", "warning")

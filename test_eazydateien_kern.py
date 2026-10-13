@@ -127,9 +127,16 @@ class TestAppKern(unittest.TestCase):
         self.app.go_parent_directory()
         self.assertEqual(self.app.current_dir, self.base)
 
-    def test_last_visited_dir_beim_wechsel(self):
+    def test_navigation_setzt_last_visited_nicht(self):
         self.app.enter_directory(self.dir_b)
+        self.assertIsNone(self.app.last_visited_dir)
+
+    def test_aktion_setzt_last_visited(self):
+        self.app.toggle_select()
         self.assertEqual(self.app.last_visited_dir, self.dir_a)
+        self.app.enter_directory(self.dir_b)
+        self.app.touch_last_used_dir()
+        self.assertEqual(self.app.last_visited_dir, self.dir_b)
 
     def test_markieren_und_g_sprung(self):
         self.app.marked_dir = self.app.current_dir
@@ -139,10 +146,32 @@ class TestAppKern(unittest.TestCase):
         self.assertEqual(self.app.current_dir, self.dir_a)
 
     def test_g_sprung_fallback_zuletzt_verwendet(self):
+        self.app.toggle_select()
         self.app.enter_directory(self.dir_b)
         self.app.active_dialog = "goto_menu"
         self.app.handle_dialog_key("-", None)
         self.assertEqual(self.app.current_dir, self.dir_a)
+
+    def test_gemerkter_ordner_hat_immer_vorrang(self):
+        self.app.marked_dir = self.dir_a
+        self.app.toggle_select()
+        self.app.enter_directory(self.dir_b)
+        self.app.touch_last_used_dir()
+        self.app.enter_directory(self.base)
+        self.app.active_dialog = "goto_menu"
+        self.app.handle_dialog_key("-", None)
+        self.assertEqual(self.app.current_dir, self.dir_a)
+        self.app.active_dialog = "goto_menu"
+        self.app.handle_dialog_key("-", None)
+        self.assertEqual(self.app.current_dir, self.dir_a)
+
+    def test_gemerkter_ordner_gilt_bis_neues_merken(self):
+        self.app.marked_dir = self.dir_a
+        self.app.marked_dir = self.dir_b
+        self.app.enter_directory(self.base)
+        self.app.active_dialog = "goto_menu"
+        self.app.handle_dialog_key("-", None)
+        self.assertEqual(self.app.current_dir, self.dir_b)
 
     def test_g_sprung_ohne_verfuegbaren_ordner(self):
         self.app.last_visited_dir = None

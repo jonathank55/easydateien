@@ -78,7 +78,7 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
 - **Gehe-zu-Schnellnavigation (`g`):**  
   - `g d`: Downloads (`~/Downloads`)  
   - `g f`: Dokumente (`~/Documents`)  
-  - `g -`: Gemerkter Ordner — zuvor mit `-` gemerkt; ohne gemerkten Ordner springt `g -` zum zuletzt verwendeten Ordner  
+  - `g -`: Gemerkter Ordner — zuvor mit `-` gemerkt und gültig, bis ein neuer Ordner mit `-` gemerkt wird. Ohne gemerkten Ordner springt `g -` zum zuletzt verwendeten Ordner (der Ordner der letzten Aktion, z. B. Auswahl, Kopieren, Ausschneiden, Einfügen, ZIP, Entpacken, Konsole; reine Navigation zählt nicht)  
   - `g h` / `~`: Benutzerordner (`~`)  
   - `g t`: Papierkorb (`~/.Trash`)  
   - `g i`: Pfad manuell eingeben  
@@ -253,8 +253,8 @@ Das Konfigurationsmenü speichert Änderungen sofort. Die Tasten `.` (versteckte
 | `d` | In macOS-Papierkorb verschieben (Bestätigung mit `y` oder `Enter`, alles andere bricht ab) |
 | `o` | Datei im konfigurierten Texteditor bearbeiten (Standard `nano`, im Menü `m` änderbar) |
 | `.` | Versteckte Dateien ein- oder ausblenden; gilt für die laufende Sitzung |
-| `g` | Gehe-zu-Menü öffnen (`d` Downloads, `f` Dokumente, `-` gemerkter bzw. zuletzt verwendeter Ordner, `h`/`~` Home, `t` Papierkorb, `i` Pfadeingabe, `p` Zwischenablage) |
-| `-` | Aktuellen Ordner merken; mit `g` dann `-` (kurz: `g-`) jederzeit dorthin zurückspringen. Ohne gemerkten Ordner springt `g-` zum zuletzt verwendeten Ordner |
+| `g` | Gehe-zu-Menü öffnen (`d` Downloads, `f` Dokumente, `-` gemerkter Ordner, `h`/`~` Home, `t` Papierkorb, `i` Pfadeingabe, `p` Zwischenablage) |
+| `-` | Aktuellen Ordner merken; `g-` springt immer dorthin (bis ein neuer Ordner mit `-` gemerkt wird). Ohne gemerkten Ordner springt `g-` zum zuletzt verwendeten Ordner (letzter Ordner mit einer Aktion wie Auswahl, Kopieren, Ausschneiden, Einfügen, ZIP, Entpacken, Konsole oder Rückgängig; reine Navigation zählt nicht) |
 | `~` | Direkt zum Benutzerordner (`~`) springen |
 | `j` | An den Anfang der Dateiliste springen |
 | `k` | An das Ende der Dateiliste springen |
