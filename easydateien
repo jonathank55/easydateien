@@ -285,6 +285,8 @@ def replace_ansi_range(base_line: str, start_col: int, replacement: str, repl_wi
 
     left_str = "".join(left_chars)
     right_str = "".join(right_chars)
+    if ANSI_ESCAPE_RE.search(left_str) and not left_str.endswith(C_RESET):
+        left_str += C_RESET
 
     left_pad = pad_to_width(left_str, start_col)
     right_w = max(0, total_width - end_col)
@@ -304,14 +306,12 @@ def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tupl
     dash_l = "─" * left_d
     dash_r = "─" * right_d
     dash_b = "─" * (box_w - 2)
-    top_line = f"╭{dash_l} {C_BOLD}{t_clean}{C_RESET} {dash_r}╮"
-    bot_line = f"╰{dash_b}╯"
-
-    res = [top_line]
+    res = [f"╭{dash_l} {t_clean} {dash_r}╮"]
     for l in content_lines:
-        padded = pad_to_width(l, inner_w)
+        padded = pad_to_width(ANSI_ESCAPE_RE.sub("", l), inner_w)
         res.append(f"│ {padded} │")
-    res.append(bot_line)
+    res.append(f"╰{dash_b}╯")
+    res = [f"{C_BOLD}{C_INVERT}{pad_to_width(ANSI_ESCAPE_RE.sub('', line), box_w)}{C_RESET}" for line in res]
     return res, box_w
 
 def format_size(size_bytes: int) -> str:
