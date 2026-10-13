@@ -304,7 +304,7 @@ def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tupl
     dash_l = "─" * left_d
     dash_r = "─" * right_d
     dash_b = "─" * (box_w - 2)
-    top_line = f"╭{dash_l} {title} {dash_r}╮"
+    top_line = f"╭{dash_l} {C_BOLD}{t_clean}{C_RESET} {dash_r}╮"
     bot_line = f"╰{dash_b}╯"
 
     res = [top_line]
@@ -2140,13 +2140,13 @@ class EasyDateienApp:
                         p_b_char = ""
                     prefix_char = f"{p_b_char} "
                     if w_left >= 26:
-                        p_styled = format_entry_name(p_it, max(3, w_left - 2), bold=is_act or p_in_cut or p_in_copy or p_is_sel)
+                        p_styled = format_entry_name(p_it, max(3, w_left - str_width(prefix_char) - 1), bold=is_act or p_in_cut or p_in_copy or p_is_sel)
                         txt_l = f"{prefix_char}{p_styled}"
-                        cell_left = pad_to_width(txt_l, w_left)
+                        cell_left = pad_to_width(txt_l, w_left - 1) + " "
                     else:
-                        p_styled = format_entry_name(p_it, max(2, w_left - 2), bold=is_act or p_in_cut or p_in_copy or p_is_sel)
+                        p_styled = format_entry_name(p_it, max(2, w_left - str_width(prefix_char) - 1), bold=is_act or p_in_cut or p_in_copy or p_is_sel)
                         txt_l = f"{prefix_char}{p_styled}"
-                        cell_left = pad_to_width(txt_l, w_left)
+                        cell_left = pad_to_width(txt_l, w_left - 1) + " "
                     if is_act:
                         cell_left = f"{C_BOLD}{C_INVERT}{ANSI_ESCAPE_RE.sub('', cell_left)}{C_RESET}"
                 else:
@@ -2173,21 +2173,21 @@ class EasyDateienApp:
                 else:
                     b_char = ""
                 prefix_str = f"{b_char} "
-                prefix_len = 1
+                prefix_len = str_width(prefix_str)
                 s_str = format_size(it.size) if not it.is_dir else ""
 
                 if w_mid >= 26 and s_str:
                     size_field = max(8, str_width(s_str))
                     avail_n = max(3, w_mid - prefix_len - 2 - size_field)
                     n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
-                    s_part = f"  {s_str:>{size_field}}"
+                    s_part = f" {s_str:>{size_field}} "
                     l_part = f"{prefix_str}{n_styled}"
-                    cell_mid = pad_to_width(l_part, w_mid - 2 - size_field) + s_part
+                    cell_mid = pad_to_width(l_part, w_mid - size_field - 2) + s_part
                 elif w_mid >= 26:
                     avail_n = max(3, w_mid - prefix_len)
                     n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
                     l_part = f"{prefix_str}{n_styled}"
-                    cell_mid = pad_to_width(l_part, w_mid)
+                    cell_mid = pad_to_width(l_part, w_mid - 1) + " "
                 else:
                     avail_n = max(2, w_mid - prefix_len)
                     n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
@@ -2218,18 +2218,21 @@ class EasyDateienApp:
                             c_b_char = ""
                         if w_right >= 26 and c_size:
                             c_field = max(8, str_width(c_size))
-                            name_w = max(3, w_right - 5 - c_field)
+                            c_pre = f"{c_b_char} " if c_b_char else " "
+                            name_w = max(3, w_right - str_width(c_pre) - c_field - 2)
                             c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
-                            s_part = f"  {c_size:>{c_field}}"
-                            cell_right = pad_to_width(f"{c_b_char} {c_styled}", w_right - 2 - c_field) + s_part
+                            s_part = f" {c_size:>{c_field}} "
+                            cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - c_field - 2) + s_part
                         elif w_right >= 26:
-                            name_w = max(3, w_right - 2)
+                            c_pre = f"{c_b_char} " if c_b_char else " "
+                            name_w = max(3, w_right - str_width(c_pre) - 1)
                             c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
-                            cell_right = pad_to_width(f"{c_b_char} {c_styled}", w_right)
+                            cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - 1) + " "
                         else:
-                            name_w = max(3, w_right - 2)
+                            c_pre = f"{c_b_char} " if c_b_char else " "
+                            name_w = max(3, w_right - str_width(c_pre) - 1)
                             c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
-                            cell_right = pad_to_width(f"{c_b_char} {c_styled}", w_right)
+                            cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - 1) + " "
                     elif len(child_items) == 0 and r == 0:
                         cell_right = pad_to_width(f" (leer)", w_right)
                     else:
@@ -2239,7 +2242,7 @@ class EasyDateienApp:
                     date_str = format_mtime(cur_item.mtime)
                     mode_str = cur_item.mode_str
                     card = [
-                        " Details",
+                        f"{C_BOLD}Details{C_RESET}",
                         f" {'Typ:':<8}{truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 9))}",
                         f" {'Größe:':<8}{truncate_to_width(size_str, max(3, w_right - 9))}",
                         f" {'Datum:':<8}{truncate_to_width(date_str, max(3, w_right - 9))}",
@@ -2302,7 +2305,7 @@ class EasyDateienApp:
             c_lines = self.get_console_display_lines(max(2, inner_cw - 2), console_h)
             for cl in c_lines:
                 if True:
-                    all_lines.append(f"│ {cl}│")
+                    all_lines.append(f"│ {pad_to_width(cl, inner_cw - 2)} │")
                 else:
                     all_lines.append(pad_to_width(cl, term_cols))
             if has_bottom_border:
