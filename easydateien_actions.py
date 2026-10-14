@@ -1301,6 +1301,33 @@ class EasyDateienActions:
             return True
         return True
 
+    def _preview_aktiv(self) -> bool:
+        """True, wenn der Cursor auf einer Datei mit Vorschau steht
+        (rechte Spalte zeigt Vorschau, Dateimanager hat den Fokus)."""
+        if not self.items or self.active_dialog:
+            return False
+        if self.show_console and self.console_focused:
+            return False
+        cur = self.items[self.selected_idx] if 0 <= self.selected_idx < len(self.items) else None
+        return bool(cur and not cur.is_dir)
+
+    def _scroll_preview(self, richtung: int) -> bool:
+        """Scrollt die Datei-Vorschau um eine Stufe (richtung: -1 hoch, +1 runter).
+        Gibt True zurück, wenn gescrollt wurde (am Anschlag ohne Bewegung: False,
+        damit PG_UP/DOWN dann das gewohnte Listen-Verhalten behalten)."""
+        cur = self.items[self.selected_idx]
+        if self.preview_scroll_item != cur.path:
+            self.preview_scroll_item = cur.path
+            self.preview_scroll_offset = 0
+        needed = max(1, (self.last_layout or {}).get("avail_rows", 0) - 7)
+        voll = len(self.load_file_preview_lines(cur.path, 100000, None))
+        max_off = max(0, voll - needed)
+        neu = max(0, min(max_off, self.preview_scroll_offset + richtung))
+        if neu == self.preview_scroll_offset:
+            return False
+        self.preview_scroll_offset = neu
+        return True
+
     def handle_mouse_click(self, x: int, y: int) -> bool:
         if not self.last_layout:
             return False

@@ -64,6 +64,8 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self.keymap: Dict[str, str] = build_keymap(self.config)
         self.keybindings = get_keybindings_from_config(self.config)
         self.last_visited_dir: Optional[str] = None
+        self.preview_scroll_offset: int = 0
+        self.preview_scroll_item: Optional[str] = None
         self.marked_dir: Optional[str] = None
         self.items: List[FileEntry] = []
         self.selected_idx: int = 0
@@ -487,13 +489,13 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         needs_redraw = True
                     continue
                 elif key in ("PAGE_UP",):
-                    if self.items:
-                        self.selected_idx = max(0, self.selected_idx - 10)
+                    if self._preview_aktiv():
+                        self._scroll_preview(-1)
                         needs_redraw = True
                     continue
                 elif key in ("PAGE_DOWN",):
-                    if self.items:
-                        self.selected_idx = min(len(self.items) - 1, self.selected_idx + 10)
+                    if self._preview_aktiv():
+                        self._scroll_preview(1)
                         needs_redraw = True
                     continue
                 elif key in ("LEFT",):

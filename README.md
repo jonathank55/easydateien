@@ -275,7 +275,7 @@ Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unver
 | `~` | Direkt zum Benutzerordner (`~`) springen |
 | `j` | An den Anfang der Dateiliste springen |
 | `k` | An das Ende der Dateiliste springen |
-| `BildAuf` / `BildAb` | 10 Einträge nach oben / unten blättern |
+| `BildAuf` / `BildAb` | Datei-Vorschau scrollen (wenn eine geöffnet ist und der Dateimanager fokussiert ist); in der Konsole: Konsolenverlauf scrollen |
 | `t` | Integrierte Konsole öffnen / schließen |
 | `Tab` | Fokus auf integrierte Konsole setzen (oder Konsole öffnen) |
 | `h` | Hilfe mit Tastenübersicht öffnen |

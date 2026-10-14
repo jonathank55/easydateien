@@ -356,7 +356,11 @@ class EasyDateienView:
                         sep_row = True
                     else:
                         p_line_idx = r - (len(card) + 1) if fm_rows >= 10 else -1
-                        if 0 <= p_line_idx < len(preview_lines):
+                        if p_line_idx == 0 and self.preview_scroll_item != (cur_item.path if cur_item else None):
+                            self.preview_scroll_offset = 0
+                            self.preview_scroll_item = cur_item.path if cur_item else None
+                        p_line_idx += self.preview_scroll_offset
+                        if 0 <= (p_line_idx - self.preview_scroll_offset) < needed_p and p_line_idx < len(preview_lines):
                             p_txt = preview_lines[p_line_idx]
                             cell_right = f" {pad_to_width(truncate_to_width(p_txt, max(2, w_right - 2)), w_right - 2)} "
                         else:
