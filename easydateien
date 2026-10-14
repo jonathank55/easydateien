@@ -105,6 +105,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self.console_output_lines: List[str] = []
         self.console_cmd_history: List[str] = []
         self.console_history_idx: int = 0
+        self.console_history_draft: str = ""
         self.console_scroll_offset: int = 0
         self.last_cmd_interactive: bool = False
         self._mouse_tracking_active: bool = False
@@ -320,6 +321,8 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     elif key == "UP":
                         # Befehlshistorie oder Scrollen
                         if self.console_cmd_history and self.console_history_idx > 0:
+                            if self.console_history_idx >= len(self.console_cmd_history):
+                                self.console_history_draft = self.console_input
                             self.console_history_idx -= 1
                             self.console_input = self.console_cmd_history[self.console_history_idx]
                             self.console_cursor_idx = len(self.console_input)
@@ -342,7 +345,8 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                                 self.console_input = self.console_cmd_history[self.console_history_idx]
                             else:
                                 self.console_history_idx = len(self.console_cmd_history)
-                                self.console_input = ""
+                                self.console_input = self.console_history_draft
+                                self.console_history_draft = ""
                             self.console_cursor_idx = len(self.console_input)
                         needs_redraw = True
                     elif key == "CTRL_C":
