@@ -767,28 +767,42 @@ def main_menu(fd: int):
                         status_hint = "Zurücksetzen abgebrochen"
     return cfg
 
-_RESIZE_FLAG = [False]
+# Self-Pipe-Muster: Das Signal schreibt sofort ein Byte in eine Pipe, auf
+# der select() mitwacht. Dadurch reagiert das Warten ohne Poll-Takt und ohne
+# Verzoegerung auf Resize (PEP 475 wuerde sonst den Timeout trotz Signal
+# abwarten -> traege Darstellung beim Fensterziehen).
+_RESIZE_PIPE = os.pipe()
 
 
 def _bei_resize(signum, frame):
-    """Terminalgroesse geaendert: Menues beim naechsten Poll neu zeichnen."""
-    _RESIZE_FLAG[0] = True
+    """Terminalgroesse geaendert: sofortiges Aufwecken des Wartens."""
+    try:
+        os.write(_RESIZE_PIPE[1], b"r")
+    except OSError:
+        pass
 
 
 def _warte_auf_taste(fd: int) -> str:
     """Wartet auf eine Taste ODER einen Fenster-Resize und meldet beides.
 
-    Die Menus des Konfigurators zeichnen nur bei Tastendruck neu; ohne diese
-    Abfrage wuerde ein Resize das Standbild der alten Breite stehen lassen.
-    Gibt 'resize' zurueck, wenn sich die Terminalgroesse geaendert hat."""
-    import time as _time
-    while True:
-        if _RESIZE_FLAG[0]:
-            _RESIZE_FLAG[0] = False
-            return "resize"
-        k = read_key(fd, timeout=0.1)
-        if k:
-            return k
+    select() wacht gleichzeitig auf Tastatur und Resize-Pipe; ein Resize
+    weckt sofort (kein Poll-Takt, keine Verzoegerung). Gibt 'resize'
+    zurueck, wenn sich die Terminalgroesse geaendert hat."""
+    try:
+        while True:
+            r, _, _ = select.select([fd, _RESIZE_PIPE[0]], [], [])
+            if _RESIZE_PIPE[0] in r:
+                try:
+                    os.read(_RESIZE_PIPE[0], 64)
+                except OSError:
+                    pass
+                return "resize"
+            if fd in r:
+                k = read_key(fd, timeout=0.0)
+                if k:
+                    return k
+    except InterruptedError:
+        return "resize"
 
 
 def run_konfigurator(standalone: bool = True):
