@@ -267,7 +267,7 @@ def edit_keybindings_menu(fd: int):
     status_hint = ""
 
     while True:
-        # Menüeinträge vorbereiten: (key, label, value)
+        # Menüeintraege vorbereiten: (key, label, value)
         binding_rows = []
         for section, action, disp, keys, desc in editable_bindings:
             keys_str = ", ".join(keys)
@@ -506,7 +506,7 @@ def _toggle_option(cfg: dict, key: str, default: bool) -> None:
     cfg[key] = not cfg.get(key, default)
 
 
-def _schnellstart_default_einträge():
+def _schnellstart_default_eintraege():
     from easydateien_common import DEFAULT_CONFIG
     return DEFAULT_CONFIG.get("schnellstart_eintraege", [])
 
@@ -538,9 +538,9 @@ def edit_schnellstart_menu(fd: int):
     cfg = load_config()
     idx = 0
     while True:
-        eintraege = cfg.get("schnellstart_eintraege") or _schnellstart_default_einträge()
+        eintraege = cfg.get("schnellstart_eintraege") or _schnellstart_default_eintraege()
         rows = []
-        for nr, e in enumerate(einträge, 1):
+        for nr, e in enumerate(eintraege, 1):
             sub = e.get("untermenu")
             if sub:
                 rows.append((str(nr), e.get("titel", ""), f"[{len(sub)} Untermenü]"))
@@ -580,10 +580,10 @@ def edit_schnellstart_menu(fd: int):
                 if not befehl:
                     continue
                 eintraege.append({"titel": titel, "befehl": befehl})
-                cfg["schnellstart_eintraege"] = einträge
+                cfg["schnellstart_eintraege"] = eintraege
                 save_config(cfg)
-            elif aktion == "del" and einträge:
-                del_rows = [(str(nr), e.get("titel", ""), "") for nr, e in enumerate(einträge, 1)]
+            elif aktion == "del" and eintraege:
+                del_rows = [(str(nr), e.get("titel", ""), "") for nr, e in enumerate(eintraege, 1)]
                 del_rows.append(("abort", "Abbrechen", ""))
                 d_idx = 0
                 gewählt = None
@@ -607,12 +607,12 @@ def edit_schnellstart_menu(fd: int):
                             break
                 if gewählt is not None:
                     del eintraege[gewählt]
-                    cfg["schnellstart_eintraege"] = einträge
+                    cfg["schnellstart_eintraege"] = eintraege
                     save_config(cfg)
                     if idx >= len(eintraege) + 3:
                         idx = max(0, len(eintraege) + 2)
             elif aktion == "reset":
-                cfg["schnellstart_eintraege"] = _schnellstart_default_einträge()
+                cfg["schnellstart_eintraege"] = _schnellstart_default_eintraege()
                 save_config(cfg)
                 idx = 0
 
