@@ -1028,7 +1028,7 @@ class EasyDateienActions:
             pass
         try:
             proc = subprocess.Popen(
-                [user_shell, "-l", "-i", "-c", cmd],
+                [user_shell, "-i", "-c", cmd],
                 cwd=self.current_dir,
                 stdin=slave_fd,
                 stdout=slave_fd,
@@ -1167,7 +1167,7 @@ class EasyDateienActions:
             sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
             try:
-                subprocess.run([user_shell, "-l", "-i", "-c", cmd], cwd=self.current_dir, env=env)
+                subprocess.run([user_shell, "-i", "-c", cmd], cwd=self.current_dir, env=env)
             except KeyboardInterrupt:
                 pass
             except Exception as e:
