@@ -79,6 +79,7 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
   - `g d`: Downloads (`~/Downloads`)  
   - `g f`: Dokumente (`~/Documents`)  
   - `g -`: Gemerkter Ordner — zuvor mit `-` gemerkt und gültig, bis ein neuer Ordner mit `-` gemerkt wird. Ohne gemerkten Ordner springt `g -` zum zuletzt verwendeten Ordner (der Ordner der letzten Aktion, z. B. Auswahl, Kopieren, Ausschneiden, Einfügen, ZIP, Entpacken, Konsole; reine Navigation zählt nicht)  
+- **Schnellstartmenü (`i`):** Apps und Befehle mit einer Taste starten (Safari, iMessage, VPN-Profile u. a.). Einträge — auch verschachtelte Untermenüs — werden zentral in der Konfiguration (`schnellstart_eintraege`) verwaltet und im Konfigurator (`m` → Schnellstart-Einträge) hinzugefügt, gelöscht oder auf Standard zurückgesetzt. GUI-Befehle (`open -a`, `osascript`) starten entkoppelt; CLI-Befehle laufen in der integrierten Konsole.
   - `g h` / `~`: Benutzerordner (`~`)  
   - `g t`: Papierkorb (`~/.Trash`)  
   - `g i`: Pfad manuell eingeben  
