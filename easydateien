@@ -151,7 +151,8 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         try:
-            signal.signal(signal.SIGWINCH, lambda s, f: None)
+            from easydateien_ui import _install_resize_handler
+            _install_resize_handler()
         except Exception:
             pass
         tty.setcbreak(fd, termios.TCSADRAIN)

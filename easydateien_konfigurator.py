@@ -558,9 +558,129 @@ def _lies_text(fd: int, prompt: str, vorgabe: str = "") -> str:
         render_box("EINGABE", f"{prompt}: {row}", [], 0, ["[Eingabe] Bestätigen", "[ESC] Abbrechen"])
 
 
+def _bearbeite_liste(fd, titel: str, liste: list, allow_untermenu: bool = True) -> "tuple[bool, list] | None":
+    """Intuitiver Editor fuer eine Eintragsliste (Haupt- oder Untermenü).
+
+    Gibt zurück: (veraendert, liste) oder None bei ESC/Abbruch.
+    Enter auf Eintrag: bearbeiten (Untermenü-Eintrag öffnet dessen Liste).
+    'add' legt neue Einträge an; 'addmenu' (nur Hauptebene) ein Untermenü."""
+    idx = 0
+    veraendert = False
+    while True:
+        rows = []
+        for nr, e in enumerate(liste, 1):
+            sub = e.get("untermenu")
+            if sub:
+                rows.append((str(nr), e.get("titel", ""), f"[{len(sub)} Untermenü]"))
+            else:
+                rows.append((str(nr), e.get("titel", ""), e.get("befehl", "")))
+        rows.append(("add", "Neuen Eintrag hinzufügen", "[neu]"))
+        if allow_untermenu:
+            rows.append(("addmenu", "Neues Untermenü hinzufügen", "[menü]"))
+        rows.append(("del", "Eintrag löschen", "[löschen]"))
+        start, count = render_box(
+            titel,
+            "Titel und Befehl je Zeile; [Eingabe] bearbeitet",
+            rows, idx,
+            [("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"),
+             ("[Eingabe] Aktion", "[Eingabe]", "[Ent]"),
+             ("[ESC] Zurück", "[ESC]", "[ESC]")]
+        )
+        k = ""
+        while not k:
+            k = _warte_auf_taste(fd)
+        if k == "resize":
+            continue
+        if k in ("ESC", "q"):
+            return (veraendert, liste) if veraendert else None
+        if k in ("UP", "WHEEL_UP"):
+            idx = max(0, idx - 1)
+        elif k in ("DOWN", "WHEEL_DOWN"):
+            idx = min(len(rows) - 1, idx + 1)
+        elif k == "PAGE_UP":
+            idx = max(0, idx - 8)
+        elif k == "PAGE_DOWN":
+            idx = min(len(rows) - 1, idx + 8)
+        elif k in ("ENTER", "SPACE", "RIGHT"):
+            aktion = rows[idx][0]
+            if aktion.isdigit() and 1 <= int(aktion) <= len(liste):
+                pos = int(aktion) - 1
+                alt = liste[pos]
+                sub = alt.get("untermenu")
+                if sub:
+                    erg = _bearbeite_liste(fd, f"UNTTERMENÜ: {alt.get('titel', '')}", sub, allow_untermenu=True)
+                    if erg is not None:
+                        _, alt["untermenu"] = erg[0], erg[1]
+                        veraendert = True
+                    continue
+                neuer_titel = _lies_text(fd, "Bezeichnung eingeben", alt.get("titel", ""))
+                if neuer_titel is None:
+                    continue
+                if neuer_titel.strip():
+                    alt["titel"] = neuer_titel.strip()
+                    veraendert = True
+                neuer_befehl = _lies_text(fd, "Befehl eingeben", alt.get("befehl", ""))
+                if neuer_befehl is None:
+                    continue
+                if neuer_befehl.strip():
+                    alt["befehl"] = neuer_befehl.strip()
+                    veraendert = True
+                continue
+            if aktion == "add":
+                titel_neu = _lies_text(fd, "Bezeichnung eingeben")
+                if not titel_neu or not titel_neu.strip():
+                    continue
+                befehl_neu = _lies_text(fd, "Befehl eingeben")
+                if befehl_neu is None:
+                    continue
+                liste.append({"titel": titel_neu.strip(), "befehl": befehl_neu.strip() if befehl_neu else ""})
+                veraendert = True
+            elif aktion == "addmenu":
+                titel_neu = _lies_text(fd, "Untermenü-Bezeichnung eingeben")
+                if not titel_neu or not titel_neu.strip():
+                    continue
+                liste.append({"titel": titel_neu.strip(), "untermenu": []})
+                veraendert = True
+                # Direkt ins neue Untermenü springen:
+                neu = liste[-1]
+                erg = _bearbeite_liste(fd, f"UNTTERMENÜ: {neu['titel']}", neu["untermenu"], allow_untermenu=True)
+                if erg is not None:
+                    neu["untermenu"] = erg[1]
+            elif aktion == "del" and liste:
+                del_rows = [(str(nr), e.get("titel", ""), "") for nr, e in enumerate(liste, 1)]
+                del_rows.append(("abort", "Abbrechen", ""))
+                d_idx = 0
+                while True:
+                    start, count = render_box("EINTRAG LÖSCHEN", "Welchen Eintrag löschen?", del_rows, d_idx,
+                                              [("[Eingabe] Löschen", "[Ent] Löschen", "[Ent]"),
+                                               ("[ESC] Abbrechen", "[ESC]", "[ESC]")])
+                    dk = ""
+                    while not dk:
+                        dk = _warte_auf_taste(fd)
+                    if dk == "resize":
+                        continue
+                    if dk in ("ESC", "q"):
+                        break
+                    if dk in ("UP", "WHEEL_UP"):
+                        d_idx = max(0, d_idx - 1)
+                    elif dk in ("DOWN", "WHEEL_DOWN"):
+                        d_idx = min(len(del_rows) - 1, d_idx + 1)
+                    elif dk in ("ENTER", "SPACE"):
+                        wahl = del_rows[d_idx][0]
+                        if wahl == "abort":
+                            break
+                        if wahl.isdigit() and 1 <= int(wahl) <= len(liste):
+                            del liste[int(wahl) - 1]
+                            veraendert = True
+                            if idx >= len(liste) + (3 if allow_untermenu else 2):
+                                idx = max(0, len(liste) + (2 if allow_untermenu else 1))
+                        break
+
+
 def edit_schnellstart_menu(fd: int):
     """Einfacher, intuitiver Editor für die Schnellstart-Einträge:
-    Ansehen, Hinzufügen (Titel + Befehl), Löschen, Auf Standard setzen."""
+    Ansehen, Hinzufügen (Titel + Befehl), Löschen, Auf Standard setzen.
+    Untermenüs werden mit [Eingabe] direkt bearbeitet (rekursiv)."""
     cfg = load_config()
     idx = 0
     while True:
@@ -573,11 +693,12 @@ def edit_schnellstart_menu(fd: int):
             else:
                 rows.append((str(nr), e.get("titel", ""), e.get("befehl", "")))
         rows.append(("add", "Neuen Eintrag hinzufügen", "[neu]"))
+        rows.append(("addmenu", "Neues Untermenü hinzufügen", "[menü]"))
         rows.append(("del", "Eintrag löschen", "[löschen]"))
         rows.append(("reset", "Auf Standard-Einträge zurücksetzen", "[standard]"))
         start, count = render_box(
             "SCHNELLSTART-EINTRÄGE",
-            "Titel und Befehl je Zeile; Untermenüs in der config.json",
+            "Titel und Befehl je Zeile; Untermenüs mit [Eingabe] bearbeiten",
             rows, idx,
             [("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"),
              ("[Eingabe] Aktion", "[Eingabe]", "[Ent]"),
@@ -601,10 +722,25 @@ def edit_schnellstart_menu(fd: int):
         elif k in ("ENTER", "SPACE", "RIGHT"):
             aktion = rows[idx][0]
             if aktion.isdigit() and 1 <= int(aktion) <= len(eintraege):
-                # Bestehenden Eintrag bearbeiten: Bezeichnung, dann Befehl;
-                # leere Eingabe uebernimmt den vorhandenen Wert (unveraendert).
                 pos = int(aktion) - 1
                 alt = eintraege[pos]
+                if alt.get("untermenu") is not None:
+                    # Untermenü-Eintrag: rekursiv bearbeiten (Einträge darin
+                    # hinzufügen/bearbeiten/löschen), Titel bleibt hier über
+                    # die normale Bezeichnungs-Eingabe änderbar.
+                    neuer_titel = _lies_text(fd, "Bezeichnung eingeben", alt.get("titel", ""))
+                    if neuer_titel is not None and neuer_titel.strip():
+                        alt["titel"] = neuer_titel.strip()
+                        cfg["schnellstart_eintraege"] = eintraege
+                        save_config(cfg)
+                    erg = _bearbeite_liste(fd, f"UNTTERMENÜ: {alt.get('titel', '')}", alt["untermenu"], allow_untermenu=True)
+                    if erg is not None and erg[0]:
+                        alt["untermenu"] = erg[1]
+                        cfg["schnellstart_eintraege"] = eintraege
+                        save_config(cfg)
+                    continue
+                # Bestehenden Eintrag bearbeiten: Bezeichnung, dann Befehl;
+                # leere Eingabe uebernimmt den vorhandenen Wert (unveraendert).
                 neuer_titel = _lies_text(fd, "Bezeichnung eingeben", alt.get("titel", ""))
                 if neuer_titel is None:
                     continue
@@ -624,11 +760,24 @@ def edit_schnellstart_menu(fd: int):
                 if not titel:
                     continue
                 befehl = _lies_text(fd, "Befehl (z. B. open -a Safari)")
-                if not befehl:
+                if befehl is None:
                     continue
-                eintraege.append({"titel": titel, "befehl": befehl})
+                eintraege.append({"titel": titel, "befehl": befehl.strip() if befehl else ""})
                 cfg["schnellstart_eintraege"] = eintraege
                 save_config(cfg)
+            elif aktion == "addmenu":
+                titel = _lies_text(fd, "Untermenü-Bezeichnung eingeben")
+                if not titel:
+                    continue
+                neu = {"titel": titel, "untermenu": []}
+                eintraege.append(neu)
+                cfg["schnellstart_eintraege"] = eintraege
+                save_config(cfg)
+                erg = _bearbeite_liste(fd, f"UNTTERMENÜ: {titel}", neu["untermenu"], allow_untermenu=True)
+                if erg is not None and erg[0]:
+                    neu["untermenu"] = erg[1]
+                    cfg["schnellstart_eintraege"] = eintraege
+                    save_config(cfg)
             elif aktion == "del" and eintraege:
                 del_rows = [(str(nr), e.get("titel", ""), "") for nr, e in enumerate(eintraege, 1)]
                 del_rows.append(("abort", "Abbrechen", ""))

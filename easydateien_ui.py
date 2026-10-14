@@ -701,11 +701,46 @@ def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
         body = styled(truncate_name(it.name, it.is_dir, width))
     return pad_to_width(body, width)
 
+# Self-Pipe: SIGWINCH schreibt sofort ein Byte; read_key kann darauf warten,
+# damit ein Fensternresize das Warten sofort beendet (statt den vollen
+# Timeout abzuwarten) und die Hauptschleife sofort neu zeichnet.
+RESIZE_PIPE = os.pipe()
+
+
+def _bei_sigwinch(signum, frame):
+    try:
+        os.write(RESIZE_PIPE[1], b"r")
+    except OSError:
+        pass
+
+
+def _install_resize_handler():
+    import signal
+    try:
+        signal.signal(signal.SIGWINCH, _bei_sigwinch)
+    except Exception:
+        pass
+
+
+def _verwerfe_resize_events():
+    try:
+        while select.select([RESIZE_PIPE[0]], [], [], 0)[0]:
+            os.read(RESIZE_PIPE[0], 64)
+    except OSError:
+        pass
+
+
 def read_key(fd: int, timeout: float = 0.05) -> str:
     """Liest Tastatur- und Maus-Events zuverlässig über SGR und ANSI-Sequenzen."""
     try:
-        r, _, _ = select.select([fd], [], [], timeout)
-        if not r:
+        r, _, _ = select.select([fd, RESIZE_PIPE[0]], [], [], timeout)
+        if RESIZE_PIPE[0] in r:
+            _verwerfe_resize_events()
+            # Resize ist kein Tastaturzeichen: sofort zurück (leer), die
+            # Hauptschleife prüft daraufhin die Terminalgröße neu.
+            if fd not in r:
+                return ""
+        if fd not in r:
             return ""
         raw = os.read(fd, 1)
         if not raw:
