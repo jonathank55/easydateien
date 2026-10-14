@@ -16,8 +16,7 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
   EasyDateien besitzt ein vollintegriertes Terminal-Panel mit konfigurierbarer Position (`unten`, `rechts` oder `links`; Einstellung `console_position` in der Konfigurationsdatei, Standard `unten`; am unteren Rand ist das Panel 4 Zeilen hoch):
   - **Strikte Fokus-Isolation:**  
     - **Konsole im Fokus (Statusleiste „Konsole“):** Sämtliche Tastenbelegungen des Dateimanagers sind strikt inaktiv. Alle Buchstaben und Zeichen (`u`, `z`, `d`, `q`, `r`, `y`, `x`, `p`, `e`, `o`, `m`, `s`, etc.) fließen ohne Kollision direkt in die Befehlszeile.
-    - **Maus-Scrollen:** Ist die Konsole fokussiert (oder zeigt der Zeiger auf den Konsolenbereich), scrollt das Mausrad den Konsolenverlauf — wie in einem echten Terminal.
-    - **Native Textauswahl & Kopieren:** Bei aktivem Maus-Tracking lässt sich Text mit gedrückter `Cmd`-Taste markieren (Cmd+Drag) und per `Cmd+C` kopieren.
+    - **Native Textauswahl & Kopieren:** Sobald die Konsole fokussiert ist, wird das Maus-Tracking automatisch freigegeben. Textausgaben, Pfade und Befehle können direkt mit der Maus markiert und per `Cmd+C` (oder Kontextmenü) in die Zwischenablage kopiert werden.
     - **`ESC`:** Schließt die Konsole deterministisch.
     - **`Tab`:** Wechselt den Fokus zurück zum Dateimanager.
     - **Konsole geöffnet, aber nicht im Fokus:** Sämtliche Tastenkürzel des Dateimanagers sind aktiv; es wird nichts versehentlich in die Konsole eingetippt. `Tab` setzt den Fokus zurück in die Konsole.
@@ -313,7 +312,7 @@ Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unver
 
 ## Maus-Referenz
 
-Die Maus ist standardmäßig aktiv (`mouse_support`) und im Konfigurationsmenü abschaltbar. Bei fokussierter Konsole scrollt das Mausrad den Konsolenverlauf; Textauswahl bleibt per `Cmd`+Drag möglich.
+Die Maus ist standardmäßig aktiv (`mouse_support`) und im Konfigurationsmenü abschaltbar. Solange die Konsole im Fokus ist, wird das Maus-Tracking automatisch freigegeben (native Textauswahl des Terminals).
 
 | Maus-Aktion | Funktion |
 | :--- | :--- |
