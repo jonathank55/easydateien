@@ -1096,6 +1096,16 @@ class EasyDateienActions:
                         in_data = os.read(fd, 32)
                     except OSError:
                         in_data = b""
+                    if in_data and b"\x03" not in in_data:
+                        # Tastatureingaben an den laufenden Befehl durchreichen
+                        # (wie in einem echten Terminal): Programme, die nachfragen
+                        # (rm override-Bestaetigung, ssh Passwort, less Suche,
+                        # Bestaetigungs-Prompts), erhalten die Antwort. Nur
+                        # Strg+C wird hier abgefangen und als Signal gesendet.
+                        try:
+                            os.write(master_fd, in_data)
+                        except OSError:
+                            pass
                     if b"\x03" in in_data:
                         ctrl_c_count += 1
                         self.console_output_lines.append("^C")
@@ -1195,7 +1205,12 @@ class EasyDateienActions:
         is_git_interactive = cmd.startswith("git ") and any(sub in cmd for sub in ["log", "diff", "commit", "add -p", "add -i", "rebase", "branch", "show", "stash", "blame"])
         is_standalone_stdin_tool = (first_prog in ("cat", "grep", "egrep", "fgrep", "sed", "awk", "head", "tail", "cut", "sort", "uniq", "wc")) and (len(tokens) <= 2 and not any(ch in cmd for ch in ("<", ">", "|", "/", ".")))
 
-        is_interactive = (first_prog in interactive_tools) or has_interactive_pipe or is_git_interactive or is_standalone_stdin_tool
+        # rm/ln/chmod & Co. mit Bestaetigungs-Potenzial (override-Prompts bei
+        # root-Besitz, -i/-I Flags): als interaktiv behandeln, damit die volle
+        # Terminal-Uebergabe mit nativer Eingabe genutzt wird.
+        is_confirm_tool = (first_prog in ("rm", "cp", "mv", "ln", "chmod", "chown", "unlink")
+                           and any(flag in cmd for flag in (" -i", " -I", "-i ", "-I ")))
+        is_interactive = (first_prog in interactive_tools) or has_interactive_pipe or is_git_interactive or is_standalone_stdin_tool or is_confirm_tool
         self.last_cmd_interactive = is_interactive
 
         user_shell, env = get_shell_environment()
