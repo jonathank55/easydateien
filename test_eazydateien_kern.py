@@ -38,7 +38,7 @@ class TestKeyBindings(unittest.TestCase):
 
     def test_wichtige_tasten_vorhanden(self):
         keymap = common.build_keymap(None)
-        for taste in ("g", "-", "h", "q", "d", "c", "x", "p", "u"):
+        for taste in ("g", "-", "h", "q", "DELETE", "c", "x", "p", "u"):
             self.assertIn(taste, keymap, f"Taste '{taste}' fehlt in keymap")
 
     def test_mark_dir_und_goto_aktiv(self):
@@ -49,6 +49,32 @@ class TestKeyBindings(unittest.TestCase):
     def test_keybindings_aus_config_kompatibel(self):
         bindings = common.get_keybindings_from_config({})
         self.assertEqual(bindings, common.KEY_BINDINGS)
+
+    def test_ungueltige_keybinding_tokens_werden_bereinigt(self):
+        # Fruehere Fehler erzeugten leere/ungueltige Token in der User-Config;
+        # diese duerfen die Validierung nie sperren (ESC aus dem Editor).
+        kaputt = {
+            "keybindings": [
+                ["Navigation & Ansicht", "goto", "Gehe zu", ["g", "", "  "], "Gehe zu"],
+                ["Dateioperationen", "trash", "Löschen", ["", "UNBEKANNT"], "Papierkorb"],
+            ]
+        }
+        bindings = common.get_keybindings_from_config(kaputt)
+        by_action = {b[1]: b for b in bindings}
+        self.assertEqual(by_action["trash"][3], ("DELETE",),
+                         "Ungültige Token wurden nicht bereinigt; trash-Standard fehlt")
+        for _s, _a, _d, keys, _desc in bindings:
+            for k in keys:
+                self.assertTrue(k and k.strip() and k not in ("UNBEKANNT", "resize"),
+                                f"Ungültiges Token {k!r} verblieb in der Belegung")
+        try:
+            common.build_keymap(kaputt)
+        except ValueError as e:
+            self.fail(f"Build_keymap scheitert an bereinigten Belegungen: {e}")
+
+    def test_trash_standard_ist_entfernen(self):
+        self.assertEqual(common.KEY_BINDINGS[[b[1] for b in common.KEY_BINDINGS].index("trash")][3],
+                         ("DELETE",))
 
     def test_hilfemenue_dynamisch_und_vollstaendig(self):
         items = common.build_help_items(common.KEY_BINDINGS)

@@ -103,7 +103,7 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
                 if seq.startswith(b"[<"):
                     if seq.endswith(b"M") or seq.endswith(b"m") or len(seq) >= 30:
                         break
-                elif len(seq) >= 2 and seq[-1:] in b"ABCDHFS~":
+                elif len(seq) >= 2 and seq[-1:] in b"ABCDHFS~Z":
                     break
                 elif len(seq) >= 6:
                     break
@@ -127,9 +127,13 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
                 b"[A": "UP", b"[B": "DOWN", b"[C": "RIGHT", b"[D": "LEFT",
                 b"OA": "UP", b"OB": "DOWN", b"OC": "RIGHT", b"OD": "LEFT",
                 b"[H": "HOME", b"[F": "END", b"OH": "HOME", b"OF": "END",
-                b"[5~": "PAGE_UP", b"[6~": "PAGE_DOWN"
+                b"[1~": "HOME", b"[7~": "HOME", b"[4~": "END", b"[8~": "END",
+                b"[2~": "INSERT", b"[3~": "DELETE",
+                b"[5~": "PAGE_UP", b"[6~": "PAGE_DOWN", b"[Z": "SHIFT_TAB"
             }
-            return mapping.get(seq, "")
+            if seq not in mapping:
+                return "UNBEKANNT"
+            return mapping[seq]
         if raw in (bytes([13]), bytes([10])):
             return "ENTER"
         elif raw == b" ":

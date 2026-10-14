@@ -618,7 +618,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     self.toggle_select_all()
                     needs_redraw = True
                     continue
-                elif key == "d":
+                elif key == "DELETE":
                     if self.items or self.selected_paths:
                         self.active_dialog = "trash_confirm"
                         needs_redraw = True

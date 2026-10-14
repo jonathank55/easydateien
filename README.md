@@ -52,7 +52,7 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
   - **Suchen & Schnellfilter (`/`):** Interaktiver Live-Filter für die Dateiliste.  
   - **Neu erstellen (`n`):** Neue Dateien oder Verzeichnisse anlegen (Ordner mit `/` am Ende).  
   - **Umbenennen (`r`):** Inline-Umbenennen mit Sofort-Feedback.  
-  - **Papierkorb (`d`):** Sicheres Verschieben in den macOS-Papierkorb (`~/.Trash`) mit Sicherheitsabfrage.  
+  - **Papierkorb (`Entfernen`):** Sicheres Verschieben in den macOS-Papierkorb (`~/.Trash`) mit Sicherheitsabfrage.  
   - **Rückgängig (`u`):** Mehrstufiges Undo-System für Erstellen, Umbenennen, Löschen, Einfügen sowie ZIP-Erstellen und -Entpacken.  
   - **ZIP-Komprimierung (`z`):** Ausgewählte Dateien und Ordner direkt als ZIP-Archiv komprimieren; der Cursor springt auf das neue Archiv.  
   - **ZIP-Entpacken (`e`):** Markierte bzw. ausgewählte ZIP-Archive in einen neuen Ordner entpacken.  
@@ -265,7 +265,7 @@ Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unver
 | `c c` | Absoluten Dateipfad in die Zwischenablage kopieren |
 | `c f` | Dateinamen in die Zwischenablage kopieren |
 | `c d` | Ordnerpfad in die Zwischenablage kopieren |
-| `d` | In macOS-Papierkorb verschieben (Bestätigung mit `y` oder `Enter`, alles andere bricht ab) |
+| `Entfernen` | In macOS-Papierkorb verschieben (Bestätigung mit `y` oder `Enter`, alles andere bricht ab) |
 | `o` | Datei im konfigurierten Texteditor bearbeiten (Standard `nano`, im Menü `m` änderbar) |
 | `.` | Versteckte Dateien ein- oder ausblenden; gilt für die laufende Sitzung |
 | `g` | Gehe-zu-Menü öffnen (`d` Downloads, `f` Dokumente, `-` gemerkter Ordner, `h`/`~` Home, `t` Papierkorb, `i` Pfadeingabe, `p` Zwischenablage) |

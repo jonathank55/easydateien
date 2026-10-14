@@ -257,7 +257,7 @@ KEY_BINDINGS = [
     ("Dateioperationen", "select_all", "Alle", ("a",), "Alle sichtbaren Elemente markieren"),
     ("Dateioperationen", "new", "Neu", ("n",), "Neue Datei oder Ordner (mit / am Ende)"),
     ("Dateioperationen", "rename", "Umbenennen", ("r",), "Element umbenennen"),
-    ("Dateioperationen", "trash", "Löschen", ("d",), "In den Papierkorb verschieben"),
+    ("Dateioperationen", "trash", "Löschen", ("DELETE",), "In den Papierkorb verschieben"),
     ("Dateioperationen", "copy", "Kopieren", ("c",), "Auswahl kopieren"),
     ("Dateioperationen", "cut", "Ausschneiden", ("x",), "Auswahl ausschneiden"),
     ("Dateioperationen", "paste", "Einfügen", ("p",), "In aktuellen Ordner einfügen"),
@@ -369,6 +369,11 @@ def get_keybindings_from_config(cfg: dict) -> list:
         cur = defaults_by_action.get(action)
         if cur is None:
             continue
+        # Ungueltige Token (leer, Nicht-Strings, Whitespace) entfernen:
+        # Sie entstanden durch fruehere Fehler beim Tastenerkennen und
+        # wuerden sonst jede Validierung sperren.
+        keys = tuple(k.strip() for k in keys
+                     if isinstance(k, str) and k.strip() and k.strip() not in ("UNBEKANNT", "resize"))
         chord = CHORD_ACTIONS.get(action)
         eff = tuple(k for k in keys if not (chord and k == chord[0]))
         if chord:
