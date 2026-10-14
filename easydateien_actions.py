@@ -1212,12 +1212,28 @@ class EasyDateienActions:
             except Exception as e:
                 self.console_output_lines.append(f"Fehler: {e}")
             finally:
-                tty.setcbreak(fd, termios.TCSADRAIN)
-                sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
-                self.sync_mouse_state()
-                sys.stdout.write("\033[2J\033[3J\033[H")
-                sys.stdout.flush()
-                self.refresh_items(force=True)
+                # Terminal-Zustand stoisch wiederherstellen: Jeder Schritt
+                # einzeln abgesichert — ein Fehler darf die App nie abstuerzen
+                # lassen (termios.error, wenn die Shell das Terminal in einem
+                # ungueltigen Zustand hinterlassen hat).
+                try:
+                    tty.setcbreak(fd, termios.TCSADRAIN)
+                except Exception:
+                    try:
+                        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                    except Exception:
+                        pass
+                try:
+                    sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
+                    self.sync_mouse_state()
+                    sys.stdout.write("\033[2J\033[3J\033[H")
+                    sys.stdout.flush()
+                except Exception:
+                    pass
+                try:
+                    self.refresh_items(force=True)
+                except Exception:
+                    pass
             return
         try:
             self._run_console_streaming(cmd, user_shell, env, fd)

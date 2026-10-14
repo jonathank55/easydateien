@@ -183,6 +183,11 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
 
                 key = read_key(fd, timeout=0.05)
                 if not key:
+                    # Kein Tastendruck: Dateisystem-Aenderungen (z. B. Downloads,
+                    # rm im Hintergrund, externe Programme) sofort erkennen und
+                    # die Anzeige aktuell halten, ohne auf eine Taste zu warten.
+                    if self.poll_changes():
+                        needs_redraw = True
                     continue
 
                 if self.active_dialog:
