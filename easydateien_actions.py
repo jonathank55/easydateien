@@ -14,9 +14,12 @@ from easydateien_ui import *
 
 import os
 import sys
+import re
 import time
 import datetime
 import shutil
+import select
+import signal
 import zipfile
 import subprocess
 import stat
@@ -963,6 +966,128 @@ class EasyDateienActions:
         out.append(prompt_line)
         return out
 
+    _CONSOLE_IGNORED_PATTERNS = (
+        "restored session", "saving session", "saving history",
+        "copying shared history", "copying history", "completed.",
+        "no job control in this shell",
+        "session contents restored", "session saved",
+    )
+
+    def _append_console_output(self, text: str) -> None:
+        """Fuegt Ausgabe der Konsole hinzu: filtert Shell-Stoerzeilen, entfernt
+        ANSI- und Steuerzeichen und begrenzt den Puffer."""
+        for l in text.splitlines():
+            l_lower = l.lower()
+            if any(p in l_lower for p in self._CONSOLE_IGNORED_PATTERNS):
+                continue
+            clean_l = ANSI_ESCAPE_RE.sub("", l)
+            clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
+            if clean_l:
+                self.console_output_lines.append(clean_l)
+        limit = 10000
+        if len(self.console_output_lines) > limit:
+            del self.console_output_lines[:len(self.console_output_lines) - limit]
+
+    def _render_console_live(self) -> None:
+        """Zeichnet den Bildschirm waehrend eines laufenden Befehls neu, damit
+        die streamende Konsolenausgabe live sichtbar ist."""
+        try:
+            curr_size = shutil.get_terminal_size((80, 24))
+            term_cols, term_rows = curr_size.columns, curr_size.lines
+            lines = self.build_screen(term_cols, term_rows)
+            out_buf = [f"\033[1;{term_rows}r"]
+            for r_idx, l in enumerate(lines[:term_rows]):
+                out_buf.append(f"\033[{r_idx+1};1H\033[2K{l}")
+            sys.stdout.write("".join(out_buf))
+            sys.stdout.flush()
+        except Exception:
+            pass
+
+    def _run_console_streaming(self, cmd: str, user_shell: str, env, fd: Optional[int]) -> None:
+        """Fuehrt einen nicht-interaktiven Befehl in einem echten Pseudo-Terminal
+        aus. Verhaelt sich wie ein Standard-Terminal: Ausgabe streamt live ins
+        Panel, Strg+C erreicht den Befehl selbst (erst SIGINT, dann SIGKILL),
+        es gibt kein hartes Zeitlimit."""
+        master_fd, slave_fd = os.openpty()
+        try:
+            proc = subprocess.Popen(
+                [user_shell, "-l", "-i", "-c", cmd],
+                cwd=self.current_dir,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                env=env,
+                start_new_session=True,
+            )
+        except Exception:
+            os.close(master_fd)
+            os.close(slave_fd)
+            raise
+        os.close(slave_fd)
+
+        watch_stdin = fd is not None
+        buf = b""
+        last_render = 0.0
+        ctrl_c_count = 0
+        try:
+            while True:
+                try:
+                    rlist, _, _ = select.select([master_fd] + ([fd] if watch_stdin else []), [], [], 0.1)
+                except InterruptedError:
+                    continue
+                if watch_stdin and fd in rlist:
+                    try:
+                        in_data = os.read(fd, 32)
+                    except OSError:
+                        in_data = b""
+                    if b"\x03" in in_data:
+                        ctrl_c_count += 1
+                        self.console_output_lines.append("^C")
+                        try:
+                            if ctrl_c_count == 1:
+                                os.killpg(proc.pid, signal.SIGINT)
+                            else:
+                                os.killpg(proc.pid, signal.SIGKILL)
+                        except Exception:
+                            pass
+                if master_fd in rlist:
+                    try:
+                        chunk = os.read(master_fd, 65536)
+                    except OSError:
+                        chunk = b""
+                    if not chunk:
+                        break
+                    buf += chunk
+                    while True:
+                        positions = [p for p in (buf.find(b"\n"), buf.find(b"\r")) if p >= 0]
+                        if not positions:
+                            break
+                        nl = min(positions)
+                        line, buf = buf[:nl], buf[nl + 1:]
+                        self._append_console_output(line.decode("utf-8", errors="replace"))
+                    now = time.monotonic()
+                    if now - last_render >= 0.15:
+                        last_render = now
+                        self._render_console_live()
+            if buf:
+                self._append_console_output(buf.decode("utf-8", errors="replace"))
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except Exception:
+                    pass
+                try:
+                    proc.wait(timeout=2)
+                except Exception:
+                    pass
+        finally:
+            try:
+                os.close(master_fd)
+            except OSError:
+                pass
+
     def run_console_command(self, cmd: str, fd: Optional[int], old_settings):
         cmd = cmd.strip()
         self.console_input = ""
@@ -1039,46 +1164,12 @@ class EasyDateienActions:
                 self.refresh_items(force=True)
             return
         try:
-            res = subprocess.run(
-                [user_shell, "-l", "-i", "-c", cmd],
-                cwd=self.current_dir,
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                env=env,
-                timeout=60.0
-            )
-            out_text = res.stdout.decode("utf-8", errors="replace")
-            err_text = res.stderr.decode("utf-8", errors="replace")
-            ignored_patterns = (
-                "restored session", "saving session", "saving history",
-                "copying shared history", "copying history",
-                "completed.", "no job control in this shell",
-                "session contents restored", "session saved"
-            )
-            if out_text:
-                for l in out_text.splitlines():
-                    l_lower = l.lower()
-                    if any(p in l_lower for p in ignored_patterns):
-                        continue
-                    clean_l = ANSI_ESCAPE_RE.sub("", l)
-                    clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
-                    self.console_output_lines.append(clean_l)
-            if err_text:
-                for l in err_text.splitlines():
-                    l_lower = l.lower()
-                    if any(p in l_lower for p in ignored_patterns):
-                        continue
-                    clean_l = ANSI_ESCAPE_RE.sub("", l)
-                    clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
-                    self.console_output_lines.append(clean_l)
+            self._run_console_streaming(cmd, user_shell, env, fd)
         except KeyboardInterrupt:
             self.console_output_lines.append("^C")
-        except subprocess.TimeoutExpired:
-            self.console_output_lines.append("[Befehl nach 60s abgebrochen]")
         except Exception as e:
             self.console_output_lines.append(f"Fehler: {e}")
         self.refresh_items(force=True)
-
     def toggle_console(self):
         if self.console_always_visible:
             # Wenn Konsole immer eingeblendet ist, kann sie nicht ausgeblendet werden
