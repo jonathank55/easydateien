@@ -1598,6 +1598,14 @@ class EasyDateienApp:
 
             elif action.action_type == "create":
                 p = action.data.get("path")
+                # Bei Ordner-Erstellung mit verschobenen Elementen: erst die
+                # Elemente an ihren Ursprung zuruecklegen, dann Ordner entfernen.
+                for old_src, new_dst in (action.data.get("moved_records") or []):
+                    try:
+                        if os.path.exists(new_dst) and not os.path.exists(old_src):
+                            shutil.move(new_dst, old_src)
+                    except Exception:
+                        pass
                 if p and os.path.exists(p):
                     dest_p = os.path.join(trash_dir, os.path.basename(p))
                     c = 1
@@ -3056,11 +3064,41 @@ class EasyDateienApp:
                 try:
                     if is_dir_target:
                         os.makedirs(target_p, exist_ok=True)
-                        self.set_status(f"Ordner erstellt: {clean_name} (u = Rückgängig)", "success")
+                        # Regel: Sind aktuell Dateien markiert (nur '*', ohne aktive
+                        # Kopieren/Ausschneiden-Vormerkung), wandern diese nach dem
+                        # Erstellen in den neuen Ordner. Nur bei Ordnern ('/' am Ende).
+                        move_sel = list(self.selected_paths) if self.selected_paths and not (self.clipboard_mode or self.clipboard_paths) else []
+                        if move_sel:
+                            moved = []
+                            move_errors = []
+                            for src_p in move_sel:
+                                if os.path.exists(src_p):
+                                    try:
+                                        shutil.move(src_p, os.path.join(target_p, os.path.basename(src_p)))
+                                        moved.append((src_p, os.path.join(target_p, os.path.basename(src_p))))
+                                    except Exception as me:
+                                        move_errors.append(os.path.basename(src_p))
+                            if moved:
+                                self.selected_paths.clear()
+                                self.undo_stack.append(UndoAction(
+                                    "create",
+                                    f"Erstellen von {clean_name} mit {len(moved)} verschobenen Elementen",
+                                    {"path": target_p, "moved_records": moved},
+                                ))
+                                if move_errors:
+                                    self.set_status(f"Ordner erstellt: {clean_name}; {len(moved)} verschoben, Fehler bei: {', '.join(move_errors[:3])}", "warning")
+                                else:
+                                    self.set_status(f"Ordner erstellt: {clean_name} — {len(moved)} Element(e) verschoben (u = Rückgängig)", "success")
+                            else:
+                                self.undo_stack.append(UndoAction("create", f"Erstellen von {clean_name}", {"path": target_p}))
+                                self.set_status(f"Ordner erstellt: {clean_name} (u = Rückgängig)", "success")
+                        else:
+                            self.undo_stack.append(UndoAction("create", f"Erstellen von {clean_name}", {"path": target_p}))
+                            self.set_status(f"Ordner erstellt: {clean_name} (u = Rückgängig)", "success")
                     else:
                         open(target_p, "a").close()
                         self.set_status(f"Datei erstellt: {clean_name} (u = Rückgängig)", "success")
-                    self.undo_stack.append(UndoAction("create", f"Erstellen von {clean_name}", {"path": target_p}))
+                        self.undo_stack.append(UndoAction("create", f"Erstellen von {clean_name}", {"path": target_p}))
                     self.refresh_items(force=True)
                     self.select_filename(clean_name)
                 except Exception as e:

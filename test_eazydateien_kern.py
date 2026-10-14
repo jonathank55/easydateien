@@ -233,6 +233,37 @@ class TestAppKern(unittest.TestCase):
         self.app.refresh_items()
         self.assertTrue(all("datei" in it.name.lower() for it in self.app.items))
 
+    def test_ordner_erstellen_mit_markierung(self):
+        import shutil as _sh
+        for n in ("x.txt", "y.txt", "z.txt"):
+            open(os.path.join(self.dir_a, n), "w").write(n)
+        self.app.refresh_items()
+        self.app.selected_paths = {os.path.join(self.dir_a, "x.txt"), os.path.join(self.dir_a, "y.txt")}
+        self.app.active_dialog = "new"
+        self.app.dialog_input = "Sammelordner/"
+        self.app.handle_dialog_key("ENTER", None)
+        self.assertIn("Sammelordner", self.app.status_message)
+        self.assertTrue(os.path.exists(os.path.join(self.dir_a, "Sammelordner/x.txt")))
+        self.assertTrue(os.path.exists(os.path.join(self.dir_a, "Sammelordner/y.txt")))
+        self.assertTrue(os.path.exists(os.path.join(self.dir_a, "z.txt")))
+        self.assertFalse(self.app.selected_paths)
+        self.app.undo_last_action()
+        self.assertTrue(os.path.exists(os.path.join(self.dir_a, "x.txt")))
+        self.assertFalse(os.path.exists(os.path.join(self.dir_a, "Sammelordner")))
+
+    def test_ordner_erstellen_ohne_verschiebung_bei_vormerkung(self):
+        open(os.path.join(self.dir_a, "v.txt"), "w").write("v")
+        self.app.refresh_items()
+        self.app.clipboard_mode = "copy"
+        self.app.clipboard_paths = [os.path.join(self.dir_a, "v.txt")]
+        self.app.selected_paths = {os.path.join(self.dir_a, "v.txt")}
+        self.app.active_dialog = "new"
+        self.app.dialog_input = "KeinVerschub/"
+        self.app.handle_dialog_key("ENTER", None)
+        self.assertTrue(os.path.exists(os.path.join(self.dir_a, "v.txt")))
+        self.assertTrue(os.path.isdir(os.path.join(self.dir_a, "KeinVerschub")))
+        self.assertEqual(os.listdir(os.path.join(self.dir_a, "KeinVerschub")), [])
+
     def test_zip_erstellen_und_entpacken(self):
         for it in self.app.items:
             if it.name == "datei.txt":

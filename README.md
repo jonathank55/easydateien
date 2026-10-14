@@ -237,7 +237,7 @@ Das Konfigurationsmenü speichert Änderungen sofort. Die Tasten `.` (versteckte
 | `Enter` | Element mit dem konfigurierten Opener öffnen (Standard `open`; Ordner öffnen im Finder) |
 | `Space` | Aktuelle Datei markieren / Markierung aufheben (`*`); der Cursor rückt eine Zeile weiter |
 | `a` | Alle sichtbaren Elemente markieren bzw. Auswahl aufheben |
-| `n` | Neue Datei oder neuen Ordner erstellen (Ordner mit `/` am Ende) |
+| `n` | Neue Datei oder neuen Ordner erstellen (Ordner mit `/` am Ende). Sind Dateien markiert (`*`, ohne aktive Kopieren/Ausschneiden-Vormerkung) und es wird ein **Ordner** erstellt, wandern die markierten Dateien automatisch in den neuen Ordner |
 | `r` | Datei / Ordner umbenennen |
 | `/` | Such- und Schnellfilter aktivieren (Live-Filter nach Namensteil) |
 | `s` | Sortierkriterium umschalten (Datum, Name, Größe, Typ); gilt für die laufende Sitzung |
