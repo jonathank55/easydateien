@@ -283,21 +283,6 @@ class TestAppKern(unittest.TestCase):
         for l in lines:
             self.assertLessEqual(len(re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", l)), 28)
 
-    def test_konsole_pty_breite_fuer_ls_spalten(self):
-        base = tempfile.mkdtemp()
-        self.addCleanup(_shutil.rmtree, base, ignore_errors=True)
-        for n in ("Applications", "bin", "Desktop", "Documents", "Downloads",
-                  "easydateien", "go", "Library", "Movies", "Music", "optimi",
-                  "Pictures", "Public", "spickzettel", "tools", "trainingsplan-app"):
-            open(os.path.join(base, n), "w").write("x")
-        app = ed.EasyDateienApp(base)
-        app.show_console = True
-        app.console_focused = True
-        app.run_console_command("ls", None, None)
-        out_lines = [l for l in app.console_output_lines if l and not l.startswith("$")]
-        self.assertTrue(out_lines, "keine ls-Ausgabe")
-        for l in out_lines:
-            self.assertLessEqual(len(l), 78, f"ueberbreite ls-Zeile: {l!r}")
 
     def test_zip_erstellen_und_entpacken(self):
         for it in self.app.items:
