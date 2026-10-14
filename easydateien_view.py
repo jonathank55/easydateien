@@ -5,9 +5,17 @@ Mixin; entstanden durch mechanischen Modul-Split. Nutzt die Helfer aus
 easydateien_ui und die Zustandsattribute des Kerns.
 """
 
-from easydateien_ui import *
+from easydateien_ui import (
+    ANSI_ESCAPE_RE, C_BOLD, C_INVERT, C_RESET,
+    List, build_help_items, build_modal_box, cell_inner_width,
+    distribute_options, format_entry_name, format_mtime, format_size,
+    frame_cell, get_file_type_desc, os, pad_to_width,
+    render_input_field, replace_ansi_range, safe_text, scan_directory,
+    str_width, truncate_name, truncate_to_width,
+)
 
 import os
+from typing import Dict, List, Optional
 
 
 class EasyDateienView:
@@ -674,7 +682,7 @@ class EasyDateienView:
                 marker = "▸ " if si == self._ss_auswahl else "  "
                 ss_items.append(f"{marker}{si + 1}. {se.get('titel', '')}")
             if self._ss_tiefe:
-                parent = self._schnellstart_eintraege()
+                parent = self._schnellstart_einträge()
                 for idx in self._ss_tiefe[:-1]:
                     parent = parent[idx].get("untermenu", [])
                 titel = f"{parent[self._ss_tiefe[-1]].get('titel', '')} [{ss_key}]"

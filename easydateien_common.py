@@ -46,7 +46,7 @@ ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 DEFAULT_CONFIG = {
-    "schnellstart_eintraege": [
+    "schnellstart_einträge": [
         {"titel": "Dateien", "befehl": "easydateien"},
         {"titel": "Textdatei", "befehl": "osascript -e 'tell application \"TextEdit\"' -e 'activate' -e 'make new document' -e 'end tell' >/dev/null 2>&1"},
         {"titel": "Safari", "befehl": "open -a Safari"},
@@ -348,7 +348,7 @@ def get_keybindings_from_config(cfg: dict) -> list:
     defaults_by_action = {b[1]: b for b in KEY_BINDINGS}
     # Standard-Tasten reservieren: gehoert eine Taste im aktuellen Standard
     # einer ANDEREN Aktion, gibt die gespeicherte Belegung sie ab (verhindert
-    # Doppelbelegungs-Konflikte, z. B. wenn frueher ESC+Strg C gemeinsam auf
+    # Doppelbelegungs-Konflikte, z. B. wenn früher ESC+Strg C gemeinsam auf
     # cancel lagen und Strg C jetzt cancel_cmd gehoert).
     reserved = {}
     for b in KEY_BINDINGS:

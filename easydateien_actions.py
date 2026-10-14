@@ -10,7 +10,18 @@ from easydateien_common import (
     CONFIG_FILE, DEFAULT_CONFIG,
     KEY_BINDINGS, CHORD_ACTIONS, get_keybindings_from_config, build_keymap,
 )
-from easydateien_ui import *
+from easydateien_ui import (
+    ANSI_ESCAPE_RE, C_INVERT, C_RESET, DEFAULT_CONFIG,
+    DISABLE_AUTOWRAP, ENABLE_AUTOWRAP, FileEntry, HIDE_CURSOR,
+    HOME_DIR, List, Optional, SHOW_CURSOR,
+    Tuple, UndoAction, arrange_entries, datetime,
+    format_size, get_macos_clipboard_files, get_shell_environment, listing_signature,
+    load_config, os, pad_to_width, re,
+    scan_raw, select, shlex, shutil,
+    signal, stat, str_width, subprocess,
+    sync_to_macos_clipboard, sys, termios, time,
+    tty, wrap_line_to_width, zipfile,
+)
 
 import os
 import sys
@@ -759,7 +770,7 @@ class EasyDateienActions:
             elif action.action_type == "create":
                 p = action.data.get("path")
                 # Bei Ordner-Erstellung mit verschobenen Elementen: erst die
-                # Elemente an ihren Ursprung zuruecklegen, dann Ordner entfernen.
+                # Elemente an ihren Ursprung zurücklegen, dann Ordner entfernen.
                 for old_src, new_dst in (action.data.get("moved_records") or []):
                     try:
                         if os.path.exists(new_dst) and not os.path.exists(old_src):
@@ -983,7 +994,7 @@ class EasyDateienActions:
                 continue
             clean_l = ANSI_ESCAPE_RE.sub("", l)
             # Tabulatoren wie ein echtes Terminal expandieren: Sprung zum
-            # naechsten 8er-Tabulatorstopp (Spalte wird gemessen), nicht
+            # nächsten 8er-Tabulatorstopp (Spalte wird gemessen), nicht
             # pauschal 8 Leerzeichen.
             clean_l = clean_l.expandtabs(8)
             clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
@@ -994,7 +1005,7 @@ class EasyDateienActions:
             del self.console_output_lines[:len(self.console_output_lines) - limit]
 
     def _render_console_live(self) -> None:
-        """Zeichnet den Bildschirm waehrend eines laufenden Befehls neu, damit
+        """Zeichnet den Bildschirm während eines laufenden Befehls neu, damit
         die streamende Konsolenausgabe live sichtbar ist."""
         try:
             curr_size = shutil.get_terminal_size((80, 24))
@@ -1009,7 +1020,7 @@ class EasyDateienActions:
             pass
 
     def _run_console_streaming(self, cmd: str, user_shell: str, env, fd: Optional[int]) -> None:
-        """Fuehrt einen nicht-interaktiven Befehl in einem echten Pseudo-Terminal
+        """Führt einen nicht-interaktiven Befehl in einem echten Pseudo-Terminal
         aus. Verhaelt sich wie ein Standard-Terminal: Ausgabe streamt live ins
         Panel, Strg+C erreicht den Befehl selbst (erst SIGINT, dann SIGKILL),
         es gibt kein hartes Zeitlimit."""
@@ -1196,37 +1207,37 @@ class EasyDateienActions:
         self.console_focused = self.show_console
         self.set_status("Konsole geöffnet" if self.show_console else "Konsole geschlossen")
 
-    def _schnellstart_eintraege(self) -> list:
-        """Liefert die Schnellstart-Eintraege aus der Konfiguration."""
-        eintraege = self.config.get("schnellstart_eintraege")
-        if not isinstance(eintraege, list) or not eintraege:
+    def _schnellstart_einträge(self) -> list:
+        """Liefert die Schnellstart-Einträge aus der Konfiguration."""
+        einträge = self.config.get("schnellstart_einträge")
+        if not isinstance(einträge, list) or not einträge:
             from easydateien_common import DEFAULT_CONFIG
-            eintraege = DEFAULT_CONFIG.get("schnellstart_eintraege", [])
-        return [e for e in eintraege if isinstance(e, dict) and e.get("titel")]
+            einträge = DEFAULT_CONFIG.get("schnellstart_einträge", [])
+        return [e for e in einträge if isinstance(e, dict) and e.get("titel")]
 
     def open_schnellstart(self):
-        """Oeffnet das Schnellstartmenue (Modal, invertiert, im Design der
-        anderen Menues). Pfeiltasten navigieren, Enter fuehrt aus, Ziffern
-        waehlen direkt, ESC/q schliesst; Untermenues mit ESC zurueck."""
+        """Öffnet das Schnellstartmenü (Modal, invertiert, im Design der
+        anderen Menüs). Pfeiltasten navigieren, Enter führt aus, Ziffern
+        wählen direkt, ESC/q schließt; Untermenüs mit ESC zurück."""
         self.active_dialog = "schnellstart"
         self._ss_auswahl = 0
         self._ss_tiefe = []
-        self.set_status("Schnellstart geoeffnet")
+        self.set_status("Schnellstart geöffnet")
 
     def _schnellstart_liste(self) -> list:
-        """Aktuell sichtbare Liste (Haupt- oder Untermenue)."""
-        liste = self._schnellstart_eintraege()
+        """Aktuell sichtbare Liste (Haupt- oder Untermenü)."""
+        liste = self._schnellstart_einträge()
         for idx in self._ss_tiefe:
             liste = liste[idx].get("untermenu", [])
         return liste
 
     def _schnellstart_execute(self, eintrag):
-        """Fuehrt einen Schnellstart-Befehl aus: GUI-Befehle (open -a/osascript)
-        entkoppelt starten; CLI-Befehle in der integrierten Konsole ausfuehren."""
+        """Führt einen Schnellstart-Befehl aus: GUI-Befehle (open -a/osascript)
+        entkoppelt starten; CLI-Befehle in der integrierten Konsole ausführen."""
         titel = eintrag.get("titel", "")
         befehl = eintrag.get("befehl", "")
         if not befehl:
-            self.set_status(f"Kein Befehl fuer: {titel}", "warning")
+            self.set_status(f"Kein Befehl für: {titel}", "warning")
             return
         self.active_dialog = None
         ist_gui = ("open -a" in befehl) or ("osascript" in befehl)
@@ -1247,14 +1258,14 @@ class EasyDateienActions:
             user_shell, env = get_shell_environment()
             self._run_console_streaming(befehl, user_shell, env, None)
             self.refresh_items(force=True)
-            self.set_status(f"Ausgefuehrt: {titel}", "info")
+            self.set_status(f"Ausgeführt: {titel}", "info")
 
     def handle_schnellstart_key(self, key: str) -> bool:
         """Tastenbehandlung des Schnellstart-Modals."""
         liste = self._schnellstart_liste()
         if not liste:
             self.active_dialog = None
-            self.set_status("Keine Schnellstart-Eintraege konfiguriert (m zum Anpassen)", "warning")
+            self.set_status("Keine Schnellstart-Einträge konfiguriert (m zum Anpassen)", "warning")
             return True
         anzahl = len(liste)
         if key in ("UP", "k"):
@@ -1654,7 +1665,7 @@ class EasyDateienActions:
                 new_path = os.path.join(self.current_dir, val)
                 # Auf case-insensitiven Dateisystemen (macOS) ist der neue Name
                 # scheinbar "vorhanden", obwohl es dieselbe Datei ist (z. B. nur
-                # Gross/Kleinschreibung geaendert). os.path.samefile prueft die
+                # Gross/Kleinschreibung geaendert). os.path.samefile prüft die
                 # Datei-Identitaet (Inode) statt des Pfadtexts und erkennt auch
                 # reine Case-Renames. Ersetzungs-Dialog nur bei einer ANDEREN Datei.
                 same_file = os.path.exists(new_path) and os.path.samefile(new_path, target_it.path)
