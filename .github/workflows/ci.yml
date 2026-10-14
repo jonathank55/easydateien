@@ -21,7 +21,7 @@ jobs:
         run: |
           set -e
           failed=0
-          for f in *.py; do
+          for f in *.py easydateien; do
             [ -f "$f" ] || continue
             if python3 -m py_compile "$f"; then
               echo "OK: $f"

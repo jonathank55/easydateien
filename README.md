@@ -224,6 +224,22 @@ Das Konfigurationsmenü speichert Änderungen sofort. Die Tasten `.` (versteckte
 
 ---
 
+## Code-Struktur (Modulares Design)
+
+Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unverändert:
+
+| Datei | Rolle |
+| :--- | :--- |
+| `easydateien` | Einstiegspunkt: Kern (`__init__`, Hauptschleife `run`), komponiert die App aus den Mixins |
+| `easydateien_ui.py` | Konstanten, Terminal-/Tastatur-Helfer, reine Rendering-Funktionen |
+| `easydateien_actions.py` | Alle Methoden mit Seiteneffekten: Dateioperationen, Navigation, Konsole, Dialoge, Maus |
+| `easydateien_view.py` | Bildschirmaufbau (`build_screen`, Statusleiste) |
+| `easydateien_common.py` | Zentrale Tastenbelegungen (Single Source of Truth), Konfiguration, gemeinsame Helfer |
+| `easydateien_konfigurator.py` | Einstellungsmenü (eigenständig lauffähig) |
+| `test_eazydateien_kern.py` | Regressionstests der Kernfunktionen |
+| `test_rendering_golden.py` | Goldene Rendering-Tests: frieren das exakte Bildschirmverhalten ein; jede Refaktorierung muss die Hashes unverändert lassen |
+| `run_tests.py` | Test-Runner (Syntax + alle Tests) |
+
 ## Tastatur-Referenz
 
 ### Dateimanager-Modus
