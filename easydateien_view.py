@@ -206,7 +206,10 @@ class EasyDateienView:
         if eff_cols == 3 and cur_item and not is_cur_dir and not (active_console and console_pos == "rechts"):
             needed_p = max(1, fm_rows - 6)
             preview_wrap_width = max(2, w_right - 1) if self.preview_wrap else None
-            preview_lines = self.load_file_preview_lines(cur_item.path, needed_p, preview_wrap_width)
+            # Fenster ab Scroll-Offset laden: die Anzeige zeigt genau den
+            # Bereich [offset, offset + bereich]; der Cache haelt die volle Datei.
+            bereich = needed_p + max(0, self.preview_scroll_offset)
+            preview_lines = self.load_file_preview_lines(cur_item.path, bereich, preview_wrap_width)
 
         self.last_layout = {
             "header_lines": header_lines_count, "avail_rows": fm_rows, "eff_cols": eff_cols,
@@ -360,7 +363,7 @@ class EasyDateienView:
                             self.preview_scroll_offset = 0
                             self.preview_scroll_item = cur_item.path if cur_item else None
                         p_line_idx += self.preview_scroll_offset
-                        if 0 <= (p_line_idx - self.preview_scroll_offset) < needed_p and p_line_idx < len(preview_lines):
+                        if 0 <= p_line_idx < len(preview_lines) and p_line_idx >= self.preview_scroll_offset:
                             p_txt = preview_lines[p_line_idx]
                             cell_right = f" {pad_to_width(truncate_to_width(p_txt, max(2, w_right - 2)), w_right - 2)} "
                         else:

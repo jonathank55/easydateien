@@ -894,14 +894,17 @@ class EasyDateienActions:
                             sort_dir_first=cfg.get("sort_dir_first", True),
                         )
                         lines.append(f"Archiv-Inhalt ({len(infos)} Dateien):")
-                        for fe in zip_entries[:max_lines - 1]:
+                        for fe in zip_entries[:10000]:
                             if fe.is_dir:
                                 lines.append(f" {fe.name}")
                             else:
                                 lines.append(f" {fe.name} ({format_size(fe.size)})")
                 else:
                     with open(path, "r", encoding="utf-8", errors="replace") as f:
-                        for _ in range(max_lines * 3):  # Mehr Zeilen lesen, falls Umbruch aktiviert ist
+                        # Vollständig lesen (Deckel), damit das Vorschau-
+                        # Scrollen den gesamten Dateiinhalt erreichen kann;
+                        # max_lines begrenzt nur die ANZEIGE, nicht den Cache.
+                        for _ in range(10000):
                             line = f.readline()
                             if not line:
                                 break
@@ -1319,9 +1322,19 @@ class EasyDateienActions:
         if self.preview_scroll_item != cur.path:
             self.preview_scroll_item = cur.path
             self.preview_scroll_offset = 0
-        needed = max(1, (self.last_layout or {}).get("avail_rows", 0) - 7)
+        # Sichtbare Vorschau-Höhe exakt wie im Rendering (build_screen):
+        # needed_p = fm_rows - 6; die Karte belegt len(card) Zeilen plus
+        # Trennlinie, danach beginnt die Vorschau.
+        layout = self.last_layout or {}
+        avail_rows = layout.get("avail_rows", 0)
+        needed_p = max(1, avail_rows - 6)
+        card_h = 5 + (1 if cur.is_symlink else 0)
+        sichtbar = max(1, needed_p - card_h - 1)
+        # Vorschau in unbegrenzter Laenge laden (Cache liefert nur den
+        # anfaenglich geladenen Ausschnitt; hier bewusst frisch)
         voll = len(self.load_file_preview_lines(cur.path, 100000, None))
-        max_off = max(0, voll - needed)
+        # Anschlag: letzte Zeile bleibt sichtbar, nie weiter
+        max_off = max(0, voll - sichtbar)
         neu = max(0, min(max_off, self.preview_scroll_offset + richtung))
         if neu == self.preview_scroll_offset:
             return False
