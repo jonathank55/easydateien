@@ -258,6 +258,41 @@ def _bindings_valid(bindings: list) -> bool:
     except ValueError:
         return False
 
+def heal_bindings(bindings: list) -> list:
+    """Löst Doppelbelegungen deterministisch auf und garantiert ein
+    konfliktfreies Ergebnis: Verlierer-Aktionen fallen auf ihren Standard
+    zurück; ist der selbst belegt, auf den nächsten freien Standard.
+    Letzte Absicherung sind die garantiert konfliktfreien KEY_BINDINGS."""
+    if _bindings_valid(bindings):
+        return bindings
+    seen = {}
+    healed = []
+    for row in bindings:
+        section, action, disp, keys, desc = row
+        chord = CHORD_ACTIONS.get(action)
+        clean = []
+        for k in keys:
+            if chord and k == chord[0]:
+                if k not in seen:
+                    seen[k] = action
+                    clean.append(k)
+                continue
+            if k in seen and seen[k] != action:
+                continue
+            seen[k] = action
+            clean.append(k)
+        if not clean:
+            for dk in cur_default_keys(action):
+                if dk not in seen:
+                    seen[dk] = action
+                    clean.append(dk)
+                    break
+        healed.append((section, action, disp, clean, desc))
+    if not _bindings_valid(healed):
+        healed = list(KEY_BINDINGS)
+    return healed
+
+
 def cur_default_keys(action: str) -> list:
     """Liefert die Standard-Tasten einer Aktion (Fallback, wenn eine Aktion
     durch Übernehmen ihrer letzten Taste leer würde)."""
@@ -284,40 +319,7 @@ def edit_keybindings_menu(fd: int):
         # der automatischen Übernahme-Logik ein Konflikt bestehen (z. B. aus
         # einer historisch kaputten Config), wird er hier selbstheilend
         # aufgelöst: Doppel-Tasten fallen auf den Standard der Aktion zurück.
-        if not _bindings_valid(editable_bindings):
-            seen = {}
-            healed = []
-            for row in editable_bindings:
-                section, action, disp, keys, desc = row
-                chord = CHORD_ACTIONS.get(action)
-                clean = []
-                for k in keys:
-                    if chord and k == chord[0]:
-                        # Chord-Praefix nur uebernehmen, wenn keine andere
-                        # Aktion diese Taste bereits besitzt — sonst bliebe
-                        # der Konflikt bestehen und das Menue waere gefangen.
-                        if k not in seen:
-                            seen[k] = action
-                            clean.append(k)
-                        continue
-                    if k in seen and seen[k] != action:
-                        continue
-                    seen[k] = action
-                    clean.append(k)
-                if not clean:
-                    clean = list(cur_default_keys(action))
-                    for ck in list(clean):
-                        if ck in seen and seen[ck] != action:
-                            clean.remove(ck)
-                    if not clean:
-                        clean = list(cur_default_keys(action))
-                        seen[clean[0]] = action
-                healed.append((section, action, disp, clean, desc))
-            if not _bindings_valid(healed):
-                # Letzte Absicherung: Standard-Belegungen sind garantiert
-                # konfliktfrei. Das Menue kann damit NIE gefangen sein.
-                healed = list(KEY_BINDINGS)
-            editable_bindings[:] = healed
+        editable_bindings[:] = heal_bindings(editable_bindings)
         json_bindings = []
         for section, action, disp, keys, desc in editable_bindings:
             json_bindings.append([section, action, disp, list(keys), desc])
@@ -427,20 +429,15 @@ def edit_keybindings_menu(fd: int):
                                     continue
                                 if new_key in keys2:
                                     rest = tuple(k for k in keys2 if k != new_key)
-                                    if not rest:
-                                        taken_from.append(disp2)
-                                        rest = tuple(cur_default_keys(act2))
+                                    taken_from.append(disp2)
                                     editable_bindings[j] = (sec2, act2, disp2, list(rest), desc2)
                             editable_bindings[i] = (section, action, disp, [new_key], desc)
-                            if _bindings_valid(editable_bindings):
-                                shown_key = format_keys([new_key])
-                                if taken_from:
-                                    status_hint = f"{C_BOLD}✓ '{disp}' auf [{shown_key}] gesetzt (von {', '.join(taken_from)} übernommen){C_RESET}"
-                                else:
-                                    status_hint = f"{C_BOLD}✓ '{disp}' auf [{shown_key}] gesetzt{C_RESET}"
+                            editable_bindings[:] = heal_bindings(editable_bindings)
+                            shown_key = format_keys([new_key])
+                            if taken_from:
+                                status_hint = f"{C_BOLD}✓ '{disp}' auf [{shown_key}] gesetzt (von {', '.join(taken_from)} übernommen){C_RESET}"
                             else:
-                                editable_bindings = list(backup)
-                                status_hint = f"{C_BOLD}✗ Belegung nicht möglich, Änderung verworfen{C_RESET}"
+                                status_hint = f"{C_BOLD}✓ '{disp}' auf [{shown_key}] gesetzt{C_RESET}"
                         break
 
 

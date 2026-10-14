@@ -311,6 +311,32 @@ def format_keys(tokens) -> str:
     return " / ".join(parts)
 
 
+def key_display(cfg_or_keymap, action: str, default: str = "") -> str:
+    """Liefert das Anzeige-Label der Taste einer Aktion aus der keymap
+    (Single Source of Truth des Konfigurators) — mit deutschem Label.
+    cfg kann eine Config (dict) oder eine fertige keymap sein; Aktionen mit
+    mehreren Tasten zeigen die erste."""
+    if isinstance(cfg_or_keymap, dict):
+        keymap = cfg_or_keymap if cfg_or_keymap and all(
+            isinstance(v, str) for v in cfg_or_keymap.values()
+        ) and any(a in cfg_or_keymap.values() for a in (action,)) else None
+        if keymap is None:
+            try:
+                keymap = build_keymap(cfg_or_keymap)
+            except Exception:
+                keymap = {}
+    else:
+        keymap = {}
+    token = None
+    for k, a in keymap.items():
+        if a == action:
+            token = k
+            break
+    if token is None:
+        return default
+    return KEY_LABELS.get(token, token)
+
+
 def build_help_items(bindings) -> list:
     """Erzeugt die Hilfemen\u00fc-Zeilen dynamisch aus den aktuellen Tastenbelegungen."""
     items = []

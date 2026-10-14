@@ -24,6 +24,7 @@ from typing import List, Dict, Set, Optional, Tuple
 
 from easydateien_common import (
     build_keymap,
+    key_display,
     build_help_items,
     get_keybindings_from_config,
     frame_cell,

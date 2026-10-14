@@ -11,7 +11,7 @@ from easydateien_ui import (
     distribute_options, format_entry_name, format_mtime, format_size,
     frame_cell, get_file_type_desc, os, pad_to_width,
     render_input_field, replace_ansi_range, safe_text, scan_directory,
-    str_width, truncate_name, truncate_to_width,
+    str_width, truncate_name, truncate_to_width, key_display,
 )
 
 import os
@@ -382,9 +382,10 @@ class EasyDateienView:
                     disp_inp = pad_to_width(disp_inp, field_w)
                     left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
-                    opts_full = ["[Eingabe] Bestätigen", "[ESC] Zurück"]
-                    opts_short = ["[Eingabe]", "[ESC]"]
-                    opts_mini = ["[ESC]"]
+                    opts_full = [f"[Eingabe] Bestätigen", f"[{key_display(self.keymap, 'cancel', 'ESC')}] Zurück"]
+                    _esc_d = key_display(self.keymap, 'cancel', 'ESC')
+                    opts_short = ["[Eingabe]", f"[{_esc_d}]"]
+                    opts_mini = [f"[{_esc_d}]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
                         hints = distribute_options(opts_full, avail_h)
                     elif sum(str_width(x) for x in opts_short) + 1 <= avail_h:
@@ -402,9 +403,10 @@ class EasyDateienView:
                     disp_inp = pad_to_width(disp_inp, field_w)
                     left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
-                    opts_full = ["[Eingabe] Erstellen", "[ESC] Zurück"]
-                    opts_short = ["[Eingabe]", "[ESC]"]
-                    opts_mini = ["[ESC]"]
+                    opts_full = [f"[Eingabe] Erstellen", f"[{key_display(self.keymap, 'cancel', 'ESC')}] Zurück"]
+                    _esc_d = key_display(self.keymap, 'cancel', 'ESC')
+                    opts_short = ["[Eingabe]", f"[{_esc_d}]"]
+                    opts_mini = [f"[{_esc_d}]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
                         hints = distribute_options(opts_full, avail_h)
                     elif sum(str_width(x) for x in opts_short) + 1 <= avail_h:
@@ -422,9 +424,10 @@ class EasyDateienView:
                     disp_inp = pad_to_width(disp_inp, field_w)
                     left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
-                    opts_full = ["[Eingabe] Filtern", "[ESC] Zurück"]
-                    opts_short = ["[Eingabe]", "[ESC]"]
-                    opts_mini = ["[ESC]"]
+                    opts_full = [f"[Eingabe] Filtern", f"[{key_display(self.keymap, 'cancel', 'ESC')}] Zurück"]
+                    _esc_d = key_display(self.keymap, 'cancel', 'ESC')
+                    opts_short = ["[Eingabe]", f"[{_esc_d}]"]
+                    opts_mini = [f"[{_esc_d}]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
                         hints = distribute_options(opts_full, avail_h)
                     elif sum(str_width(x) for x in opts_short) + 1 <= avail_h:
@@ -442,9 +445,10 @@ class EasyDateienView:
                     disp_inp = pad_to_width(disp_inp, field_w)
                     left_str = f"{label}{disp_inp}"
                     avail_h = max(1, term_cols - str_width(left_str) - 2)
-                    opts_full = ["[Eingabe] Wechseln", "[ESC] Zurück"]
-                    opts_short = ["[Eingabe]", "[ESC]"]
-                    opts_mini = ["[ESC]"]
+                    opts_full = [f"[Eingabe] Wechseln", f"[{key_display(self.keymap, 'cancel', 'ESC')}] Zurück"]
+                    _esc_d = key_display(self.keymap, 'cancel', 'ESC')
+                    opts_short = ["[Eingabe]", f"[{_esc_d}]"]
+                    opts_mini = [f"[{_esc_d}]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
                         hints = distribute_options(opts_full, avail_h)
                     elif sum(str_width(x) for x in opts_short) + 1 <= avail_h:
@@ -541,9 +545,10 @@ class EasyDateienView:
                 elif self.active_dialog == "schnellstart":
                     left_str = " Schnellstart: Eintrag wählen"
                     avail_r = max(1, term_cols - str_width(left_str) - 1)
-                    opts_full = ["[↑↓] Navigieren", "[Eingabe] Starten", "[ESC] Zurück"]
-                    opts_short = ["[↑↓] Nav", "[Ent] Start", "[ESC]"]
-                    opts_mini = ["[ESC]"]
+                    _esc_d = key_display(self.keymap, 'cancel', 'ESC')
+                    opts_full = ["[↑↓] Navigieren", "[Eingabe] Starten", f"[{_esc_d}] Zurück"]
+                    opts_short = ["[↑↓] Nav", "[Ent] Start", f"[{_esc_d}]"]
+                    opts_mini = [f"[{_esc_d}]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_r:
                         hints = distribute_options(opts_full, avail_r)
                     elif str_width(" ".join(opts_short)) <= avail_r:
@@ -554,9 +559,11 @@ class EasyDateienView:
                 elif self.active_dialog == "goto_menu":
                     left_str = " Menü: Taste wählen"
                     avail_r = max(1, term_cols - str_width(left_str) - 1)
-                    opts_full = ["[ESC / q] Zurück"]
-                    opts_short = ["[ESC / q] Zurück"]
-                    opts_mini = ["[ESC]"]
+                    _esc = key_display(self.keymap, "cancel", "ESC")
+                    _q = key_display(self.keymap, "quit", "q")
+                    opts_full = [f"[{_esc} / {_q}] Zurück"]
+                    opts_short = [f"[{_esc} / {_q}] Zurück"]
+                    opts_mini = [f"[{_esc}]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_r:
                         hints = distribute_options(opts_full, avail_r)
                     elif str_width(opts_short[0]) <= avail_r:
@@ -569,9 +576,11 @@ class EasyDateienView:
                 elif self.active_dialog == "help_menu":
                     left_str = " Hilfe: ↑↓ Scrollen"
                     avail_r = max(1, term_cols - str_width(left_str) - 1)
-                    opts_full = ["[ESC / q] Zurück"]
-                    opts_short = ["[ESC / q] Zurück"]
-                    opts_mini = ["[ESC]"]
+                    _esc = key_display(self.keymap, "cancel", "ESC")
+                    _q = key_display(self.keymap, "quit", "q")
+                    opts_full = [f"[{_esc} / {_q}] Zurück"]
+                    opts_short = [f"[{_esc} / {_q}] Zurück"]
+                    opts_mini = [f"[{_esc}]"]
                     if sum(str_width(x) for x in opts_full) + 2 <= avail_r:
                         hints = distribute_options(opts_full, avail_r)
                     elif str_width(opts_short[0]) <= avail_r:
@@ -589,12 +598,16 @@ class EasyDateienView:
                     left_b = f" {mode_lbl}  " if mode_lbl else " "
                     avail_ctrl = max(1, term_cols - str_width(left_b) - 1)
 
-                    # Dynamische Optionen für die Hilfeleiste in der Konsole
-                    opt_full = ["[PG_UP/DWN] Scrollen", "[TAB] Fokus", "[ESC] Schließen"]
-                    opt_short = ["[PG_UP/DWN] Scrollen", "[TAB] Fokus", "[ESC] Schließen"]
-                    opt_mini = ["[PG_UP/DWN]", "[TAB]", "[ESC]"]
-                    opt_esc_only = ["[ESC] Schließen"]
-                    opt_esc_mini = ["[ESC]"]
+                    # Dynamische Optionen für die Hilfeleiste in der Konsole;
+                    # Tasten aus der keymap (Single Source of Truth)
+                    kd = lambda a, d: key_display(self.keymap, a, d)
+                    esc_lbl = kd("cancel", "ESC")
+                    tab_lbl = kd("console_focus", "Tab")
+                    opt_full = [f"[Bild↑/Bild↓] Scrollen", f"[{tab_lbl}] Fokus", f"[{esc_lbl}] Schließen"]
+                    opt_short = [f"[Bild↑/↓] Scrollen", f"[{tab_lbl}] Fokus", f"[{esc_lbl}] Schließen"]
+                    opt_mini = ["[Bild↑/↓]", f"[{tab_lbl}]", f"[{esc_lbl}]"]
+                    opt_esc_only = [f"[{esc_lbl}] Schließen"]
+                    opt_esc_mini = [f"[{esc_lbl}]"]
 
                     w_full = sum(str_width(it) for it in opt_full)
                     w_short = sum(str_width(it) for it in opt_short)
@@ -715,26 +728,29 @@ class EasyDateienView:
         return all_lines[:term_rows]
 
     def build_dynamic_controls(self, avail_w: int) -> str:
+        kd = lambda a, d: key_display(self.keymap, a, d)
+        h_lbl, t_lbl = kd("help", "h"), kd("console", "t")
+        m_lbl, q_lbl = kd("menu", "m"), kd("quit", "q")
         # Stufe 1: Vollständig mit 5 Optionen (Navigieren, Hilfe, Konsole, Menü, Beenden)
-        items_full = ["[←↑↓→] Navigieren", "[h] Hilfe", "[t] Konsole", "[m] Menü", "[q] Beenden"]
+        items_full = ["[←↑↓→] Navigieren", f"[{h_lbl}] Hilfe", f"[{t_lbl}] Konsole", f"[{m_lbl}] Menü", f"[{q_lbl}] Beenden"]
         w_full = sum(str_width(it) for it in items_full)
         if w_full + (len(items_full) - 1) * 1 <= avail_w:
             return f"{distribute_options(items_full, avail_w)}"
 
         # Stufe 2: 3 Optionen (Navigieren, Hilfe, Beenden)
-        items_3 = ["[←↑↓→] Navigieren", "[h] Hilfe", "[q] Beenden"]
+        items_3 = ["[←↑↓→] Navigieren", f"[{h_lbl}] Hilfe", f"[{q_lbl}] Beenden"]
         w_3 = sum(str_width(it) for it in items_3)
         if w_3 + (len(items_3) - 1) * 1 <= avail_w:
             return f"{distribute_options(items_3, avail_w)}"
 
         # Stufe 3: 2 Optionen (Navigieren, Hilfe)
-        items_2 = ["[←↑↓→] Navigieren", "[h] Hilfe"]
+        items_2 = ["[←↑↓→] Navigieren", f"[{h_lbl}] Hilfe"]
         w_2 = sum(str_width(it) for it in items_2)
         if w_2 + (len(items_2) - 1) * 1 <= avail_w:
             return f"{distribute_options(items_2, avail_w)}"
 
         # Stufe 4: Bei wenig Platz: "Nav" statt "Navigieren"
-        items_short = ["[←↑↓→] Nav", "[h] Hilfe"]
+        items_short = ["[←↑↓→] Nav", f"[{h_lbl}] Hilfe"]
         w_short = sum(str_width(it) for it in items_short)
         if w_short + (len(items_short) - 1) * 1 <= avail_w:
             return f"{distribute_options(items_short, avail_w)}"
