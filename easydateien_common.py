@@ -346,13 +346,20 @@ def get_keybindings_from_config(cfg: dict) -> list:
     # aufgefrischt (sonst würden alte Beschreibungstexte im Hilfemenü
     # eingefroren). Nicht mehr existierende Aktionen fallen weg.
     defaults_by_action = {b[1]: b for b in KEY_BINDINGS}
-    # Standard-Tasten reservieren: gehoert eine Taste im aktuellen Standard
-    # einer ANDEREN Aktion, gibt die gespeicherte Belegung sie ab (verhindert
-    # Doppelbelegungs-Konflikte, z. B. wenn früher ESC+Strg C gemeinsam auf
-    # cancel lagen und Strg C jetzt cancel_cmd gehoert).
+    # Drei Schutzschichten gegen Tastenkonflikte, automatisch bei jedem Laden:
+    # 1. Unbekannte Aktionen fallen weg (nur im Code existierende sind gueltig).
+    # 2. Tasten, die im aktuellen Standard einer ANDEREN Aktion gehoeren
+    #    (inkl. Chord-Sequenzen wie cc/cf/cd), gibt die gespeicherte
+    #    Belegung ab.
+    # 3. Verbleibende individuelle Tasten bleiben; Doppelbelegungen sind
+    #    danach ausgeschlossen.
     reserved = {}
     for b in KEY_BINDINGS:
-        for k in b[3]:
+        chord = CHORD_ACTIONS.get(b[1])
+        eff = tuple(k for k in b[3] if not (chord and k == chord[0]))
+        if chord:
+            eff = eff + tuple(chord[1])
+        for k in eff:
             reserved.setdefault(k, b[1])
     result = []
     for item in custom_bindings:
@@ -362,9 +369,14 @@ def get_keybindings_from_config(cfg: dict) -> list:
         else:
             section, action, disp, keys, desc = item
         cur = defaults_by_action.get(action)
-        if cur is not None:
-            cleaned = tuple(k for k in keys if reserved.get(k, action) == action)
-            result.append((cur[0], action, cur[2], cleaned or cur[3], cur[4]))
+        if cur is None:
+            continue
+        chord = CHORD_ACTIONS.get(action)
+        eff = tuple(k for k in keys if not (chord and k == chord[0]))
+        if chord:
+            eff = eff + tuple(chord[1])
+        cleaned = tuple(k for k in eff if reserved.get(k, action) == action)
+        result.append((cur[0], action, cur[2], cleaned or cur[3], cur[4]))
     # Aktionen, die nur im aktuellen Code existieren, ergänzen
     known = {b[1] for b in result}
     for b in KEY_BINDINGS:
