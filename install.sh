@@ -78,7 +78,7 @@ chmod +x "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_konfigurator.py"
 # geladen, das nach Abschluss gelöscht wird. Damit die Verweise in $CONFIG_DIR
 # gültig bleiben, werden sie in diesem Fall fest kopiert statt nur verlinkt.
 if [ -n "$CLEANUP_DIR" ]; then
-    rm -f "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_konfigurator.py"
+    rm -f "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_konfigurator.py"
     cp "$SRC_DIR/easydateien" "$CONFIG_DIR/easydateien"
     cp "$SRC_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_ui.py"
         cp "$SRC_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_actions.py"
