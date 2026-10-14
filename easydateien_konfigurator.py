@@ -487,8 +487,8 @@ MENU_VALUE_RENDERERS = {
     "preview_wrap": lambda cfg: f"[{'ein' if cfg.get('preview_wrap', True) else 'aus'}]",
     "sort": lambda cfg: "[öffnen]",
     "editor": lambda cfg: f"[{editor_command(cfg)}]",
-    "keybindings": lambda cfg: f"[{len(cfg.get('schnellstart_einträge') or cfg.get('__ss_default', []) or [])}]" if False else "[öffnen]",
-    "schnellstart": lambda cfg: f"[{len(cfg.get('schnellstart_einträge') or [])}]" if cfg.get('schnellstart_einträge') else "[öffnen]",
+    "keybindings": lambda cfg: f"[{len(cfg.get('schnellstart_eintraege') or cfg.get('__ss_default', []) or [])}]" if False else "[öffnen]",
+    "schnellstart": lambda cfg: f"[{len(cfg.get('schnellstart_eintraege') or [])}]" if cfg.get('schnellstart_eintraege') else "[öffnen]",
     "reset": lambda cfg: "[standard]",
 }
 
@@ -508,7 +508,7 @@ def _toggle_option(cfg: dict, key: str, default: bool) -> None:
 
 def _schnellstart_default_einträge():
     from easydateien_common import DEFAULT_CONFIG
-    return DEFAULT_CONFIG.get("schnellstart_einträge", [])
+    return DEFAULT_CONFIG.get("schnellstart_eintraege", [])
 
 
 def _lies_text(fd: int, prompt: str, vorgabe: str = "") -> str:
@@ -538,7 +538,7 @@ def edit_schnellstart_menu(fd: int):
     cfg = load_config()
     idx = 0
     while True:
-        einträge = cfg.get("schnellstart_einträge") or _schnellstart_default_einträge()
+        eintraege = cfg.get("schnellstart_eintraege") or _schnellstart_default_einträge()
         rows = []
         for nr, e in enumerate(einträge, 1):
             sub = e.get("untermenu")
@@ -579,8 +579,8 @@ def edit_schnellstart_menu(fd: int):
                 befehl = _lies_text(fd, "Befehl (z. B. open -a Safari)")
                 if not befehl:
                     continue
-                einträge.append({"titel": titel, "befehl": befehl})
-                cfg["schnellstart_einträge"] = einträge
+                eintraege.append({"titel": titel, "befehl": befehl})
+                cfg["schnellstart_eintraege"] = einträge
                 save_config(cfg)
             elif aktion == "del" and einträge:
                 del_rows = [(str(nr), e.get("titel", ""), "") for nr, e in enumerate(einträge, 1)]
@@ -601,18 +601,18 @@ def edit_schnellstart_menu(fd: int):
                         d_idx = min(len(del_rows) - 1, d_idx + 1)
                     elif dk in ("ENTER", "SPACE"):
                         wahl = del_rows[d_idx][0]
-                        if wahl != "abort" and wahl.isdigit() and 1 <= int(wahl) <= len(einträge):
+                        if wahl != "abort" and wahl.isdigit() and 1 <= int(wahl) <= len(eintraege):
                             gewählt = int(wahl) - 1
                         else:
                             break
                 if gewählt is not None:
-                    del einträge[gewählt]
-                    cfg["schnellstart_einträge"] = einträge
+                    del eintraege[gewählt]
+                    cfg["schnellstart_eintraege"] = einträge
                     save_config(cfg)
-                    if idx >= len(einträge) + 3:
-                        idx = max(0, len(einträge) + 2)
+                    if idx >= len(eintraege) + 3:
+                        idx = max(0, len(eintraege) + 2)
             elif aktion == "reset":
-                cfg["schnellstart_einträge"] = _schnellstart_default_einträge()
+                cfg["schnellstart_eintraege"] = _schnellstart_default_einträge()
                 save_config(cfg)
                 idx = 0
 

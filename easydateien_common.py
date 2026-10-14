@@ -46,7 +46,7 @@ ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 DEFAULT_CONFIG = {
-    "schnellstart_einträge": [
+    "schnellstart_eintraege": [
         {"titel": "Dateien", "befehl": "easydateien"},
         {"titel": "Textdatei", "befehl": "osascript -e 'tell application \"TextEdit\"' -e 'activate' -e 'make new document' -e 'end tell' >/dev/null 2>&1"},
         {"titel": "Safari", "befehl": "open -a Safari"},

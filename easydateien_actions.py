@@ -1210,13 +1210,13 @@ class EasyDateienActions:
         self.console_focused = self.show_console
         self.set_status("Konsole geöffnet" if self.show_console else "Konsole geschlossen")
 
-    def _schnellstart_einträge(self) -> list:
+    def _schnellstart_eintraege(self) -> list:
         """Liefert die Schnellstart-Einträge aus der Konfiguration."""
-        einträge = self.config.get("schnellstart_einträge")
-        if not isinstance(einträge, list) or not einträge:
+        eintraege = self.config.get("schnellstart_eintraege")
+        if not isinstance(eintraege, list) or not eintraege:
             from easydateien_common import DEFAULT_CONFIG
-            einträge = DEFAULT_CONFIG.get("schnellstart_einträge", [])
-        return [e for e in einträge if isinstance(e, dict) and e.get("titel")]
+            eintraege = DEFAULT_CONFIG.get("schnellstart_eintraege", [])
+        return [e for e in eintraege if isinstance(e, dict) and e.get("titel")]
 
     def open_schnellstart(self):
         """Öffnet das Schnellstartmenü (Modal, invertiert, im Design der
@@ -1229,7 +1229,7 @@ class EasyDateienActions:
 
     def _schnellstart_liste(self) -> list:
         """Aktuell sichtbare Liste (Haupt- oder Untermenü)."""
-        liste = self._schnellstart_einträge()
+        liste = self._schnellstart_eintraege()
         for idx in self._ss_tiefe:
             liste = liste[idx].get("untermenu", [])
         return liste
@@ -1278,6 +1278,17 @@ class EasyDateienActions:
             self._ss_auswahl = (self._ss_auswahl + 1) % anzahl
             return True
         if key in ("ESC", "q", "Q"):
+            if self._ss_tiefe:
+                self._ss_tiefe.pop()
+                self._ss_auswahl = 0
+            else:
+                self.active_dialog = None
+                self.set_status("Schnellstart geschlossen")
+            return True
+        # Menütaste (Standard: i) schließt wie bei Navigationshilfe [h]
+        # und Gehe zu [g] — dynamisch aus der keymap gelesen.
+        ss_key = next((k for k, a in self.keymap.items() if a == "schnellstart"), "i")
+        if key.lower() == ss_key.lower():
             if self._ss_tiefe:
                 self._ss_tiefe.pop()
                 self._ss_auswahl = 0

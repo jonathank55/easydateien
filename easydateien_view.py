@@ -689,7 +689,7 @@ class EasyDateienView:
                 marker = "▸ " if si == self._ss_auswahl else "  "
                 ss_items.append(f"{marker}{si + 1}. {se.get('titel', '')}")
             if self._ss_tiefe:
-                parent = self._schnellstart_einträge()
+                parent = self._schnellstart_eintraege()
                 for idx in self._ss_tiefe[:-1]:
                     parent = parent[idx].get("untermenu", [])
                 titel = f"{parent[self._ss_tiefe[-1]].get('titel', '')} [{ss_key}]"
