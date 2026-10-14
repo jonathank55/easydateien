@@ -39,10 +39,26 @@ else
     SRC_DIR="$CLEANUP_DIR"
     echo "Lade Programmdateien von GitHub nach $SRC_DIR ..."
     for DATEI in "${PROGRAMM_DATEIEN[@]}"; do
-        curl -fsSL "$RAW_BASE/$DATEI" -o "$SRC_DIR/$DATEI"
+        OK=""
+        for VERSUCH in 1 2 3; do
+            if curl -fsSL --connect-timeout 10 --retry 2 "$RAW_BASE/$DATEI" -o "$SRC_DIR/$DATEI" && [ -s "$SRC_DIR/$DATEI" ]; then
+                OK="ja"
+                break
+            fi
+            echo "Hinweis: Download von '$DATEI' fehlgeschlagen (Versuch $VERSUCH von 3) — versuche erneut ..." >&2
+            rm -f "$SRC_DIR/$DATEI"
+            sleep 1
+        done
+        if [ -z "$OK" ]; then
+            echo "==============================================================================" >&2
+            echo "FEHLER: '$DATEI' konnte nicht geladen werden (Netzwerk instabil?)." >&2
+            echo "Bitte Internet pruefen und erneut ausfuehren." >&2
+            echo "==============================================================================" >&2
+            exit 1
+        fi
     done
     # Clipboard-Quelle (optional; wird vom Programm sonst bei Bedarf kompiliert)
-    curl -fsSL "$RAW_BASE/easydateien_clip.m" -o "$SRC_DIR/easydateien_clip.m" || rm -f "$SRC_DIR/easydateien_clip.m"
+    curl -fsSL --connect-timeout 10 --retry 2 "$RAW_BASE/easydateien_clip.m" -o "$SRC_DIR/easydateien_clip.m" || rm -f "$SRC_DIR/easydateien_clip.m"
     trap 'rm -rf "$CLEANUP_DIR"' EXIT
 fi
 
