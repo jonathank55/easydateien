@@ -293,7 +293,12 @@ def edit_keybindings_menu(fd: int):
                 clean = []
                 for k in keys:
                     if chord and k == chord[0]:
-                        clean.append(k)
+                        # Chord-Praefix nur uebernehmen, wenn keine andere
+                        # Aktion diese Taste bereits besitzt — sonst bliebe
+                        # der Konflikt bestehen und das Menue waere gefangen.
+                        if k not in seen:
+                            seen[k] = action
+                            clean.append(k)
                         continue
                     if k in seen and seen[k] != action:
                         continue
@@ -301,9 +306,17 @@ def edit_keybindings_menu(fd: int):
                     clean.append(k)
                 if not clean:
                     clean = list(cur_default_keys(action))
+                    for ck in list(clean):
+                        if ck in seen and seen[ck] != action:
+                            clean.remove(ck)
+                    if not clean:
+                        clean = list(cur_default_keys(action))
+                        seen[clean[0]] = action
                 healed.append((section, action, disp, clean, desc))
             if not _bindings_valid(healed):
-                return False
+                # Letzte Absicherung: Standard-Belegungen sind garantiert
+                # konfliktfrei. Das Menue kann damit NIE gefangen sein.
+                healed = list(KEY_BINDINGS)
             editable_bindings[:] = healed
         json_bindings = []
         for section, action, disp, keys, desc in editable_bindings:
@@ -354,9 +367,10 @@ def edit_keybindings_menu(fd: int):
         elif k in ("PAGE_DOWN",):
             idx = min(len(binding_rows) - 1, idx + 8)
         elif k in ("ESC", "q"):
-            if not save_editable_bindings():
-                status_hint = f"{C_BOLD}✗ Nicht gespeichert: Doppelte Taste wäre unbrauchbar{C_RESET}"
-                continue
+            # ESC verlaesst das Menue IMMER. Scheitert das Speichern (was
+            # durch die Selbstheilung praktisch ausgeschlossen ist), wird
+            # der Standard gespeichert statt den Ausgang zu blockieren.
+            save_editable_bindings()
             break
         else:
             click = clicked_row(k, start, count)
@@ -373,8 +387,7 @@ def edit_keybindings_menu(fd: int):
                 status_hint = f"{C_BOLD}✓ Tastenbelegungen zurückgesetzt{C_RESET}"
 
             elif selected_action == "back":
-                if not save_editable_bindings():
-                    status_hint = f"{C_BOLD}✗ Nicht gespeichert: Doppelte Taste wäre unbrauchbar{C_RESET}"
+                save_editable_bindings()
                 break
 
             else:
