@@ -205,7 +205,10 @@ class EasyDateienView:
         preview_lines = []
         if eff_cols == 3 and cur_item and not is_cur_dir and not (active_console and console_pos == "rechts"):
             needed_p = max(1, fm_rows - 6)
-            preview_wrap_width = max(2, w_right - 1) if self.preview_wrap else None
+            # Umbruch in der exakten Zellinnenbreite (w_right - 2): dann
+            # passt jede umgebrochene Zeile ohne zweiten Schnitt, und es
+            # erscheint kein sinnloses "..." am Zeilenende.
+            preview_wrap_width = max(2, w_right - 2) if self.preview_wrap else None
             # Fenster ab Scroll-Offset laden: die Anzeige zeigt genau den
             # Bereich [offset, offset + bereich]; der Cache haelt die volle Datei.
             bereich = needed_p + max(0, self.preview_scroll_offset)
@@ -365,7 +368,10 @@ class EasyDateienView:
                         p_line_idx += self.preview_scroll_offset
                         if 0 <= p_line_idx < len(preview_lines) and p_line_idx >= self.preview_scroll_offset:
                             p_txt = preview_lines[p_line_idx]
-                            cell_right = f" {pad_to_width(truncate_to_width(p_txt, max(2, w_right - 2)), w_right - 2)} "
+                            if self.preview_wrap and preview_wrap_width:
+                                cell_right = f" {pad_to_width(p_txt, max(2, w_right - 2))} "
+                            else:
+                                cell_right = f" {pad_to_width(truncate_to_width(p_txt, max(2, w_right - 2)), w_right - 2)} "
                         else:
                             cell_right = " " * w_right
                 else:
