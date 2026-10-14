@@ -47,8 +47,13 @@ class EasyDateienActions:
                 self._mouse_tracking_active = False
 
     def sync_mouse_state(self):
-        """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Konfigurationsstatus."""
-        should_enable = bool(self.config.get("mouse_support", True)) and not (self.show_console and self.console_focused)
+        """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Konfigurationsstatus.
+
+        Maus-Tracking bleibt auch bei fokussierter Konsole aktiv: Das Mausrad
+        scrollt dann den Konsolenverlauf (handle_mouse_wheel routet nach
+        Position/Fokus). Native Textauswahl bleibt jederzeit per Cmd+Drag
+        moeglich (Terminal-Funktion, unabhaengig vom Tracking)."""
+        should_enable = bool(self.config.get("mouse_support", True))
         self.set_mouse_tracking(should_enable)
 
     def suspend_tui(self, fd: int, old_settings):
@@ -1300,13 +1305,20 @@ class EasyDateienActions:
                 is_over_console = True
 
         if is_over_console or (self.show_console and self.console_focused):
-            # Berechne die Gesamtzahl der Zeilen in der Konsole nach dem Umbruch
+            # Konsolen-Zellenbreite exakt wie im Rendering (build_screen),
+            # konsistent mit get_console_display_lines — sonst laufen
+            # Scroll-Grenzen und Render-Umbruch auseinander.
+            term_cols = shutil.get_terminal_size((80, 24)).columns
+            inner_cw = max(4, term_cols - 2)
+            console_w = max(2, inner_cw - 2)
             wrapped_lines: List[str] = []
             for raw_line in self.console_output_lines:
-                wrapped_lines.extend(wrap_line_to_width(raw_line, max(1, shutil.get_terminal_size((80, 24)).columns - 4)))
+                wrapped_lines.extend(wrap_line_to_width(raw_line, console_w))
 
-            # Maximale Scroll-Position berechnen
-            max_scroll = max(0, len(wrapped_lines) - 1)
+            # Maximale Scroll-Position: Inhalt ueber den sichtbaren Bereich
+            # hinaus (deckungsgleich mit dem Rendering-Clamp)
+            needed = max(1, int(layout.get("avail_rows", 0) or 0) or 4)
+            max_scroll = max(0, len(wrapped_lines) - needed)
 
             if direction == "up":
                 # Nach oben scrollen (Inhalt nach unten bewegen)
