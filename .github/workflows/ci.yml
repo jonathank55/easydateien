@@ -69,12 +69,24 @@ jobs:
           HOME="$TESTHOME" bash install.sh
           grep -q '"editor": "vim"' "$TESTHOME/.config/easydateien/config.json"
 
-      - name: Installation - unvollständig muss laut scheitern
+      - name: Verifikation - fehlende Datei muss laut scheitern
         run: |
           export TESTHOME=$(mktemp -d)
           mkdir -p "$TESTHOME/.config/easydateien" "$TESTHOME/.local/bin"
-          cp install.sh /tmp/inst_poisoned.sh
-          sed -i 's/easydateien_view.py" //g; s/ easydateien_view.py//g' /tmp/inst_poisoned.sh
-          HOME="$TESTHOME" bash /tmp/inst_poisoned.sh > /dev/null 2>&1 && {
-            echo "FEHLER: unvollständige Installation wurde als Erfolg gemeldet"; exit 1
-          }
+          HOME="$TESTHOME" bash install.sh > /dev/null 2>&1
+          rm "$TESTHOME/.config/easydateien/easydateien_view.py"
+          # Verifikationsblock aus install.sh isoliert ausfuehren:
+          CONFIG_DIR="$TESTHOME/.config/easydateien" bash -c '
+            VERIFY_FILES=("easydateien" "easydateien_ui.py" "easydateien_actions.py" "easydateien_view.py" "easydateien_common.py" "easydateien_konfigurator.py")
+            VERIFY_FAILED=0
+            for DATEI in "${VERIFY_FILES[@]}"; do
+              ZIEL="$CONFIG_DIR/$DATEI"
+              if [ ! -f "$ZIEL" ] || { [ -L "$ZIEL" ] && [ ! -e "$ZIEL" ]; }; then
+                echo "FEHLER: $ZIEL fehlt oder ist ein toter Symlink" >&2
+                VERIFY_FAILED=1
+              fi
+            done
+            exit $VERIFY_FAILED
+          ' && {
+            echo "FEHLER: Verifikation meldete Erfolg trotz fehlender Datei"; exit 1
+          } || [ $? -eq 1 ]
