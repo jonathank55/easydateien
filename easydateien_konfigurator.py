@@ -132,6 +132,10 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
                 b"[5~": "PAGE_UP", b"[6~": "PAGE_DOWN", b"[Z": "SHIFT_TAB"
             }
             if seq not in mapping:
+                if seq.startswith(b"[3") and seq.endswith(b"~"):
+                    return "DELETE"
+                if seq.startswith(b"[2") and seq.endswith(b"~"):
+                    return "INSERT"
                 return "UNBEKANNT"
             return mapping[seq]
         if raw in (bytes([13]), bytes([10])):
@@ -143,9 +147,14 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
         elif raw in (bytes([3]), bytes([4])):
             return "QUIT"
         try:
-            return raw.decode("utf-8")
+            ch = raw.decode("utf-8")
         except Exception:
-            return ""
+            return "UNBEKANNT"
+        # Steuerzeichen sind keine waehlbaren Tasten: Sie wuerden als
+        # unsichtbare Token gespeichert ('[] ist bereits belegt').
+        if not ch.isprintable():
+            return "UNBEKANNT"
+        return ch
     except Exception:
         return ""
 
@@ -248,6 +257,15 @@ def _bindings_valid(bindings: list) -> bool:
     except ValueError:
         return False
 
+def cur_default_keys(action: str) -> list:
+    """Liefert die Standard-Tasten einer Aktion (Fallback, wenn eine Aktion
+    durch Übernehmen ihrer letzten Taste leer würde)."""
+    for _s, a, _d, keys, _desc in KEY_BINDINGS:
+        if a == action:
+            return list(keys)
+    return []
+
+
 def edit_keybindings_menu(fd: int):
     """Interaktives Menü zum Anpassen der Tastenbelegungen."""
     cfg = load_config()
@@ -261,9 +279,31 @@ def edit_keybindings_menu(fd: int):
 
     def save_editable_bindings() -> bool:
         # Speichert nur, wenn die Belegungen konfliktfrei sind; ein Konflikt
-        # würde sonst den Start des Dateimanagers verhindern.
+        # würde sonst den Start des Dateimanagers verhindern. Sollte trotz
+        # der automatischen Übernahme-Logik ein Konflikt bestehen (z. B. aus
+        # einer historisch kaputten Config), wird er hier selbstheilend
+        # aufgelöst: Doppel-Tasten fallen auf den Standard der Aktion zurück.
         if not _bindings_valid(editable_bindings):
-            return False
+            seen = {}
+            healed = []
+            for row in editable_bindings:
+                section, action, disp, keys, desc = row
+                chord = CHORD_ACTIONS.get(action)
+                clean = []
+                for k in keys:
+                    if chord and k == chord[0]:
+                        clean.append(k)
+                        continue
+                    if k in seen and seen[k] != action:
+                        continue
+                    seen[k] = action
+                    clean.append(k)
+                if not clean:
+                    clean = list(cur_default_keys(action))
+                healed.append((section, action, disp, clean, desc))
+            if not _bindings_valid(healed):
+                return False
+            editable_bindings[:] = healed
         json_bindings = []
         for section, action, disp, keys, desc in editable_bindings:
             json_bindings.append([section, action, disp, list(keys), desc])
@@ -339,6 +379,7 @@ def edit_keybindings_menu(fd: int):
 
             else:
                 # Tastenbelegung für diese Aktion bearbeiten
+                backup = list(editable_bindings)
                 for i, (section, action, disp, keys, desc) in enumerate(editable_bindings):
                     if action == selected_action:
                         render_box(
@@ -360,13 +401,32 @@ def edit_keybindings_menu(fd: int):
                                 break
 
                         if new_key and new_key not in ("", "resize", "UNBEKANNT"):
-                            trial = list(editable_bindings)
-                            trial[i] = (section, action, disp, [new_key], desc)
-                            if _bindings_valid(trial):
-                                editable_bindings = trial
-                                status_hint = f"{C_BOLD}✓ '{disp}' auf [{new_key}] gesetzt{C_RESET}"
+                            # Belegte Taste automatisch übernehmen: Die alte
+                            # Aktion verliert diese Taste (wie in modernen
+                            # Editoren). Konflikte sind damit unmöglich, die
+                            # Validierung kann nie mehr scheitern.
+                            taken_from = []
+                            for j, (sec2, act2, disp2, keys2, desc2) in enumerate(editable_bindings):
+                                if j == i:
+                                    continue
+                                chord2 = CHORD_ACTIONS.get(act2)
+                                if chord2 and new_key == chord2[0]:
+                                    continue
+                                if new_key in keys2:
+                                    rest = tuple(k for k in keys2 if k != new_key)
+                                    if not rest:
+                                        taken_from.append(disp2)
+                                        rest = tuple(cur_default_keys(act2))
+                                    editable_bindings[j] = (sec2, act2, disp2, list(rest), desc2)
+                            editable_bindings[i] = (section, action, disp, [new_key], desc)
+                            if _bindings_valid(editable_bindings):
+                                if taken_from:
+                                    status_hint = f"{C_BOLD}✓ '{disp}' auf [{new_key}] gesetzt (von {', '.join(taken_from)} übernommen){C_RESET}"
+                                else:
+                                    status_hint = f"{C_BOLD}✓ '{disp}' auf [{new_key}] gesetzt{C_RESET}"
                             else:
-                                status_hint = f"{C_BOLD}✗ [{new_key}] ist bereits belegt{C_RESET}"
+                                editable_bindings = list(backup)
+                                status_hint = f"{C_BOLD}✗ Belegung nicht möglich, Änderung verworfen{C_RESET}"
                         break
 
 

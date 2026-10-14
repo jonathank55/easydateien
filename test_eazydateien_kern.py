@@ -72,6 +72,20 @@ class TestKeyBindings(unittest.TestCase):
         except ValueError as e:
             self.fail(f"Build_keymap scheitert an bereinigten Belegungen: {e}")
 
+    def test_konfigurator_read_key_sondertasten(self):
+        import easydateien_konfigurator as k
+        r, w = os.pipe()
+        def t(seq):
+            os.write(w, seq)
+            return k.read_key(r, timeout=0.3)
+        self.assertEqual(t(b"\x1b[3~"), "DELETE")
+        self.assertEqual(t(b"\x1b[3;5~"), "DELETE")
+        self.assertEqual(t(b"\x1b[2~"), "INSERT")
+        self.assertEqual(t(b"\x1b[Z"), "SHIFT_TAB")
+        self.assertEqual(t(b"\x1b[9~"), "UNBEKANNT")
+        self.assertEqual(t(b"\x7f"), "UNBEKANNT")
+        self.assertEqual(t(b"\x1b"), "ESC")
+
     def test_trash_standard_ist_entfernen(self):
         self.assertEqual(common.KEY_BINDINGS[[b[1] for b in common.KEY_BINDINGS].index("trash")][3],
                          ("DELETE",))
