@@ -44,7 +44,7 @@ class EasyDateienActions:
 
     # ------------------------------------------------------------------ Terminal
 
-    def set_mouse_tracking(self, enable: bool):
+    def set_mouse_tracking(self, enable: bool, force: bool = False):
         """Aktiviert oder deaktiviert das SGR-Maus-Tracking im Terminal deterministisch."""
         if enable:
             if not self._mouse_tracking_active:
@@ -56,6 +56,12 @@ class EasyDateienActions:
                 sys.stdout.write("\033[?1006l\033[?1000l")
                 sys.stdout.flush()
                 self._mouse_tracking_active = False
+            elif force:
+                # Sicherheitsnetz (z. B. beim Programmende): auch ohne
+                # gesetztes Flag die Modi bedingungslos zuruecksetzen,
+                # damit das normale Terminal keinen Maus-Muell empfängt.
+                sys.stdout.write("\033[?1006l\033[?1000l")
+                sys.stdout.flush()
 
     def sync_mouse_state(self):
         """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Konfigurationsstatus."""

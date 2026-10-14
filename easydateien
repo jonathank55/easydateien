@@ -648,8 +648,8 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                 elif key == "q":
                     break
         finally:
-            self.set_mouse_tracking(False)
-            sys.stdout.write("\033[?1007l\033[r" + ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
+            self.set_mouse_tracking(False, force=True)
+            sys.stdout.write("\033[?1007l\033[?1000l\033[?1006l\033[r" + ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
             sys.stdout.flush()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
