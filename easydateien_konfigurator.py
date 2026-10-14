@@ -36,6 +36,7 @@ from easydateien_common import (
     fit_hints,
     load_config,
     save_config,
+    format_keys,
 )
 
 # Kompatibilitäts-Re-Exports: Der Dateimanager und externe Aufrufe können diese
@@ -318,8 +319,7 @@ def edit_keybindings_menu(fd: int):
         # Menüeintraege vorbereiten: (key, label, value)
         binding_rows = []
         for section, action, disp, keys, desc in editable_bindings:
-            keys_str = ", ".join(keys)
-            binding_rows.append((action, f"{section}: {disp}", f"[{keys_str}]"))
+            binding_rows.append((action, f"{section}: {disp}", f"[{format_keys(keys)}]"))
 
         binding_rows.append(("reset", "Auf Standard zurücksetzen", "[Zurücksetzen]"))
         binding_rows.append(("back", "Zurück", "[ESC]"))
@@ -387,7 +387,7 @@ def edit_keybindings_menu(fd: int):
                             "Drücken Sie die neue Taste oder Tastenkombination (ESC zum Abbrechen)",
                             [],
                             0,
-                            [("Aktuell:", ", ".join(keys), "")]
+                            [("Aktuell:", format_keys(keys), "")]
                         )
 
                         # Warten auf neue Tastenbelegung
@@ -420,10 +420,11 @@ def edit_keybindings_menu(fd: int):
                                     editable_bindings[j] = (sec2, act2, disp2, list(rest), desc2)
                             editable_bindings[i] = (section, action, disp, [new_key], desc)
                             if _bindings_valid(editable_bindings):
+                                shown_key = format_keys([new_key])
                                 if taken_from:
-                                    status_hint = f"{C_BOLD}✓ '{disp}' auf [{new_key}] gesetzt (von {', '.join(taken_from)} übernommen){C_RESET}"
+                                    status_hint = f"{C_BOLD}✓ '{disp}' auf [{shown_key}] gesetzt (von {', '.join(taken_from)} übernommen){C_RESET}"
                                 else:
-                                    status_hint = f"{C_BOLD}✓ '{disp}' auf [{new_key}] gesetzt{C_RESET}"
+                                    status_hint = f"{C_BOLD}✓ '{disp}' auf [{shown_key}] gesetzt{C_RESET}"
                             else:
                                 editable_bindings = list(backup)
                                 status_hint = f"{C_BOLD}✗ Belegung nicht möglich, Änderung verworfen{C_RESET}"
