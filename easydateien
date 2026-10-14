@@ -96,9 +96,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self.last_layout: Dict = {}
 
         self.console_always_visible: bool = self.config.get("console_always_visible", False)
-        self.console_dynamic_height: bool = self.config.get("console_dynamic_height", True)
         self.preview_wrap: bool = self.config.get("preview_wrap", True)
-        self.console_position: str = self.config.get("console_position", "unten").lower()
         # Wenn Konsole immer eingeblendet sein soll, dann standardmäßig zeigen
         self.show_console: bool = self.config.get("show_console", False) or self.console_always_visible
         self.console_focused: bool = False
@@ -138,9 +136,9 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
     UNDO_BACKUP_DIR = os.path.join(CONFIG_DIR, "undo_backups")
 
     def get_effective_columns(self, term_cols: int) -> int:
-        if term_cols >= 48:
+        if term_cols >= 40:
             return 3
-        if term_cols >= 30:
+        if term_cols >= 24:
             return 2
         return 1
 
@@ -623,16 +621,13 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         self.config.clear()
                         self.config.update(new_cfg)
                         self.show_console = self.config.get("show_console", False)
-                        self.console_position = self.config.get("console_position", "unten").lower()
                     except Exception as e:
                         self.set_status(f"Fehler Konfigurator: {e}", "error")
                     tty.setcbreak(fd, termios.TCSADRAIN)
                     sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
                     # Konfiguration neu laden
                     self.console_always_visible = self.config.get("console_always_visible", False)
-                    self.console_dynamic_height = self.config.get("console_dynamic_height", True)
                     self.preview_wrap = self.config.get("preview_wrap", True)
-                    self.console_position = self.config.get("console_position", "unten").lower()
                     self.show_console = self.config.get("show_console", False) or self.console_always_visible
                     self.sync_mouse_state()
                     sys.stdout.write("\033[2J\033[3J\033[H")

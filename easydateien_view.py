@@ -70,24 +70,13 @@ class EasyDateienView:
         header_lines_count = 1 + (1 if has_top_border else 0)
 
         active_console = self.show_console or self.console_always_visible
-        console_pos = self.config.get("console_position", "unten").lower()
-        if console_pos not in ("unten", "rechts", "links"):
-            console_pos = "unten"
-        # Konsolenposition respektieren: Die gewaehlte Position (links/rechts)
-        # gilt bei JEDER Fensterbreite — kein automatischer Umbruch auf "unten".
-        # Auch in schmalen Fenstern bleibt die Konsole seitlich; der Layout-
-        # Teil weiter unten passt die Spaltenbreiten entsprechend an.
 
-        # Dynamische Berechnung der Konsolenhöhe
-        if active_console and console_pos == "unten":
+        # Dynamische Berechnung der Konsolenhöhe: bis zu 30% der verfügbaren
+        # Höhe, mindestens 2 und höchstens 16 Zeilen (immer aktiv; der Deckel
+        # wirkt nur bei großen Fenstern, kleine Größen bleiben unverändert).
+        if active_console:
             min_console_h = 2  # Mindesthöhe für die Konsole
-            if self.console_dynamic_height:
-                # Dynamisch: bis zu 30% der verfügbaren Höhe, aber mindestens 2 und höchstens 8 Zeilen
-                console_h = max(min_console_h, min(8, int(avail_total * 0.3)))
-            else:
-                # Statisch: 4 Zeilen
-                console_h = 4
-            
+            console_h = max(min_console_h, min(16, int(avail_total * 0.3)))
             # Prüfe ob genug Platz für Dateimanager bleibt
             min_fm_rows = 3  # Mindestens 3 Zeilen für Dateimanager
             if avail_total - console_h - 1 >= min_fm_rows:
@@ -102,87 +91,33 @@ class EasyDateienView:
 
         eff_cols = self.get_effective_columns(term_cols)
 
-        if active_console and console_pos in ("links", "rechts"):
-            # Seitliche Konsole: eigene Konsolenspalte bei JEDER Fensterbreite.
-            konsolen_w = max(10, int(term_cols * 0.30))
-            rest2 = max(8, term_cols - konsolen_w - 1)
-            if console_pos == "links":
-                w_left = konsolen_w
-                w_mid = rest2
-                w_right = 0
-            else:
-                w_left = 0
-                w_mid = rest2
-                w_right = konsolen_w
-            top_line = f"╭{'─' * w_left}┬{'─' * w_mid}" + (f"┬{'─' * w_right}" if w_right else "") + "╮"
-            bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}" + (f"┴{'─' * w_right}" if w_right else "") + "╯"
-            mid_sep  = f"├{'─' * w_left}┴{'─' * w_mid}" + (f"┴{'─' * w_right}" if w_right else "") + "┤"
-            fm_rows = avail_total
-            console_h = 0
-        elif True:
-            if eff_cols == 3:
-                avail = max(10, term_cols - 4)
-                w_left = max(5, int(avail * 0.16))
-                w_right = max(10, int(avail * 0.33))
-                w_mid = avail - w_left - w_right
-                top_line = f"╭{'─' * w_left}┬{'─' * w_mid}┬{'─' * w_right}╮"
-                bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}╯"
-                mid_sep  = f"├{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}┤"
-            elif eff_cols == 2:
-                avail = max(8, term_cols - 3)
-                w_left = max(5, int(avail * 0.24))
-                w_right = 0
-                w_mid = avail - w_left
-                top_line = f"╭{'─' * w_left}┬{'─' * w_mid}╮"
-                bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}╯"
-                mid_sep  = f"├{'─' * w_left}┴{'─' * w_mid}┤"
-            else:
-                w_mid = max(4, term_cols - 2)
-                w_left = 0
-                w_right = 0
-                top_line = f"╭{'─' * w_mid}╮"
-                bot_line = f"╰{'─' * w_mid}╯"
-                mid_sep  = f"├{'─' * w_mid}┤"
-        elif False:
-            top_line = "─" * term_cols
-            bot_line = "─" * term_cols
-            mid_sep  = "─" * term_cols
-            if eff_cols == 3:
-                avail = max(10, term_cols - 4)
-                w_left = max(5, int(avail * 0.16))
-                w_right = max(10, int(avail * 0.33))
-                w_mid = avail - w_left - w_right
-            elif eff_cols == 2:
-                avail = max(8, term_cols - 2)
-                w_left = max(5, int(avail * 0.24))
-                w_right = 0
-                w_mid = avail - w_left
-            else:
-                w_mid = term_cols
-                w_left = 0
-                w_right = 0
+        if eff_cols == 3:
+            avail = max(10, term_cols - 4)
+            w_left = max(5, int(avail * 0.16))
+            w_right = max(10, int(avail * 0.33))
+            w_mid = avail - w_left - w_right
+            top_line = f"╭{'─' * w_left}┬{'─' * w_mid}┬{'─' * w_right}╮"
+            bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}╯"
+            mid_sep  = f"├{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}┤"
+        elif eff_cols == 2:
+            avail = max(8, term_cols - 3)
+            w_left = max(5, int(avail * 0.24))
+            w_right = 0
+            w_mid = avail - w_left
+            top_line = f"╭{'─' * w_left}┬{'─' * w_mid}╮"
+            bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}╯"
+            mid_sep  = f"├{'─' * w_left}┴{'─' * w_mid}┤"
         else:
-            top_line = ""
-            bot_line = ""
-            mid_sep  = ""
-            if eff_cols == 3:
-                avail = max(10, term_cols - 4)
-                w_left = max(5, int(avail * 0.16))
-                w_right = max(10, int(avail * 0.33))
-                w_mid = avail - w_left - w_right
-            elif eff_cols == 2:
-                avail = max(8, term_cols - 2)
-                w_left = max(5, int(avail * 0.24))
-                w_right = 0
-                w_mid = avail - w_left
-            else:
-                w_mid = term_cols
-                w_left = 0
-                w_right = 0
+            w_mid = max(4, term_cols - 2)
+            w_left = 0
+            w_right = 0
+            top_line = f"╭{'─' * w_mid}╮"
+            bot_line = f"╰{'─' * w_mid}╯"
+            mid_sep  = f"├{'─' * w_mid}┤"
 
         parent_items = []
         cur_p_idx = 0
-        if eff_cols >= 2 and not (active_console and console_pos == "links"):
+        if eff_cols >= 2:
             parent_path = os.path.dirname(self.current_dir)
             if parent_path != self.current_dir:
                 if self.cached_parent_dir == parent_path and self.cached_parent_items:
@@ -207,7 +142,7 @@ class EasyDateienView:
 
         child_items = []
         is_cur_dir = bool(cur_item and cur_item.is_dir)
-        if eff_cols == 3 and cur_item and is_cur_dir and not (active_console and console_pos == "rechts"):
+        if eff_cols == 3 and cur_item and is_cur_dir:
             if self.cached_child_path == cur_item.path and self.cached_child_items:
                 child_items = self.cached_child_items
             else:
@@ -222,7 +157,7 @@ class EasyDateienView:
                 self.cached_child_items = child_items
 
         preview_lines = []
-        if eff_cols == 3 and cur_item and not is_cur_dir and not (active_console and console_pos == "rechts"):
+        if eff_cols == 3 and cur_item and not is_cur_dir:
             needed_p = max(1, fm_rows - 6)
             # Umbruch in der exakten Zellinnenbreite (w_right - 2): dann
             # passt jede umgebrochene Zeile ohne zweiten Schnitt, und es
@@ -237,20 +172,15 @@ class EasyDateienView:
             "header_lines": header_lines_count, "avail_rows": fm_rows, "eff_cols": eff_cols,
             "div_style": div_style, "w_left": w_left, "w_mid": w_mid, "w_right": w_right,
             "m_start": m_start, "p_start": p_start, "active_console": active_console,
-            "console_pos": console_pos if active_console else None,
-            "split_row": (header_lines_count + fm_rows) if (active_console and console_pos == "unten" and console_h > 0) else -1,
+            "console_pos": "unten" if active_console else None,
+            "split_row": (header_lines_count + fm_rows) if (active_console and console_h > 0) else -1,
             "child_items": child_items, "cur_item": cur_item, "is_cur_dir": is_cur_dir,
         }
-
-        c_right_lines = self.get_console_display_lines(w_right, fm_rows) if (active_console and console_pos == "rechts") else []
-        c_left_lines = self.get_console_display_lines(w_left, fm_rows) if (active_console and console_pos == "links") else []
 
         file_lines = []
         for r in range(fm_rows):
             sep_row = False
-            if active_console and console_pos == "links":
-                cell_left = c_left_lines[r] if r < len(c_left_lines) else " " * w_left
-            elif eff_cols >= 2:
+            if eff_cols >= 2:
                 p_idx = p_start + r
                 if p_idx < len(parent_items):
                     p_it = parent_items[p_idx]
@@ -320,9 +250,7 @@ class EasyDateienView:
             else:
                 cell_mid = " " * w_mid
 
-            if active_console and console_pos == "rechts":
-                cell_right = c_right_lines[r] if r < len(c_right_lines) else " " * w_right
-            elif eff_cols == 3:
+            if eff_cols == 3:
                 if cur_item and is_cur_dir:
                     if r < len(child_items):
                         c_it = child_items[r]
@@ -428,7 +356,7 @@ class EasyDateienView:
             all_lines.append(pad_to_width(top_line, term_cols))
         all_lines.extend(file_lines)
 
-        if active_console and console_pos == "unten" and console_h > 0:
+        if active_console and console_h > 0:
             all_lines.append(pad_to_width(mid_sep, term_cols))
             inner_cw = max(4, term_cols - 2)
             c_lines = self.get_console_display_lines(max(2, inner_cw - 2), console_h)

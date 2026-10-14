@@ -13,7 +13,7 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
 ## Kernmerkmale
 
 - **Integrierte Konsole & Terminal mit strikter Fokus-Isolation (`t`, `Tab`, `ESC`):**  
-  EasyDateien besitzt ein vollintegriertes Terminal-Panel mit konfigurierbarer Position (`unten`, `rechts` oder `links`; Einstellung `console_position` in der Konfigurationsdatei, Standard `unten`; am unteren Rand ist das Panel 4 Zeilen hoch):
+  EasyDateien besitzt ein vollintegriertes Terminal-Panel am unteren Rand (Position fest `unten`; die Höhe passt sich dynamisch an die Fenstergröße an — bis zu 30% der verfügbaren Höhe, höchstens 16 Zeilen):
   - **Strikte Fokus-Isolation:**  
     - **Konsole im Fokus (Statusleiste „Konsole“):** Sämtliche Tastenbelegungen des Dateimanagers sind strikt inaktiv. Alle Buchstaben und Zeichen (`u`, `z`, `d`, `q`, `r`, `y`, `x`, `p`, `e`, `o`, `m`, `s`, etc.) fließen ohne Kollision direkt in die Befehlszeile.
     - **Native Textauswahl & Kopieren:** Sobald die Konsole fokussiert ist, wird das Maus-Tracking automatisch freigegeben. Textausgaben, Pfade und Befehle können direkt mit der Maus markiert und per `Cmd+C` (oder Kontextmenü) in die Zwischenablage kopiert werden.
@@ -195,7 +195,6 @@ Die Konfiguration wird im standardisierten JSON-Format gespeichert. Fehlende Sch
   "esc_to_quit": false,
   "mouse_support": true,
   "show_console": false,
-  "console_position": "unten",
   "text_editor": "nano %s",
   "opener": "open %s",
   "sort_by": "mtime",
@@ -212,7 +211,6 @@ Die Konfiguration wird im standardisierten JSON-Format gespeichert. Fehlende Sch
 | `esc_to_quit` | `false` | Reserviert; wird von der aktuellen Version nicht ausgewertet (Beenden: `q`) |
 | `mouse_support` | `true` | Mausunterstützung ein/aus |
 | `show_console` | `false` | Integrierte Konsole beim Start geöffnet |
-| `console_position` | `"unten"` | Position der Konsole: `unten`, `rechts`, `links` (bei Terminalbreite unter 60 Zeichen immer unten); nur in der Datei einstellbar, Konsolenhöhe unten: 4 Zeilen |
 | `text_editor` | `"nano %s"` | Editor für `o`; `%s` steht für den Dateipfad (im Menü wählbar: `nano`, `vim`, `nvim`, `micro`, `hx`, `emacs -nw`) |
 | `opener` | `"open %s"` | Befehl für `Enter` und Doppelklick |
 | `sort_by` | `"mtime"` | Sortierung: `mtime` (Datum), `name`, `size` (Größe), `ext` (Typ) |

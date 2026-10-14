@@ -1419,12 +1419,11 @@ class EasyDateienActions:
         w_mid = layout.get("w_mid", 0)
         m_start = layout.get("m_start", 0)
         active_console = layout.get("active_console", False)
-        console_pos = layout.get("console_pos", "unten")
         split_row = layout.get("split_row", -1)
 
         if y == 1:
             return True
-        if active_console and console_pos == "unten" and split_row > 0:
+        if active_console and split_row > 0:
             if y > split_row:
                 self.console_focused = True
                 return True
@@ -1434,17 +1433,11 @@ class EasyDateienActions:
         file_row = (y - 1) - hdr_count
         if 0 <= file_row < avail_rows:
             col_x = x - 1
-            if active_console and console_pos == "rechts" and col_x >= (w_left + w_mid + 2):
-                self.console_focused = True
-                return True
-            elif active_console and console_pos == "links" and col_x <= w_left:
-                self.console_focused = True
-                return True
             self.console_focused = False
             in_left = (eff_cols >= 2 and col_x <= w_left)
             in_mid = (eff_cols == 1 and col_x <= w_mid) or (eff_cols >= 2 and (w_left + 1) <= col_x <= (w_left + 1 + w_mid))
             in_right = (eff_cols == 3 and col_x >= (w_left + w_mid + 2))
-            if in_left and not (active_console and console_pos == "links"):
+            if in_left:
                 self.go_parent_directory()
                 return True
             elif in_mid:
@@ -1461,7 +1454,7 @@ class EasyDateienActions:
                         self.last_click_time = now
                         self.last_click_idx = target_idx
                     return True
-            elif in_right and not (active_console and console_pos == "rechts"):
+            elif in_right:
                 cur_item = layout.get("cur_item")
                 if cur_item and layout.get("is_cur_dir"):
                     child_items = layout.get("child_items", [])
@@ -1494,19 +1487,12 @@ class EasyDateienActions:
         """Behandelt Mausrad-Events präzise nach Mausposition und Fokus."""
         layout = self.last_layout or {}
         active_console = layout.get("active_console", False) or self.show_console
-        console_pos = layout.get("console_pos", "unten")
         split_row = layout.get("split_row", -1)
-        w_left = layout.get("w_left", 0)
-        w_mid = layout.get("w_mid", 0)
 
         is_over_console = False
         if active_console:
             if y is not None and x is not None:
-                if console_pos == "unten" and split_row > 0 and y >= split_row:
-                    is_over_console = True
-                elif console_pos == "rechts" and x >= (w_left + w_mid + 2):
-                    is_over_console = True
-                elif console_pos == "links" and x <= w_left:
+                if split_row > 0 and y >= split_row:
                     is_over_console = True
             elif self.console_focused:
                 is_over_console = True

@@ -53,8 +53,6 @@ MAIN_MENU_ITEMS = [
     ("mouse", "Mausunterstützung", "ein"),
     ("hidden", "Versteckte Dateien anzeigen", "aus"),
     ("console_always_visible", "Konsole immer eingeblendet", "aus"),
-    ("console_dynamic_height", "Dynamische Konsolenhöhe", "ein"),
-    ("console_position", "Konsolenposition", "unten"),
     ("preview_wrap", "Vorschau-Umbruch", "ein"),
     ("sort", "Datei- und Ordneranordnung", "öffnen"),
     ("editor", "Editor", "nano"),
@@ -494,8 +492,6 @@ MENU_VALUE_RENDERERS = {
     "mouse": lambda cfg: f"[{'ein' if cfg.get('mouse_support', True) else 'aus'}]",
     "hidden": lambda cfg: f"[{'ein' if cfg.get('show_hidden', False) else 'aus'}]",
     "console_always_visible": lambda cfg: f"[{'ein' if cfg.get('console_always_visible', False) else 'aus'}]",
-    "console_dynamic_height": lambda cfg: f"[{'ein' if cfg.get('console_dynamic_height', True) else 'aus'}]",
-    "console_position": lambda cfg: f"[{cfg.get('console_position', 'unten')}]",
     "preview_wrap": lambda cfg: f"[{'ein' if cfg.get('preview_wrap', True) else 'aus'}]",
     "sort": lambda cfg: "[öffnen]",
     "editor": lambda cfg: f"[{editor_command(cfg)}]",
@@ -505,7 +501,6 @@ MENU_VALUE_RENDERERS = {
 }
 
 # Umschalt- und Rotationsaktionen des Hauptmenüs (datengetrieben)
-_CONSOLE_POSITIONS = ["unten", "rechts", "links"]
 
 
 def _cycle_option(cfg: dict, key: str, options: list, step: int) -> None:
@@ -865,12 +860,6 @@ def main_menu(fd: int):
                 save_config(cfg)
             elif act == "console_always_visible":
                 _toggle_option(cfg, "console_always_visible", False)
-                save_config(cfg)
-            elif act == "console_dynamic_height":
-                _toggle_option(cfg, "console_dynamic_height", True)
-                save_config(cfg)
-            elif act == "console_position":
-                _cycle_option(cfg, "console_position", _CONSOLE_POSITIONS, -1 if k == "LEFT" else 1)
                 save_config(cfg)
             elif act == "preview_wrap":
                 _toggle_option(cfg, "preview_wrap", True)
