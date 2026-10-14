@@ -906,16 +906,35 @@ class EasyDateienActions:
                             else:
                                 lines.append(f" {fe.name} ({format_size(fe.size)})")
                 else:
+                    # Dateigroesse pruefen: Riesen-Dateien (Modelle, Videos)
+                    # brauchen keinen vollstaendigen Vorschau-Cache; sie
+                    # werden nur bis zum Budget gelesen (Scrollen deckt das
+                    # Lesenswerte ab, ohne die App beim Blättern zu blocken).
+                    try:
+                        file_size = os.path.getsize(path)
+                    except OSError:
+                        file_size = 0
+                    VORSCHAU_BUDGET_BYTES = 1 * 1024 * 1024  # 1 MB
                     with open(path, "r", encoding="utf-8", errors="replace") as f:
-                        # Vollständig lesen (Deckel), damit das Vorschau-
-                        # Scrollen den gesamten Dateiinhalt erreichen kann;
-                        # max_lines begrenzt nur die ANZEIGE, nicht den Cache.
+                        gelesen = 0
                         for _ in range(10000):
                             line = f.readline()
                             if not line:
                                 break
+                            gelesen += len(line)
+                            if gelesen > VORSCHAU_BUDGET_BYTES:
+                                # Budget erreicht: Vorschau endet hier; der
+                                # Rest bleibt ungeladen (verhindert Sekunden-
+                                # langes Einfrieren bei GB-Dateien).
+                                lines.append("… [weitere Inhalte nicht geladen]")
+                                break
                             clean_line = line.rstrip("\r\n").replace("\t", "    ")
                             clean_line = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_line)
+                            if "\x00" in line or (len(clean_line) == 0 and len(line.strip()) > 0 and file_size > 1024 * 1024):
+                                # Binaär-Inhalt in einer Grossdatei: Vorschau
+                                # abbrechen statt Muell anzeigen bzw. zu lesen.
+                                lines = ["[Binärdatei oder nicht lesbar]"] if not lines else lines
+                                break
                             lines.append(clean_line)
             except Exception:
                 lines = ["[Binäre Datei oder nicht lesbar]"]
