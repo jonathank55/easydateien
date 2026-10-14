@@ -1165,6 +1165,7 @@ class EasyDateienActions:
         self.touch_last_used_dir()
         self.console_cmd_history.append(cmd)
         self.console_history_idx = len(self.console_cmd_history)
+        self.console_history_draft = ""
         self.console_output_lines.append(f"$ {cmd}")
         self.console_scroll_offset = 0
         if cmd in ("exit", "quit"):

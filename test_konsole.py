@@ -76,7 +76,12 @@ class TestKonsoleUnit(unittest.TestCase):
         self.app._console_history_next()
         self.assertEqual(self.app.console_input, "mein-entwurf",
                          "Ungesendeter Entwurf ging beim Historien-Blättern verloren")
-        self.assertEqual(self.app.console_history_draft, "")
+        # Entwurf bleibt am Ende stabil (weitere Blätterzyklen)
+        self.assertTrue(self.app._console_history_prev())
+        self.assertEqual(self.app.console_input, "echo zwei")
+        self.app._console_history_next()
+        self.assertEqual(self.app.console_input, "mein-entwurf",
+                         "Entwurf nach erneutem Blättern wieder verloren")
 
     def test_historie_ohne_entwurf_endet_leer(self):
         self.app.run_console_command("echo eins", None, None)

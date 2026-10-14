@@ -165,7 +165,6 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         else:
             self.console_history_idx = len(self.console_cmd_history)
             self.console_input = self.console_history_draft
-            self.console_history_draft = ""
         self.console_cursor_idx = len(self.console_input)
 
     def run(self):
