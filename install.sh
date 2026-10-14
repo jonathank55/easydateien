@@ -82,6 +82,14 @@ fi
 mkdir -p "$CONFIG_DIR"
 
 echo "Verlinke Programmdateien nach $CONFIG_DIR..."
+# Selbstheilung: Tote Symlinks und Altreste aus frueheren Installationen entfernen
+for DATEI in easydateien easydateien_ui.py easydateien_actions.py easydateien_view.py easydateien_common.py easydateien_konfigurator.py config.example.json; do
+    ZIEL="$CONFIG_DIR/$DATEI"
+    if [ -L "$ZIEL" ] && [ ! -e "$ZIEL" ]; then
+        rm -f "$ZIEL"
+        echo "Entferne toten Symlink: $ZIEL"
+    fi
+done
 ln -sf "$SRC_DIR/easydateien" "$CONFIG_DIR/easydateien"
 ln -sf "$SRC_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_ui.py"
     ln -sf "$SRC_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_actions.py"
@@ -116,10 +124,52 @@ if command -v clang >/dev/null 2>&1 && [ -f "$SRC_DIR/easydateien_clip.m" ]; the
     fi
 fi
 
-# 3. Standard-Konfiguration initialisieren, falls noch nicht vorhanden
-if [ ! -f "$CONFIG_DIR/config.json" ]; then
-    echo "Erstelle Standard-Konfiguration in $CONFIG_DIR/config.json..."
-    cp "$SRC_DIR/config.json" "$CONFIG_DIR/config.json"
+# 3. Standard-Konfiguration initialisieren oder HEILEN: Eine korrupte
+# config.json (z. B. halbfertig durch abgebrochene Installation) wird
+# durch gueltige Standardwerte ersetzt, eine gueltige bleibt unberuehrt.
+CONFIG_KAPUTT=0
+if [ -f "$CONFIG_DIR/config.json" ] && command -v python3 >/dev/null 2>&1; then
+    if ! python3 -c "import json; json.load(open('$CONFIG_DIR/config.json'))" 2>/dev/null; then
+        CONFIG_KAPUTT=1
+    fi
+fi
+if [ ! -f "$CONFIG_DIR/config.json" ] || [ "$CONFIG_KAPUTT" -ne 0 ]; then
+    if [ "$CONFIG_KAPUTT" -ne 0 ]; then
+        echo "Korrupte Konfiguration erkannt — stelle Standardwerte wieder her ..."
+    else
+        echo "Erstelle Standard-Konfiguration in $CONFIG_DIR/config.json..."
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        if ! python3 -c "
+import sys, json
+sys.path.insert(0, '$CONFIG_DIR')
+import easydateien_common
+with open('$CONFIG_DIR/config.json', 'w') as f:
+    json.dump(easydateien_common.DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
+    f.write('
+')
+" 2>/dev/null; then
+            echo "Hinweis: Konfiguration wird mit dokumentierten Standardwerten erstellt." >&2
+            cat > "$CONFIG_DIR/config.json" <<'STANDARD_CONFIG'
+{
+  "esc_to_quit": false,
+  "mouse_support": false,
+  "show_console": false,
+  "console_always_visible": true,
+  "preview_wrap": true,
+  "text_editor": "nano %s",
+  "opener": "open %s",
+  "sort_by": "name",
+  "sort_reverse": true,
+  "sort_dir_first": true,
+  "show_hidden": false
+}
+STANDARD_CONFIG
+        fi
+    else
+        echo "FEHLER: python3 wird benoetigt, um EasyDateien zu installieren." >&2
+        exit 1
+    fi
 else
     echo "Bestehende Konfiguration in $CONFIG_DIR/config.json bleibt unberührt."
 fi
@@ -160,6 +210,10 @@ if command -v python3 >/dev/null 2>&1; then
         echo "FEHLER: Programmmodule konnten nicht geladen werden (Import-Test)" >&2
         VERIFY_FAILED=1
     fi
+fi
+if [ ! -s "$CONFIG_DIR/config.json" ] || ! python3 -c "import json; json.load(open('$CONFIG_DIR/config.json'))" 2>/dev/null; then
+    echo "FEHLER: config.json fehlt oder ist ungueltig." >&2
+    VERIFY_FAILED=1
 fi
 if [ "$VERIFY_FAILED" -ne 0 ]; then
     echo "==============================================================================" >&2
