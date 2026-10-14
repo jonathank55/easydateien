@@ -713,6 +713,30 @@ def main():
         app.run()
     except KeyboardInterrupt:
         pass
-
+    finally:
+        # Garantierter Terminal-Reset — auch bei unerwarteten Ausnahmen:
+        # Scroll-Region aufheben, Autowrap zuruecksetzen, Cursor zeigen,
+        # Alternativbildschirm verlassen. Jeder Schritt einzeln abgesichert.
+        import sys as _sys
+        for seq in ("\033[?1007l", "\033[?1000l", "\033[?1006l", "\033[r",
+                    "\033[?7h", "\033[?25h", "\033[?1049l"):
+            try:
+                _sys.stdout.write(seq)
+            except Exception:
+                pass
+        try:
+            _sys.stdout.flush()
+        except Exception:
+            pass
+        try:
+            import termios, tty
+            _fd = _sys.stdin.fileno()
+            try:
+                tty.setcbreak(_fd, termios.TCSADRAIN)
+            except Exception:
+                pass
+            termios.tcsetattr(_fd, termios.TCSADRAIN, termios.tcgetattr(_fd))
+        except Exception:
+            pass
 if __name__ == "__main__":
     main()
