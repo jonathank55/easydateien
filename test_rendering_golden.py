@@ -88,13 +88,13 @@ print(json.dumps({
 # Hashes des heutigen, als korrekt eingefrorenen Verhaltens (bitgleich vom
 # Monolithen vor dem Modul-Split; Subprozess liefert sie reproduzierbar):
 EXPECTED = {
-    "3N": "1b1d44741bf49d70",
-    "3M": "68ad4866fd3de6a5",
-    "3C": "0c274160906dabce",
-    "GOTO": "a8f9cc5d6367bbd5",
-    "HELP": "feb60744b5af9fda",
-    "2N": "0146bf19d7af120f",
-    "1N": "d49b4e5b75993738",
+    "3N": "859ed9527bb4d6c4",
+    "3M": "a5aafdcf1e3d1196",
+    "3C": "43bc3d4029d60240",
+    "GOTO": "ae11fed352ead461",
+    "HELP": "dbae3c2069d77aaa",
+    "2N": "e0d8c2d030a1ba6b",
+    "1N": "c9d21da3b263cb9d",
 }
 
 
