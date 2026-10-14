@@ -62,6 +62,30 @@ class TestKonsoleUnit(unittest.TestCase):
     def out(self):
         return [l for l in self.app.console_output_lines if l and not l.startswith("$ ")]
 
+    def test_historie_entwurf_bleibt_erhalten(self):
+        self.app.run_console_command("echo eins", None, None)
+        self.app.run_console_command("echo zwei", None, None)
+        self.app.console_input = "mein-entwurf"
+        self.app.console_cursor_idx = len(self.app.console_input)
+        self.assertTrue(self.app._console_history_prev())
+        self.assertEqual(self.app.console_input, "echo zwei")
+        self.assertTrue(self.app._console_history_prev())
+        self.assertEqual(self.app.console_input, "echo eins")
+        self.app._console_history_next()
+        self.assertEqual(self.app.console_input, "echo zwei")
+        self.app._console_history_next()
+        self.assertEqual(self.app.console_input, "mein-entwurf",
+                         "Ungesendeter Entwurf ging beim Historien-Blättern verloren")
+        self.assertEqual(self.app.console_history_draft, "")
+
+    def test_historie_ohne_entwurf_endet_leer(self):
+        self.app.run_console_command("echo eins", None, None)
+        self.app.console_input = ""
+        self.assertTrue(self.app._console_history_prev())
+        self.assertEqual(self.app.console_input, "echo eins")
+        self.app._console_history_next()
+        self.assertEqual(self.app.console_input, "")
+
     def test_stdout_erscheint(self):
         self.app.run_console_command("echo hello", None, None)
         self.assertIn("hello", self.out())

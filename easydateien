@@ -143,6 +143,31 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
             return 2
         return 1
 
+    def _console_history_prev(self) -> bool:
+        """Springt in der Befehlshistorie einen Schritt zurueck; sichert dabei
+        einen noch nicht gesendeten Entwurf (wie in bash). Gibt False zurueck,
+        wenn kein aelterer Eintrag existiert."""
+        if not (self.console_cmd_history and self.console_history_idx > 0):
+            return False
+        if self.console_history_idx >= len(self.console_cmd_history):
+            self.console_history_draft = self.console_input
+        self.console_history_idx -= 1
+        self.console_input = self.console_cmd_history[self.console_history_idx]
+        self.console_cursor_idx = len(self.console_input)
+        return True
+
+    def _console_history_next(self) -> None:
+        """Springt in der Befehlshistorie einen Schritt vor; stellt am Ende
+        den gesicherten Entwurf wieder her (wie in bash)."""
+        if self.console_history_idx < len(self.console_cmd_history) - 1:
+            self.console_history_idx += 1
+            self.console_input = self.console_cmd_history[self.console_history_idx]
+        else:
+            self.console_history_idx = len(self.console_cmd_history)
+            self.console_input = self.console_history_draft
+            self.console_history_draft = ""
+        self.console_cursor_idx = len(self.console_input)
+
     def run(self):
         if not sys.stdin.isatty():
             print("EasyDateien erfordert ein interaktives Terminal.")
@@ -320,14 +345,9 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         needs_redraw = True
                     elif key == "UP":
                         # Befehlshistorie oder Scrollen
-                        if self.console_cmd_history and self.console_history_idx > 0:
-                            if self.console_history_idx >= len(self.console_cmd_history):
-                                self.console_history_draft = self.console_input
-                            self.console_history_idx -= 1
-                            self.console_input = self.console_cmd_history[self.console_history_idx]
-                            self.console_cursor_idx = len(self.console_input)
-                        else:
-                            # Nach oben scrollen (Inhalt nach unten bewegen)
+                        if not self._console_history_prev():
+                            # Kein Historieneintrag mehr: Nach oben scrollen
+                            # (Inhalt nach unten bewegen)
                             wrapped_lines: List[str] = []
                             for raw_line in self.console_output_lines:
                                 wrapped_lines.extend(wrap_line_to_width(raw_line, max(1, shutil.get_terminal_size((80, 24)).columns - 4)))
@@ -340,14 +360,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                             # Nach unten scrollen (Inhalt nach oben bewegen)
                             self.console_scroll_offset = max(0, self.console_scroll_offset - 1)
                         elif self.console_cmd_history:
-                            if self.console_history_idx < len(self.console_cmd_history) - 1:
-                                self.console_history_idx += 1
-                                self.console_input = self.console_cmd_history[self.console_history_idx]
-                            else:
-                                self.console_history_idx = len(self.console_cmd_history)
-                                self.console_input = self.console_history_draft
-                                self.console_history_draft = ""
-                            self.console_cursor_idx = len(self.console_input)
+                            self._console_history_next()
                         needs_redraw = True
                     elif key == "CTRL_C":
                         self.console_input = ""

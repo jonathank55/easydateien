@@ -318,6 +318,13 @@ def get_shell_environment() -> Tuple[str, Dict[str, str]]:
         if sp not in path_parts and os.path.exists(sp):
             path_parts.append(sp)
     env["PATH"] = ":".join(path_parts)
+    # Geerbte Terminalgroessen-Variablen entfernen: shutil.get_terminal_size()
+    # wertet COLUMNS/LINES vor dem ioctl aus; vererbte Werte vom aeusseren
+    # Terminal wuerden die Panelbreite ueberschreiben (kuenstliche Mindest-
+    # breite, falscher Umbruch). Ohne diese Variablen liest jedes Programm die
+    # exakte, per TIOCSWINSZ gesetzte PTY-Breite.
+    env.pop("COLUMNS", None)
+    env.pop("LINES", None)
     return user_shell, env
 
 def replace_ansi_range(base_line: str, start_col: int, replacement: str, repl_width: int, total_width: int) -> str:
