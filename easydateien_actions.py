@@ -1060,7 +1060,9 @@ class EasyDateienActions:
             import fcntl
             import struct
             curr = shutil.get_terminal_size((80, 24))
-            panel_w = max(20, curr.columns - 2)
+            # Innenbreite des Panels: Rand │ plus je ein Leerzeichen Abstand
+            # links und rechts ergeben term_cols - 4 nutzbare Zeichen.
+            panel_w = max(20, curr.columns - 4)
             panel_h = max(4, curr.lines // 3)
             fcntl.ioctl(master_fd, termios.TIOCSWINSZ, struct.pack("HHHH", panel_h, panel_w, 0, 0))
         except Exception:
