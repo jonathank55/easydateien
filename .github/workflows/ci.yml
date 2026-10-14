@@ -74,7 +74,7 @@ jobs:
           export TESTHOME=$(mktemp -d)
           mkdir -p "$TESTHOME/.config/easydateien" "$TESTHOME/.local/bin"
           cp install.sh /tmp/inst_poisoned.sh
-          sed -i 's/"easydateien_view.py" //' /tmp/inst_poisoned.sh
+          sed -i 's/easydateien_view.py" //g; s/ easydateien_view.py//g' /tmp/inst_poisoned.sh
           HOME="$TESTHOME" bash /tmp/inst_poisoned.sh > /dev/null 2>&1 && {
             echo "FEHLER: unvollständige Installation wurde als Erfolg gemeldet"; exit 1
           }
