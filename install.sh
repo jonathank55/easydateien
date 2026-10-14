@@ -119,6 +119,35 @@ for TARGET_BIN in "$HOME/.local/bin" "$HOME/bin"; do
     fi
 done
 
+# ---------------------------------------------------------------- Selbst-Verifikation
+# Prueft, dass die Installation vollstaendig und lauffaehig ist. Schlaegt etwas
+# fehl, bricht das Skript LAUT ab, statt einen halbfertigen Zustand zu melden.
+VERIFY_FILES=("easydateien" "easydateien_ui.py" "easydateien_actions.py" "easydateien_view.py" "easydateien_common.py" "easydateien_konfigurator.py")
+VERIFY_FAILED=0
+for DATEI in "${VERIFY_FILES[@]}"; do
+    ZIEL="$CONFIG_DIR/$DATEI"
+    if [ ! -f "$ZIEL" ] || [ -L "$ZIEL" ] && [ ! -e "$ZIEL" ]; then
+        echo "FEHLER: $ZIEL fehlt oder ist ein toter Symlink" >&2
+        VERIFY_FAILED=1
+    fi
+done
+if command -v python3 >/dev/null 2>&1; then
+    if ! python3 -m py_compile "$CONFIG_DIR/easydateien" 2>/dev/null; then
+        echo "FEHLER: Hauptprogramm hat keine gueltige Python-Syntax" >&2
+        VERIFY_FAILED=1
+    fi
+    if ! python3 -c "import sys; sys.path.insert(0, '$CONFIG_DIR'); import easydateien_ui, easydateien_actions, easydateien_view, easydateien_common" 2>/dev/null; then
+        echo "FEHLER: Programmmodule konnten nicht geladen werden (Import-Test)" >&2
+        VERIFY_FAILED=1
+    fi
+fi
+if [ "$VERIFY_FAILED" -ne 0 ]; then
+    echo "==============================================================================" >&2
+    echo "FEHLER: Die Installation ist unvollstaendig. NICHT als erfolgreich melden." >&2
+    echo "Bitte erneut ausfuehren und die Meldungen oben pruefen." >&2
+    exit 1
+fi
+
 echo "=============================================================================="
 echo "ERFOLG: EasyDateien wurde erfolgreich installiert!"
 echo "Befehl:  easydateien (oder kurz: ed)"

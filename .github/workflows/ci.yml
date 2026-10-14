@@ -34,3 +34,47 @@ jobs:
 
       - name: Test-Suite ausführen
         run: python3 run_tests.py
+
+  installationsmatrix:
+    name: Installation in allen Modi
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installation - frisch
+        run: |
+          export TESTHOME=$(mktemp -d)
+          mkdir -p "$TESTHOME/.local/bin"
+          HOME="$TESTHOME" bash install.sh
+
+      - name: Installation - Update mit toten Symlinks (Reparaturfall)
+        run: |
+          export TESTHOME=$(mktemp -d)
+          mkdir -p "$TESTHOME/.config/easydateien" "$TESTHOME/.local/bin"
+          ln -s /nicht/vorhanden "$TESTHOME/.config/easydateien/easydateien_ui.py"
+          ln -s /nicht/vorhanden "$TESTHOME/.config/easydateien/easydateien"
+          HOME="$TESTHOME" bash install.sh
+
+      - name: Installation - bestehende config.json bleibt unberührt
+        run: |
+          export TESTHOME=$(mktemp -d)
+          mkdir -p "$TESTHOME/.config/easydateien" "$TESTHOME/.local/bin"
+          echo '{"editor": "vim"}' > "$TESTHOME/.config/easydateien/config.json"
+          HOME="$TESTHOME" bash install.sh
+          grep -q '"editor": "vim"' "$TESTHOME/.config/easydateien/config.json"
+
+      - name: Installation - unvollständig muss laut scheitern
+        run: |
+          export TESTHOME=$(mktemp -d)
+          mkdir -p "$TESTHOME/.config/easydateien" "$TESTHOME/.local/bin"
+          cp install.sh /tmp/inst_poisoned.sh
+          sed -i 's/"easydateien_view.py" //' /tmp/inst_poisoned.sh
+          HOME="$TESTHOME" bash /tmp/inst_poisoned.sh > /dev/null 2>&1 && {
+            echo "FEHLER: unvollständige Installation wurde als Erfolg gemeldet"; exit 1
+          }

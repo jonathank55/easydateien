@@ -981,6 +981,7 @@ class EasyDateienActions:
             if any(p in l_lower for p in self._CONSOLE_IGNORED_PATTERNS):
                 continue
             clean_l = ANSI_ESCAPE_RE.sub("", l)
+            clean_l = clean_l.replace("\t", "        ")
             clean_l = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_l)
             if clean_l:
                 self.console_output_lines.append(clean_l)
