@@ -73,8 +73,10 @@ class EasyDateienView:
         console_pos = self.config.get("console_position", "unten").lower()
         if console_pos not in ("unten", "rechts", "links"):
             console_pos = "unten"
-        if active_console and console_pos in ("rechts", "links") and term_cols < 60:
-            console_pos = "unten"
+        # Konsolenposition respektieren: Die gewaehlte Position (links/rechts)
+        # gilt bei JEDER Fensterbreite — kein automatischer Umbruch auf "unten".
+        # Auch in schmalen Fenstern bleibt die Konsole seitlich; der Layout-
+        # Teil weiter unten passt die Spaltenbreiten entsprechend an.
 
         # Dynamische Berechnung der Konsolenhöhe
         if active_console and console_pos == "unten":
@@ -100,10 +102,27 @@ class EasyDateienView:
 
         eff_cols = self.get_effective_columns(term_cols)
 
-        if True:
+        if active_console and console_pos in ("links", "rechts"):
+            # Seitliche Konsole: eigene Konsolenspalte bei JEDER Fensterbreite.
+            konsolen_w = max(10, int(term_cols * 0.30))
+            rest2 = max(8, term_cols - konsolen_w - 1)
+            if console_pos == "links":
+                w_left = konsolen_w
+                w_mid = rest2
+                w_right = 0
+            else:
+                w_left = 0
+                w_mid = rest2
+                w_right = konsolen_w
+            top_line = f"╭{'─' * w_left}┬{'─' * w_mid}" + (f"┬{'─' * w_right}" if w_right else "") + "╮"
+            bot_line = f"╰{'─' * w_left}┴{'─' * w_mid}" + (f"┴{'─' * w_right}" if w_right else "") + "╯"
+            mid_sep  = f"├{'─' * w_left}┴{'─' * w_mid}" + (f"┴{'─' * w_right}" if w_right else "") + "┤"
+            fm_rows = avail_total
+            console_h = 0
+        elif True:
             if eff_cols == 3:
                 avail = max(10, term_cols - 4)
-                w_left = max(6, int(avail * 0.22))
+                w_left = max(5, int(avail * 0.16))
                 w_right = max(10, int(avail * 0.33))
                 w_mid = avail - w_left - w_right
                 top_line = f"╭{'─' * w_left}┬{'─' * w_mid}┬{'─' * w_right}╮"
@@ -111,7 +130,7 @@ class EasyDateienView:
                 mid_sep  = f"├{'─' * w_left}┴{'─' * w_mid}┴{'─' * w_right}┤"
             elif eff_cols == 2:
                 avail = max(8, term_cols - 3)
-                w_left = max(6, int(avail * 0.30))
+                w_left = max(5, int(avail * 0.24))
                 w_right = 0
                 w_mid = avail - w_left
                 top_line = f"╭{'─' * w_left}┬{'─' * w_mid}╮"
@@ -130,12 +149,12 @@ class EasyDateienView:
             mid_sep  = "─" * term_cols
             if eff_cols == 3:
                 avail = max(10, term_cols - 4)
-                w_left = max(6, int(avail * 0.22))
+                w_left = max(5, int(avail * 0.16))
                 w_right = max(10, int(avail * 0.33))
                 w_mid = avail - w_left - w_right
             elif eff_cols == 2:
                 avail = max(8, term_cols - 2)
-                w_left = max(6, int(avail * 0.30))
+                w_left = max(5, int(avail * 0.24))
                 w_right = 0
                 w_mid = avail - w_left
             else:
@@ -148,12 +167,12 @@ class EasyDateienView:
             mid_sep  = ""
             if eff_cols == 3:
                 avail = max(10, term_cols - 4)
-                w_left = max(6, int(avail * 0.22))
+                w_left = max(5, int(avail * 0.16))
                 w_right = max(10, int(avail * 0.33))
                 w_mid = avail - w_left - w_right
             elif eff_cols == 2:
                 avail = max(8, term_cols - 2)
-                w_left = max(6, int(avail * 0.30))
+                w_left = max(5, int(avail * 0.24))
                 w_right = 0
                 w_mid = avail - w_left
             else:

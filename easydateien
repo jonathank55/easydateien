@@ -138,9 +138,9 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
     UNDO_BACKUP_DIR = os.path.join(CONFIG_DIR, "undo_backups")
 
     def get_effective_columns(self, term_cols: int) -> int:
-        if term_cols >= 60:
+        if term_cols >= 48:
             return 3
-        if term_cols >= 40:
+        if term_cols >= 30:
             return 2
         return 1
 
