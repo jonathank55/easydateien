@@ -197,10 +197,16 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         else:
             tag_colored = ""
 
-        avail_lbl = max(2, inner - str_width(tag) - 3)
+        # Tag dynamisch kuerzen: Titel bekommt mindestens 2 Spalten,
+        # der Tag den Rest; laengere Tags enden mit "..." statt hartem Schnitt.
+        MIN_TITEL = 12
+        tag_max = max(2, inner - 4 - MIN_TITEL)
+        tag_visible = truncate_to_width(tag, tag_max)
+        tag = tag_visible
+        avail_lbl = max(MIN_TITEL, inner - str_width(tag_visible) - 3)
         lbl_trunc = truncate_to_width(label, avail_lbl)
         lbl_styled = lbl_trunc
-        content_row = f"{lbl_styled}{' ' * max(1, inner - 2 - str_width(lbl_trunc) - str_width(tag))}{tag_colored}"
+        content_row = f"{lbl_styled}{' ' * max(1, inner - 2 - str_width(lbl_trunc) - str_width(tag_visible))}{tag_colored}"
         if is_sel:
             content_row = f"{C_BOLD}{C_INVERT} {pad_to_width(ANSI_ESCAPE_RE.sub('', content_row), inner - 2)} {C_RESET}"
             lines.append(f"│{content_row}│")
@@ -515,6 +521,9 @@ def _lies_text(fd: int, prompt: str, vorgabe: str = "") -> str:
     """Liest eine Textzeile im Konfigurator-Stil (einfaches cbreak-Lesen)."""
     render_box("EINGABE", prompt, [], 0, [f"[ESC] Abbrechen"])
     row = vorgabe
+    # Erste Eingabe ersetzt die Vorgabe ( intuitive Bearbeitung: einfach
+    # los-tippen ueberschreibt; nur ENTER ohne Eingabe uebernimmt die Vorgabe).
+    ersetzt = not vorgabe
     while True:
         k = read_key(fd, timeout=0.05)
         if not k:
@@ -525,11 +534,21 @@ def _lies_text(fd: int, prompt: str, vorgabe: str = "") -> str:
             return None
         elif k == "BACKSPACE":
             row = row[:-1]
+            ersetzt = True
         elif k in ("DELETE",):
             row = ""
+            ersetzt = True
+        elif k == "SPACE":
+            if not ersetzt:
+                row = ""
+                ersetzt = True
+            row += " "
         elif k and len(k) == 1 and k.isprintable():
+            if not ersetzt:
+                row = ""
+                ersetzt = True
             row += k
-        render_box("EINGABE", prompt, [( "text", row, "")], 0, [f"[ESC] Abbrechen", "[Eingabe] Bestätigen"])
+        render_box("EINGABE", f"{prompt}: {row}", [], 0, ["[Eingabe] Bestätigen", "[ESC] Abbrechen"])
 
 
 def edit_schnellstart_menu(fd: int):
@@ -545,7 +564,7 @@ def edit_schnellstart_menu(fd: int):
             if sub:
                 rows.append((str(nr), e.get("titel", ""), f"[{len(sub)} Untermenü]"))
             else:
-                rows.append((str(nr), e.get("titel", ""), f"{e.get('befehl', '')[:26]}"))
+                rows.append((str(nr), e.get("titel", ""), e.get("befehl", "")))
         rows.append(("add", "Neuen Eintrag hinzufügen", "[neu]"))
         rows.append(("del", "Eintrag löschen", "[löschen]"))
         rows.append(("reset", "Auf Standard-Einträge zurücksetzen", "[standard]"))
@@ -572,6 +591,25 @@ def edit_schnellstart_menu(fd: int):
             idx = min(len(rows) - 1, idx + 8)
         elif k in ("ENTER", "SPACE", "RIGHT"):
             aktion = rows[idx][0]
+            if aktion.isdigit() and 1 <= int(aktion) <= len(eintraege):
+                # Bestehenden Eintrag bearbeiten: Bezeichnung, dann Befehl;
+                # leere Eingabe uebernimmt den vorhandenen Wert (unveraendert).
+                pos = int(aktion) - 1
+                alt = eintraege[pos]
+                neuer_titel = _lies_text(fd, "Bezeichnung eingeben", alt.get("titel", ""))
+                if neuer_titel is None:
+                    continue
+                if neuer_titel.strip():
+                    alt["titel"] = neuer_titel.strip()
+                if "untermenu" not in alt:
+                    neuer_befehl = _lies_text(fd, "Befehl eingeben", alt.get("befehl", ""))
+                    if neuer_befehl is None:
+                        continue
+                    if neuer_befehl.strip():
+                        alt["befehl"] = neuer_befehl.strip()
+                cfg["schnellstart_eintraege"] = eintraege
+                save_config(cfg)
+                continue
             if aktion == "add":
                 titel = _lies_text(fd, "Titel des neuen Eintrags")
                 if not titel:
