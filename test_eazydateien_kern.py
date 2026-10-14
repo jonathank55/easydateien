@@ -12,6 +12,7 @@ import os
 import sys
 import tempfile
 import unittest
+import re
 import zipfile
 
 import easydateien_common as common
@@ -263,6 +264,24 @@ class TestAppKern(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.dir_a, "v.txt")))
         self.assertTrue(os.path.isdir(os.path.join(self.dir_a, "KeinVerschub")))
         self.assertEqual(os.listdir(os.path.join(self.dir_a, "KeinVerschub")), [])
+
+    def test_konsole_tabs_expandiert_und_umbruch(self):
+        import shutil as _sh
+        for n in ("a.txt", "b.txt"):
+            open(os.path.join(self.dir_a, n), "w").write(n)
+        self.app.show_console = True
+        self.app.console_focused = True
+        self.app.run_console_command("printf 'alpha\\tbeta\\tgamma-lang-dies-ist-ein-sehr-langes-wort\\n'", None, None)
+        self.app.refresh_items()
+        # Tabs duerfen nirgends landen
+        for l in self.app.console_output_lines:
+            self.assertNotIn("\t", l)
+        # Schmale Konsole: Umbruch statt Abschneiden, Inhalt bleibt erhalten
+        lines = self.app.get_console_display_lines(28, 10)
+        joined = "".join(re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", l) for l in lines)
+        self.assertIn("gamma-lang", joined)
+        for l in lines:
+            self.assertLessEqual(len(re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", l)), 28)
 
     def test_zip_erstellen_und_entpacken(self):
         for it in self.app.items:
