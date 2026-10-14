@@ -285,7 +285,7 @@ class TestAppKern(unittest.TestCase):
 
     def test_konsole_pty_breite_fuer_ls_spalten(self):
         base = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, base, ignore_errors=True)
+        self.addCleanup(_shutil.rmtree, base, ignore_errors=True)
         for n in ("Applications", "bin", "Desktop", "Documents", "Downloads",
                   "easydateien", "go", "Library", "Movies", "Music", "optimi",
                   "Pictures", "Public", "spickzettel", "tools", "trainingsplan-app"):
