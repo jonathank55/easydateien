@@ -72,6 +72,12 @@ class TestKeyBindings(unittest.TestCase):
         except ValueError as e:
             self.fail(f"Build_keymap scheitert an bereinigten Belegungen: {e}")
 
+    def test_entfernen_loescht(self):
+        # Entfernen (DELETE) muss auf Löschen (trash) gelegt sein (Standard-Belegung)
+        keymap = common.build_keymap(None)
+        self.assertEqual(keymap.get("DELETE"), "trash",
+                         "DELETE ist nicht auf Löschen gelegt — Entfernen würde nichts auslösen")
+
     def test_konfigurator_read_key_sondertasten(self):
         import easydateien_konfigurator as k
         r, w = os.pipe()

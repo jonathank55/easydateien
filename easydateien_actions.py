@@ -371,31 +371,16 @@ class EasyDateienActions:
         self.set_status(f"{len(targets)} ausgeschnitten (p = einfügen)", "warning")
 
     def copy_selection(self):
+        """Kopiert wie im macOS-Finder: Die Zwischenablage wird immer
+        komplett durch die aktuelle Auswahl (oder den Zeiger-Eintrag) ersetzt
+        — kein Ansammeln, kein Toggle, kein '+'-Marker. Die Zwischenablage
+        bleibt bis zur nächsten Kopier-/Ausschneiden-Aktion bestehen."""
         if not self.items:
             return
         self.touch_last_used_dir()
         cur_p = self.items[self.selected_idx].path
-        if self.selected_paths:
-            # Auswahl zur Vormerkung hinzufügen; bestehende Vormerkung bleibt erhalten (ohne ESC wird nichts aufgehoben)
-            targets = list(self.clipboard_paths)
-            for p in self.selected_paths:
-                if p not in targets:
-                    targets.append(p)
-            self.selected_paths.clear()
-        elif self.clipboard_mode == "copy" and cur_p in self.clipboard_paths:
-            # Toggle: Vormerkung zurück in die Auswahl übernehmen (wieder mit "*" markiert)
-            self.selected_paths.update(self.clipboard_paths)
-            self.clipboard_mode = None
-            self.clipboard_paths = []
-            self.set_status(f"Auswahl: {len(self.selected_paths)}")
-            return
-        elif self.clipboard_paths:
-            # Zeiger-Datei zur Vormerkung hinzufügen statt die Vormerkung zu ersetzen
-            targets = list(self.clipboard_paths)
-            if cur_p not in targets:
-                targets.append(cur_p)
-        else:
-            targets = [cur_p]
+        targets = list(self.selected_paths) if self.selected_paths else [cur_p]
+        self.selected_paths.clear()
         self.clipboard_mode = "copy"
         self.clipboard_paths = targets
         sync_to_macos_clipboard(targets)

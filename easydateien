@@ -391,7 +391,11 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                 # 2. DATEIMANAGER-MODUS (Konsole geschlossen ODER Konsole geöffnet aber nicht im Fokus):
                 # Sämtliche Tastenkürzel für Dateiverwaltung sind voll aktiv.
                 # Keine Zeichen fließen in die Konsole.
-                if key == "CTRL_C":
+                # Alle Aktionen werden über die keymap aufgelöst (Single Source
+                # of Truth): Geänderte Tastenbelegungen aus dem Konfigurator
+                # wirken hier unmittelbar.
+                action = self.keymap.get(key)
+                if action == "cancel_cmd":
                     if self.filter_query:
                         self.filter_query = ""
                         self.refresh_items(force=True)
@@ -401,19 +405,19 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         self.selected_paths.clear()
                         self.set_status("Auswahl aufgehoben")
                         needs_redraw = True
-                    elif self.clipboard_mode or self.clipboard_paths:
+                    elif self.clipboard_mode == "cut":
                         self.clipboard_mode = None
                         self.clipboard_paths = []
-                        self.set_status("Zwischenspeicher geleert")
+                        self.set_status("Ausschneiden aufgehoben")
                         needs_redraw = True
                     continue
 
-                if key == "u":
+                if action == "undo":
                     self.undo_last_action()
                     needs_redraw = True
                     continue
 
-                if key == "ESC":
+                if action == "cancel":
                     if self.show_console and not self.console_always_visible:
                         self.show_console = False
                         self.console_focused = False
@@ -430,15 +434,15 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         self.set_status("Auswahl aufgehoben")
                         needs_redraw = True
                         continue
-                    elif self.clipboard_mode or self.clipboard_paths:
+                    elif self.clipboard_mode == "cut":
                         self.clipboard_mode = None
                         self.clipboard_paths = []
-                        self.set_status("Zwischenspeicher geleert")
+                        self.set_status("Ausschneiden aufgehoben")
                         needs_redraw = True
                         continue
                     continue
 
-                if key == "TAB":
+                if action == "console_focus":
                     if self.show_console:
                         self.console_focused = True
                         
@@ -448,82 +452,82 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         needs_redraw = True
                     continue
 
-                if key == "h":
+                if action == "help":
                     self.active_dialog = "help_menu"
                     self.help_scroll_offset = 0
                     needs_redraw = True
                     continue
 
-                if key == "t":
+                if action == "console":
                     self.toggle_console()
                     needs_redraw = True
                     continue
 
-                if key == "-":
+                if action == "mark_dir":
                     self.marked_dir = self.current_dir
                     self.set_status(f"Ordner gemerkt: {self.get_short_dir(self.current_dir)} (g- springt zurück)", "success")
                     needs_redraw = True
                     continue
-                if key == "i":
+                if action == "schnellstart":
                     self.open_schnellstart()
                     needs_redraw = True
                     continue
-                if key == "g":
+                if action == "goto":
                     self.active_dialog = "goto_menu"
                     needs_redraw = True
                     continue
 
-                if key == "/":
+                if action == "search":
                     self.active_dialog = "search"
                     self.dialog_input = self.filter_query
                     self.dialog_cursor = len(self.dialog_input)
                     needs_redraw = True
                     continue
 
-                if key == "n":
+                if action == "new":
                     self.active_dialog = "new"
                     self.dialog_input = ""
                     self.dialog_cursor = 0
                     needs_redraw = True
                     continue
 
-                if key == "s":
+                if action == "sort":
                     self.toggle_sort()
                     needs_redraw = True
                     continue
 
-                if key == "~":
+                if action == "home":
                     self.change_directory(HOME_DIR)
                     self.set_status("Home (~)")
                     needs_redraw = True
                     continue
 
-                if key == "UP":
+                if action == "up":
                     if self.items:
                         self.selected_idx = max(0, self.selected_idx - 1)
                         needs_redraw = True
                     continue
-                elif key == "DOWN":
+                elif action == "down":
                     if self.items:
                         self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1)
                         needs_redraw = True
                     continue
-                elif key in ("PAGE_UP",):
+                elif action == "page_up":
                     if self._preview_aktiv():
                         self._scroll_preview(-1)
                         needs_redraw = True
                     continue
-                elif key in ("PAGE_DOWN",):
+                elif action == "page_down":
                     if self._preview_aktiv():
                         self._scroll_preview(1)
                         needs_redraw = True
                     continue
-                elif key in ("LEFT",):
+                elif action == "left":
                     self.dir_cursor_memory[self.current_dir] = self.selected_idx
                     self.go_parent_directory()
                     needs_redraw = True
                     continue
-                elif key == "RIGHT":
+                elif action == "right":
                     if self.items:
                         item = self.items[self.selected_idx]
                         if item.is_dir:
@@ -534,7 +538,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                                 self.selected_idx = max(0, min(remembered_idx, len(self.items) - 1))
                             needs_redraw = True
                     continue
-                elif key == "e":
+                elif action == "extract":
                     if self.items:
                         item = self.items[self.selected_idx]
                         if not item.is_dir and item.name.lower().endswith('.zip'):
@@ -543,14 +547,14 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         elif not item.is_dir:
                             self.set_status("Taste 'e' ist für ZIP-Entpacken reserviert", "warning")
                     continue
-                elif key == "o":
+                elif action == "edit":
                     if self.items:
                         item = self.items[self.selected_idx]
                         if not item.is_dir:
                             self.open_in_editor(item, fd, old_settings)
                             needs_redraw = True
                     continue
-                elif key == "ENTER":
+                elif action == "open":
                     if self.items and 0 <= self.selected_idx < len(self.items):
                         item = self.items[self.selected_idx]
                         self.open_with_system(item)
@@ -563,7 +567,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                             self.set_status(f"Fehler: {e}", "error")
                     needs_redraw = True
                     continue
-                elif key == "r":
+                elif action == "rename":
                     if self.items:
                         item = self.items[self.selected_idx]
                         self.active_dialog = "rename"
@@ -572,11 +576,11 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         self.dialog_target_item = item
                         needs_redraw = True
                     continue
-                elif key in ("z",):
+                elif action == "zip":
                     zip_path = self.create_zip_archive()
                     needs_redraw = True
                     continue
-                elif key == "c":
+                elif action == "copy":
                     r, _, _ = select.select([fd], [], [], 0.04)
                     if r:
                         next_k = read_key(fd, timeout=0.01)
@@ -602,35 +606,35 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     self.copy_selection()
                     needs_redraw = True
                     continue
-                elif key == "x":
+                elif action == "cut":
                     self.cut_selection()
                     needs_redraw = True
                     continue
-                elif key == "p":
+                elif action == "paste":
                     self.paste_clipboard()
                     needs_redraw = True
                     continue
-                elif key == "SPACE":
+                elif action == "select":
                     self.toggle_select()
                     needs_redraw = True
                     continue
-                elif key == "a":
+                elif action == "select_all":
                     self.toggle_select_all()
                     needs_redraw = True
                     continue
-                elif key == "DELETE":
+                elif action == "trash":
                     if self.items or self.selected_paths:
                         self.active_dialog = "trash_confirm"
                         needs_redraw = True
                     continue
-                elif key == ".":
+                elif action == "hidden":
                     new_h = not self.config.get("show_hidden", False)
                     self.config["show_hidden"] = new_h
                     self.refresh_items(force=True)
                     self.set_status(f"Versteckte Dateien: {'Ein' if new_h else 'Aus'}")
                     needs_redraw = True
                     continue
-                elif key == "m":
+                elif action == "menu":
                     try:
                         from easydateien_konfigurator import run_konfigurator
                         new_cfg = run_konfigurator(standalone=False)
@@ -641,7 +645,15 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         self.set_status(f"Fehler Konfigurator: {e}", "error")
                     tty.setcbreak(fd, termios.TCSADRAIN)
                     sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
-                    # Konfiguration neu laden
+                    # Konfiguration neu laden — inklusive keymap, damit
+                    # geänderte Tastenbelegungen sofort wirken
+                    try:
+                        self.keymap = build_keymap(self.config)
+                        self.keybindings = get_keybindings_from_config(self.config)
+                    except ValueError:
+                        self.set_status("Tastenkonflikt in Config — Standardbelegung aktiv", "warning")
+                        self.keymap = build_keymap(None)
+                        self.keybindings = get_keybindings_from_config(None)
                     self.console_always_visible = self.config.get("console_always_visible", False)
                     self.preview_wrap = self.config.get("preview_wrap", True)
                     self.show_console = self.config.get("show_console", False) or self.console_always_visible
@@ -652,16 +664,16 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     self.set_status("Einstellungen übernommen", "success")
                     needs_redraw = True
                     continue
-                elif key == "j":
+                elif action == "top":
                     self.selected_idx = 0
                     needs_redraw = True
                     continue
-                elif key == "k":
+                elif action == "bottom":
                     if self.items:
                         self.selected_idx = len(self.items) - 1
                         needs_redraw = True
                     continue
-                elif key == "q":
+                elif action == "quit":
                     break
         finally:
             self.set_mouse_tracking(False, force=True)

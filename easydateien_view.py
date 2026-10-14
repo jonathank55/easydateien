@@ -190,19 +190,17 @@ class EasyDateienView:
                     p_is_sel = p_it.path in self.selected_paths
                     if p_in_cut:
                         p_b_char = f"{C_BOLD}×{C_RESET}"
-                    elif p_in_copy:
-                        p_b_char = f"{C_BOLD}+{C_RESET}"
                     elif p_is_sel:
                         p_b_char = f"{C_BOLD}*{C_RESET}"
                     else:
                         p_b_char = ""
                     prefix_char = f" {p_b_char} " if p_b_char else " "
                     if w_left >= 26:
-                        p_styled = format_entry_name(p_it, max(3, w_left - str_width(prefix_char) - 1), bold=is_act or p_in_cut or p_in_copy or p_is_sel)
+                        p_styled = format_entry_name(p_it, max(3, w_left - str_width(prefix_char) - 1), bold=is_act or p_in_cut or p_is_sel)
                         txt_l = f"{prefix_char}{p_styled}"
                         cell_left = pad_to_width(txt_l, w_left - 1) + " "
                     else:
-                        p_styled = format_entry_name(p_it, max(2, w_left - str_width(prefix_char) - 1), bold=is_act or p_in_cut or p_in_copy or p_is_sel)
+                        p_styled = format_entry_name(p_it, max(2, w_left - str_width(prefix_char) - 1), bold=is_act or p_in_cut or p_is_sel)
                         txt_l = f"{prefix_char}{p_styled}"
                         cell_left = pad_to_width(txt_l, w_left - 1) + " "
                     if is_act:
@@ -224,8 +222,6 @@ class EasyDateienView:
 
                 if in_cut:
                     b_char = f"{C_BOLD}×{C_RESET}"
-                elif in_copy:
-                    b_char = f"{C_BOLD}+{C_RESET}"
                 elif is_sel:
                     b_char = f"{C_BOLD}*{C_RESET}"
                 else:
@@ -237,13 +233,13 @@ class EasyDateienView:
                 if s_str:
                     size_field = str_width(s_str)
                     avail_n = max(3, avail - prefix_len - size_field - 1)
-                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or is_sel)
                     n_w = str_width(ANSI_ESCAPE_RE.sub("", n_styled))
                     body = prefix_str + n_styled + " " * max(1, avail - prefix_len - n_w - size_field - 1)
                     cell_mid = frame_cell(body + f"{s_str:>{size_field}}", w_mid)
                 else:
                     avail_n = max(2, avail - prefix_len)
-                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or in_copy or is_sel)
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or is_sel)
                     cell_mid = frame_cell(prefix_str + n_styled, w_mid)
             elif len(self.items) == 0 and r == 0:
                 cell_mid = frame_cell("(leer)", w_mid)
@@ -260,8 +256,6 @@ class EasyDateienView:
                         c_is_sel = c_it.path in self.selected_paths
                         if c_in_cut:
                             c_b_char = f"{C_BOLD}×{C_RESET}"
-                        elif c_in_copy:
-                            c_b_char = f"{C_BOLD}+{C_RESET}"
                         elif c_is_sel:
                             c_b_char = f"{C_BOLD}*{C_RESET}"
                         else:
@@ -270,18 +264,18 @@ class EasyDateienView:
                             c_field = str_width(c_size)
                             c_pre = f" {c_b_char} " if c_b_char else " "
                             name_w = max(3, w_right - str_width(c_pre) - c_field - 2)
-                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
+                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_is_sel)
                             s_part = f" {c_size:>{c_field}} "
                             cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - c_field - 2) + s_part
                         elif w_right >= 26:
                             c_pre = f" {c_b_char} " if c_b_char else " "
                             name_w = max(3, w_right - str_width(c_pre) - 1)
-                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
+                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_is_sel)
                             cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - 1) + " "
                         else:
                             c_pre = f" {c_b_char} " if c_b_char else " "
                             name_w = max(3, w_right - str_width(c_pre) - 1)
-                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_in_copy or c_is_sel)
+                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_is_sel)
                             cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - 1) + " "
                     elif len(child_items) == 0 and r == 0:
                         cell_right = pad_to_width(f" (leer)", w_right)
