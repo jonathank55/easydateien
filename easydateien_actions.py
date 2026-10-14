@@ -1196,6 +1196,100 @@ class EasyDateienActions:
         self.console_focused = self.show_console
         self.set_status("Konsole geöffnet" if self.show_console else "Konsole geschlossen")
 
+    def _schnellstart_eintraege(self) -> list:
+        """Liefert die Schnellstart-Eintraege aus der Konfiguration."""
+        eintraege = self.config.get("schnellstart_eintraege")
+        if not isinstance(eintraege, list) or not eintraege:
+            from easydateien_common import DEFAULT_CONFIG
+            eintraege = DEFAULT_CONFIG.get("schnellstart_eintraege", [])
+        return [e for e in eintraege if isinstance(e, dict) and e.get("titel")]
+
+    def open_schnellstart(self):
+        """Oeffnet das Schnellstartmenue (Modal, invertiert, im Design der
+        anderen Menues). Pfeiltasten navigieren, Enter fuehrt aus, Ziffern
+        waehlen direkt, ESC/q schliesst; Untermenues mit ESC zurueck."""
+        self.active_dialog = "schnellstart"
+        self._ss_auswahl = 0
+        self._ss_tiefe = []
+        self.set_status("Schnellstart geoeffnet")
+
+    def _schnellstart_liste(self) -> list:
+        """Aktuell sichtbare Liste (Haupt- oder Untermenue)."""
+        liste = self._schnellstart_eintraege()
+        for idx in self._ss_tiefe:
+            liste = liste[idx].get("untermenu", [])
+        return liste
+
+    def _schnellstart_execute(self, eintrag):
+        """Fuehrt einen Schnellstart-Befehl aus: GUI-Befehle (open -a/osascript)
+        entkoppelt starten; CLI-Befehle in der integrierten Konsole ausfuehren."""
+        titel = eintrag.get("titel", "")
+        befehl = eintrag.get("befehl", "")
+        if not befehl:
+            self.set_status(f"Kein Befehl fuer: {titel}", "warning")
+            return
+        self.active_dialog = None
+        ist_gui = ("open -a" in befehl) or ("osascript" in befehl)
+        if ist_gui:
+            try:
+                subprocess.Popen(
+                    befehl, shell=True,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                self.set_status(f"Gestartet: {titel}", "success")
+            except Exception as e:
+                self.set_status(f"Fehler beim Starten von {titel}: {e}", "error")
+        else:
+            self.show_console = True
+            self.console_focused = True
+            self.console_output_lines.append(f"$ {befehl}")
+            user_shell, env = get_shell_environment()
+            self._run_console_streaming(befehl, user_shell, env, None)
+            self.refresh_items(force=True)
+            self.set_status(f"Ausgefuehrt: {titel}", "info")
+
+    def handle_schnellstart_key(self, key: str) -> bool:
+        """Tastenbehandlung des Schnellstart-Modals."""
+        liste = self._schnellstart_liste()
+        if not liste:
+            self.active_dialog = None
+            self.set_status("Keine Schnellstart-Eintraege konfiguriert (m zum Anpassen)", "warning")
+            return True
+        anzahl = len(liste)
+        if key in ("UP", "k"):
+            self._ss_auswahl = (self._ss_auswahl - 1) % anzahl
+            return True
+        if key in ("DOWN", "j"):
+            self._ss_auswahl = (self._ss_auswahl + 1) % anzahl
+            return True
+        if key in ("ESC", "q", "Q"):
+            if self._ss_tiefe:
+                self._ss_tiefe.pop()
+                self._ss_auswahl = 0
+            else:
+                self.active_dialog = None
+                self.set_status("Schnellstart geschlossen")
+            return True
+        if key in ("ENTER", "SPACE"):
+            eintrag = liste[self._ss_auswahl]
+            if "untermenu" in eintrag and eintrag["untermenu"]:
+                self._ss_tiefe.append(self._ss_auswahl)
+                self._ss_auswahl = 0
+            else:
+                self._schnellstart_execute(eintrag)
+            return True
+        if key.isdigit() and 1 <= int(key) <= anzahl:
+            self._ss_auswahl = int(key) - 1
+            eintrag = liste[self._ss_auswahl]
+            if "untermenu" in eintrag and eintrag["untermenu"]:
+                self._ss_tiefe.append(self._ss_auswahl)
+                self._ss_auswahl = 0
+            else:
+                self._schnellstart_execute(eintrag)
+            return True
+        return True
+
     def handle_mouse_click(self, x: int, y: int) -> bool:
         if not self.last_layout:
             return False
@@ -1329,6 +1423,9 @@ class EasyDateienActions:
     def handle_dialog_key(self, key: str, fd: int) -> bool:
         if not self.active_dialog:
             return False
+        if self.active_dialog == "schnellstart":
+            self.handle_schnellstart_key(key)
+            return True
 
         if key in ("ESC", "CTRL_C"):
             if self.active_dialog == "overwrite_confirm":

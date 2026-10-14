@@ -414,6 +414,10 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     self.set_status(f"Ordner gemerkt: {self.get_short_dir(self.current_dir)} (g- springt zurück)", "success")
                     needs_redraw = True
                     continue
+                if key == "i":
+                    self.open_schnellstart()
+                    needs_redraw = True
+                    continue
                 if key == "g":
                     self.active_dialog = "goto_menu"
                     needs_redraw = True

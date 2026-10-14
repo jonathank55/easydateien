@@ -59,6 +59,7 @@ MAIN_MENU_ITEMS = [
     ("sort", "Datei- und Ordneranordnung", "öffnen"),
     ("editor", "Editor", "nano"),
     ("keybindings", "Tastenbelegungen", "öffnen"),
+    ("schnellstart", "Schnellstart-Einträge", "öffnen"),
     ("reset", "Auf Standardwerte zurücksetzen", "standard"),
 ]
 
@@ -486,7 +487,8 @@ MENU_VALUE_RENDERERS = {
     "preview_wrap": lambda cfg: f"[{'ein' if cfg.get('preview_wrap', True) else 'aus'}]",
     "sort": lambda cfg: "[öffnen]",
     "editor": lambda cfg: f"[{editor_command(cfg)}]",
-    "keybindings": lambda cfg: "[öffnen]",
+    "keybindings": lambda cfg: f"[{len(cfg.get('schnellstart_eintraege') or cfg.get('__ss_default', []) or [])}]" if False else "[öffnen]",
+    "schnellstart": lambda cfg: f"[{len(cfg.get('schnellstart_eintraege') or [])}]" if cfg.get('schnellstart_eintraege') else "[öffnen]",
     "reset": lambda cfg: "[standard]",
 }
 
@@ -502,6 +504,117 @@ def _cycle_option(cfg: dict, key: str, options: list, step: int) -> None:
 
 def _toggle_option(cfg: dict, key: str, default: bool) -> None:
     cfg[key] = not cfg.get(key, default)
+
+
+def _schnellstart_default_eintraege():
+    from easydateien_common import DEFAULT_CONFIG
+    return DEFAULT_CONFIG.get("schnellstart_eintraege", [])
+
+
+def _lies_text(fd: int, prompt: str, vorgabe: str = "") -> str:
+    """Liest eine Textzeile im Konfigurator-Stil (einfaches cbreak-Lesen)."""
+    render_box("EINGABE", prompt, [], 0, [f"[ESC] Abbrechen"])
+    row = vorgabe
+    while True:
+        k = read_key(fd, timeout=0.05)
+        if not k:
+            continue
+        if k == "ENTER":
+            return row
+        if k in ("ESC", "q"):
+            return None
+        elif k == "BACKSPACE":
+            row = row[:-1]
+        elif k in ("DELETE",):
+            row = ""
+        elif k and len(k) == 1 and k.isprintable():
+            row += k
+        render_box("EINGABE", prompt, [( "text", row, "")], 0, [f"[ESC] Abbrechen", "[Eingabe] Bestätigen"])
+
+
+def edit_schnellstart_menu(fd: int):
+    """Einfacher, intuitiver Editor fuer die Schnellstart-Einträge:
+    Ansehen, Hinzufügen (Titel + Befehl), Löschen, Auf Standard setzen."""
+    cfg = load_config()
+    idx = 0
+    while True:
+        eintraege = cfg.get("schnellstart_eintraege") or _schnellstart_default_eintraege()
+        rows = []
+        for nr, e in enumerate(eintraege, 1):
+            sub = e.get("untermenu")
+            if sub:
+                rows.append((str(nr), e.get("titel", ""), f"[{len(sub)} Untermenü]"))
+            else:
+                rows.append((str(nr), e.get("titel", ""), f"{e.get('befehl', '')[:26]}"))
+        rows.append(("add", "Neuen Eintrag hinzufügen", "[neu]"))
+        rows.append(("del", "Eintrag löschen", "[löschen]"))
+        rows.append(("reset", "Auf Standard-Einträge zurücksetzen", "[standard]"))
+        start, count = render_box(
+            "SCHNELLSTART-EINTRÄGE",
+            "Titel und Befehl je Zeile; Untermenüs in der config.json",
+            rows, idx,
+            [("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"),
+             ("[Eingabe] Aktion", "[Eingabe]", "[Ent]"),
+             ("[ESC] Zurück", "[ESC]", "[ESC]")]
+        )
+        k = ""
+        while not k:
+            k = read_key(fd)
+        if k in ("ESC", "q"):
+            return
+        elif k in ("UP", "WHEEL_UP"):
+            idx = max(0, idx - 1)
+        elif k in ("DOWN", "WHEEL_DOWN"):
+            idx = min(len(rows) - 1, idx + 1)
+        elif k == "PAGE_UP":
+            idx = max(0, idx - 8)
+        elif k == "PAGE_DOWN":
+            idx = min(len(rows) - 1, idx + 8)
+        elif k in ("ENTER", "SPACE", "RIGHT"):
+            aktion = rows[idx][0]
+            if aktion == "add":
+                titel = _lies_text(fd, "Titel des neuen Eintrags")
+                if not titel:
+                    continue
+                befehl = _lies_text(fd, "Befehl (z. B. open -a Safari)")
+                if not befehl:
+                    continue
+                eintraege.append({"titel": titel, "befehl": befehl})
+                cfg["schnellstart_eintraege"] = eintraege
+                save_config(cfg)
+            elif aktion == "del" and eintraege:
+                del_rows = [(str(nr), e.get("titel", ""), "") for nr, e in enumerate(eintraege, 1)]
+                del_rows.append(("abort", "Abbrechen", ""))
+                d_idx = 0
+                gewaehlt = None
+                while gewaehlt is None:
+                    start, count = render_box("EINTRAG LÖSCHEN", "Welchen Eintrag löschen?", del_rows, d_idx,
+                                              [("[Eingabe] Löschen", "[Ent] Löschen", "[Ent]"), ("[ESC] Abbrechen", "[ESC]", "[ESC]")])
+                    dk = ""
+                    while not dk:
+                        dk = read_key(fd)
+                    if dk in ("ESC", "q"):
+                        break
+                    elif dk in ("UP", "WHEEL_UP"):
+                        d_idx = max(0, d_idx - 1)
+                    elif dk in ("DOWN", "WHEEL_DOWN"):
+                        d_idx = min(len(del_rows) - 1, d_idx + 1)
+                    elif dk in ("ENTER", "SPACE"):
+                        wahl = del_rows[d_idx][0]
+                        if wahl != "abort" and wahl.isdigit() and 1 <= int(wahl) <= len(eintraege):
+                            gewaehlt = int(wahl) - 1
+                        else:
+                            break
+                if gewaehlt is not None:
+                    del eintraege[gewaehlt]
+                    cfg["schnellstart_eintraege"] = eintraege
+                    save_config(cfg)
+                    if idx >= len(eintraege) + 3:
+                        idx = max(0, len(eintraege) + 2)
+            elif aktion == "reset":
+                cfg["schnellstart_eintraege"] = _schnellstart_default_eintraege()
+                save_config(cfg)
+                idx = 0
 
 
 def main_menu(fd: int):
@@ -576,6 +689,12 @@ def main_menu(fd: int):
                     break
                 else:
                     edit_keybindings_menu(fd)
+                    cfg = load_config()
+            elif act == "schnellstart":
+                if k == "LEFT":
+                    break
+                else:
+                    edit_schnellstart_menu(fd)
                     cfg = load_config()
             elif act == "reset":
                 if k != "LEFT":

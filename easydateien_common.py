@@ -46,6 +46,18 @@ ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 DEFAULT_CONFIG = {
+    "schnellstart_eintraege": [
+        {"titel": "Dateien", "befehl": "easydateien"},
+        {"titel": "Textdatei", "befehl": "osascript -e 'tell application \"TextEdit\"' -e 'activate' -e 'make new document' -e 'end tell' >/dev/null 2>&1"},
+        {"titel": "Safari", "befehl": "open -a Safari"},
+        {"titel": "iMessage", "befehl": "open -a Messages"},
+        {"titel": "WhatsApp", "befehl": "open -a WhatsApp"},
+        {"titel": "VPN", "untermenu": [
+            {"titel": "Verbindung → DE", "befehl": "windscribe-cli connect DE"},
+            {"titel": "Verbindung → Schnellste", "befehl": "windscribe-cli connect best"},
+            {"titel": "Verbindung trennen", "befehl": "windscribe-cli disconnect"}
+        ]}
+    ],
     "esc_to_quit": False,
     "mouse_support": False,
     "show_console": False,
@@ -236,6 +248,7 @@ KEY_BINDINGS = [
     ("Navigation & Ansicht", "open", "Auswählen", ("ENTER",), "Mit Standardprogramm öffnen"),
     ("Navigation & Ansicht", "goto", "Gehe zu", ("g",), "Gehe zu (Schnellzugriff auf Ordner)"),
     ("Navigation & Ansicht", "mark_dir", "Merken", ("-",), "Aktuellen Ordner merken (g- springt zurück)"),
+    ("Navigation & Ansicht", "schnellstart", "Schnellstart", ("i",), "Schnellstartmenü öffnen"),
     ("Navigation & Ansicht", "home", "Start", ("~",), "Zum Benutzerordner springen"),
     ("Navigation & Ansicht", "search", "Suchen", ("/",), "Dateien nach Suchbegriff filtern"),
     ("Navigation & Ansicht", "hidden", "Versteckt", (".",), "Versteckte Dateien ein-/ausblenden"),

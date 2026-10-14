@@ -570,6 +570,19 @@ class EasyDateienView:
                         st_line = pad_to_width(f"{left_str} {hints}", term_cols)
                     else:
                         st_line = pad_to_width(left_str, term_cols)
+                elif self.active_dialog == "schnellstart":
+                    left_str = " Schnellstart: Eintrag wählen"
+                    avail_r = max(1, term_cols - str_width(left_str) - 1)
+                    opts_full = ["[↑↓] Navigieren", "[Eingabe] Starten", "[ESC] Zurück"]
+                    opts_short = ["[↑↓] Nav", "[Ent] Start", "[ESC]"]
+                    opts_mini = ["[ESC]"]
+                    if sum(str_width(x) for x in opts_full) + 2 <= avail_r:
+                        hints = distribute_options(opts_full, avail_r)
+                    elif str_width(" ".join(opts_short)) <= avail_r:
+                        hints = distribute_options(opts_short, avail_r)
+                    else:
+                        hints = distribute_options(opts_mini, avail_r)
+                    st_line = pad_to_width(f"{left_str} {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "goto_menu":
                     left_str = " Menü: Taste wählen"
                     avail_r = max(1, term_cols - str_width(left_str) - 1)
@@ -653,7 +666,33 @@ class EasyDateienView:
             all_lines.append(st_line)
 
         # Modale Vordergrund-Menüs im Yazi-Stil zentriert überlagern
-        if self.active_dialog == "goto_menu":
+        if self.active_dialog == "schnellstart":
+            ss_liste = self._schnellstart_liste()
+            ss_key = next((k for k, a in self.keymap.items() if a == "schnellstart"), "i")
+            ss_items = []
+            for si, se in enumerate(ss_liste):
+                marker = "▸ " if si == self._ss_auswahl else "  "
+                ss_items.append(f"{marker}{si + 1}. {se.get('titel', '')}")
+            if self._ss_tiefe:
+                parent = self._schnellstart_eintraege()
+                for idx in self._ss_tiefe[:-1]:
+                    parent = parent[idx].get("untermenu", [])
+                titel = f"{parent[self._ss_tiefe[-1]].get('titel', '')} [{ss_key}]"
+            else:
+                titel = f"Schnellstart [{ss_key}]"
+            ss_w = min(term_cols - 4, 44)
+            if ss_w >= 24 and term_rows >= 8:
+                box_lines, box_w = build_modal_box(titel, ss_items, ss_w)
+                box_h = len(box_lines)
+                start_x = max(0, (term_cols - box_w) // 2)
+                min_y = 2 if has_top_border else 1
+                max_y = max(min_y, (term_rows - (2 if has_bottom_border else 1)) - box_h)
+                start_y = max(min_y, min(max_y, (term_rows - box_h) // 2))
+                for b_idx, bl in enumerate(box_lines):
+                    r_pos = start_y + b_idx
+                    if 0 <= r_pos < len(all_lines):
+                        all_lines[r_pos] = replace_ansi_range(all_lines[r_pos], start_x, bl, box_w, term_cols)
+        elif self.active_dialog == "goto_menu":
             goto_items = [
                 f"[d] Downloads",
                 f"[f] Dokumente",
@@ -665,7 +704,8 @@ class EasyDateienView:
             ]
             target_w = min(term_cols - 4, 46)
             if target_w >= 24 and term_rows >= 8:
-                box_lines, box_w = build_modal_box("Gehe zu [g]", goto_items, target_w)
+                goto_key = next((k for k, a in self.keymap.items() if a == "goto"), "g")
+                box_lines, box_w = build_modal_box(f"Gehe zu [{goto_key}]", goto_items, target_w)
                 box_h = len(box_lines)
                 start_x = max(0, (term_cols - box_w) // 2)
                 min_y = 2 if has_top_border else 1
