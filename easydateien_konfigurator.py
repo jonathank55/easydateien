@@ -297,7 +297,9 @@ def edit_keybindings_menu(fd: int):
         )
 
         status_hint = ""
-        k = read_key(fd)
+        k = _warte_auf_taste(fd)
+        if k == "resize":
+            continue
         if not k:
             continue
 
@@ -348,7 +350,7 @@ def edit_keybindings_menu(fd: int):
                         # Warten auf neue Tastenbelegung
                         new_key = ""
                         while True:
-                            key_press = read_key(fd)
+                            key_press = _warte_auf_taste(fd)
                             if key_press == "ESC":
                                 break
                             elif key_press:
@@ -410,7 +412,9 @@ def sort_menu(fd: int):
         )
 
         status_hint = ""
-        k = read_key(fd)
+        k = _warte_auf_taste(fd)
+        if k == "resize":
+            continue
         if not k:
             continue
 
@@ -457,7 +461,9 @@ def keybindings_menu(fd: int):
             idx,
             [("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"), ("[ESC / q] Zurück", "[ESC] Zurück", "[ESC]")]
         )
-        k = read_key(fd)
+        k = _warte_auf_taste(fd)
+        if k == "resize":
+            continue
         if not k:
             continue
         if k in ("UP", "k", "WHEEL_UP"):
@@ -525,8 +531,9 @@ def _lies_text(fd: int, prompt: str, vorgabe: str = "") -> str:
     # los-tippen ueberschreibt; nur ENTER ohne Eingabe uebernimmt die Vorgabe).
     ersetzt = not vorgabe
     while True:
-        k = read_key(fd, timeout=0.05)
-        if not k:
+        k = _warte_auf_taste(fd)
+        if k == "resize":
+            render_box("EINGABE", f"{prompt}: {row}", [], 0, ["[Eingabe] Bestätigen", "[ESC] Abbrechen"])
             continue
         if k == "ENTER":
             return row
@@ -578,7 +585,9 @@ def edit_schnellstart_menu(fd: int):
         )
         k = ""
         while not k:
-            k = read_key(fd)
+            k = _warte_auf_taste(fd)
+        if k == "resize":
+            continue
         if k in ("ESC", "q"):
             return
         elif k in ("UP", "WHEEL_UP"):
@@ -630,7 +639,9 @@ def edit_schnellstart_menu(fd: int):
                                               [("[Eingabe] Löschen", "[Ent] Löschen", "[Ent]"), ("[ESC] Abbrechen", "[ESC]", "[ESC]")])
                     dk = ""
                     while not dk:
-                        dk = read_key(fd)
+                        dk = _warte_auf_taste(fd)
+                    if dk == "resize":
+                        continue
                     if dk in ("ESC", "q"):
                         break
                     elif dk in ("UP", "WHEEL_UP"):
@@ -678,7 +689,9 @@ def main_menu(fd: int):
             footer_text
         )
         status_hint = ""
-        k = read_key(fd)
+        k = _warte_auf_taste(fd)
+        if k == "resize":
+            continue
         if not k:
             continue
         if k in ("UP", "WHEEL_UP"):
@@ -745,7 +758,7 @@ def main_menu(fd: int):
                     )
                     k2 = ""
                     while not k2:
-                        k2 = read_key(fd)
+                        k2 = _warte_auf_taste(fd)
                     if k2 in ("y", "Y"):
                         cfg = dict(DEFAULT_CONFIG)
                         save_config(cfg)
@@ -754,10 +767,39 @@ def main_menu(fd: int):
                         status_hint = "Zurücksetzen abgebrochen"
     return cfg
 
+_RESIZE_FLAG = [False]
+
+
+def _bei_resize(signum, frame):
+    """Terminalgroesse geaendert: Menues beim naechsten Poll neu zeichnen."""
+    _RESIZE_FLAG[0] = True
+
+
+def _warte_auf_taste(fd: int) -> str:
+    """Wartet auf eine Taste ODER einen Fenster-Resize und meldet beides.
+
+    Die Menus des Konfigurators zeichnen nur bei Tastendruck neu; ohne diese
+    Abfrage wuerde ein Resize das Standbild der alten Breite stehen lassen.
+    Gibt 'resize' zurueck, wenn sich die Terminalgroesse geaendert hat."""
+    import time as _time
+    while True:
+        if _RESIZE_FLAG[0]:
+            _RESIZE_FLAG[0] = False
+            return "resize"
+        k = read_key(fd, timeout=0.1)
+        if k:
+            return k
+
+
 def run_konfigurator(standalone: bool = True):
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     tty.setcbreak(fd, termios.TCSADRAIN)
+    try:
+        import signal as _signal
+        _signal.signal(_signal.SIGWINCH, _bei_resize)
+    except Exception:
+        pass
     if standalone:
         sys.stdout.write("\033[?1049h\033[?25l" + DISABLE_AUTOWRAP + "\033[?1000h\033[?1006h\033[2J\033[3J\033[H")
         sys.stdout.flush()
