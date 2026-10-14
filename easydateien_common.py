@@ -376,7 +376,9 @@ def get_keybindings_from_config(cfg: dict) -> list:
         # Sie entstanden durch fruehere Fehler beim Tastenerkennen und
         # wuerden sonst jede Validierung sperren.
         keys = tuple(k.strip() for k in keys
-                     if isinstance(k, str) and k.strip() and k.strip() not in ("UNBEKANNT", "resize"))
+                     if isinstance(k, str) and k.strip()
+                     and k.strip() not in ("UNBEKANNT", "resize")
+                     and all(c.isprintable() for c in k))
         chord = CHORD_ACTIONS.get(action)
         eff = tuple(k for k in keys if not (chord and k == chord[0]))
         if chord:
