@@ -257,7 +257,7 @@ KEY_BINDINGS = [
     ("Dateioperationen", "select_all", "Alle", ("a",), "Alle sichtbaren Elemente markieren"),
     ("Dateioperationen", "new", "Neu", ("n",), "Neue Datei oder Ordner (mit / am Ende)"),
     ("Dateioperationen", "rename", "Umbenennen", ("r",), "Element umbenennen"),
-    ("Dateioperationen", "trash", "Löschen", ("DELETE",), "In den Papierkorb verschieben"),
+    ("Dateioperationen", "trash", "Löschen", ("DELETE", "BACKSPACE"), "In den Papierkorb verschieben"),
     ("Dateioperationen", "copy", "Kopieren", ("c",), "Auswahl kopieren"),
     ("Dateioperationen", "cut", "Ausschneiden", ("x",), "Auswahl ausschneiden"),
     ("Dateioperationen", "paste", "Einfügen", ("p",), "In aktuellen Ordner einfügen"),

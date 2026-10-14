@@ -61,7 +61,7 @@ class TestKeyBindings(unittest.TestCase):
         }
         bindings = common.get_keybindings_from_config(kaputt)
         by_action = {b[1]: b for b in bindings}
-        self.assertEqual(by_action["trash"][3], ("DELETE",),
+        self.assertEqual(by_action["trash"][3], ("DELETE", "BACKSPACE"),
                          "Ungültige Token wurden nicht bereinigt; trash-Standard fehlt")
         for _s, _a, _d, keys, _desc in bindings:
             for k in keys:
@@ -94,7 +94,7 @@ class TestKeyBindings(unittest.TestCase):
 
     def test_trash_standard_ist_entfernen(self):
         self.assertEqual(common.KEY_BINDINGS[[b[1] for b in common.KEY_BINDINGS].index("trash")][3],
-                         ("DELETE",))
+                         ("DELETE", "BACKSPACE"))
 
     def test_hilfemenue_dynamisch_und_vollstaendig(self):
         items = common.build_help_items(common.KEY_BINDINGS)

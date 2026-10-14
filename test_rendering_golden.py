@@ -92,7 +92,7 @@ EXPECTED = {
     "3M": "a5aafdcf1e3d1196",
     "3C": "43bc3d4029d60240",
     "GOTO": "ae11fed352ead461",
-    "HELP": "dbae3c2069d77aaa",
+    "HELP": "059ae3a198bc2cb3",
     "2N": "e0d8c2d030a1ba6b",
     "1N": "c9d21da3b263cb9d",
 }
