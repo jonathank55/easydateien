@@ -357,7 +357,7 @@ def edit_keybindings_menu(fd: int):
                                 new_key = key_press
                                 break
 
-                        if new_key:
+                        if new_key and new_key not in ("", "resize", "UNBEKANNT"):
                             trial = list(editable_bindings)
                             trial[i] = (section, action, disp, [new_key], desc)
                             if _bindings_valid(trial):
@@ -947,7 +947,7 @@ def _warte_auf_taste(fd: int) -> str:
                     pass
                 return "resize"
             if fd in r:
-                k = read_key(fd, timeout=0.0)
+                k = read_key(fd, timeout=0.05)
                 if k:
                     return k
     except InterruptedError:
