@@ -294,6 +294,9 @@ KEY_LABELS = {
     "CTRL_C": "Strg C",
     "PAGE_UP": "Bild\u2191",
     "PAGE_DOWN": "Bild\u2193",
+    "DELETE": "Entfernen",
+    "INSERT": "Einfg",
+    "SHIFT_TAB": "Umschalt Tab",
 }
 
 
