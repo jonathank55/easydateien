@@ -15,6 +15,7 @@ from easydateien_ui import (
 )
 
 import os
+import time
 from typing import Dict, List, Optional
 
 
@@ -24,6 +25,12 @@ class EasyDateienView:
 
     def build_screen(self, term_cols: int, term_rows: int) -> List[str]:
         """Baut den vollständigen Terminal-Bildschirm pixelgenau und flickerfrei auf."""
+        # Visuelles Kopier-Feedback: Fuer ~1 Sekunde nach dem Kopieren zeigen
+        # die kopierten Eintraege '+' (statt '*' oder unmarkiert), danach
+        # automatisch zurueck zum vorherigen Zustand.
+        _flash_on = getattr(self, "_copy_flash_until", 0.0) and time.monotonic() < self._copy_flash_until
+        _flash_paths = getattr(self, "_copy_flash_paths", set()) if _flash_on else set()
+
         # Automatische Aktualisierung der Dateiliste
         self.refresh_items()
 
@@ -190,17 +197,19 @@ class EasyDateienView:
                     p_is_sel = p_it.path in self.selected_paths
                     if p_in_cut:
                         p_b_char = f"{C_BOLD}×{C_RESET}"
+                    elif p_it.path in _flash_paths:
+                        p_b_char = f"{C_BOLD}+{C_RESET}"
                     elif p_is_sel:
                         p_b_char = f"{C_BOLD}*{C_RESET}"
                     else:
                         p_b_char = ""
                     prefix_char = f" {p_b_char} " if p_b_char else " "
                     if w_left >= 26:
-                        p_styled = format_entry_name(p_it, max(3, w_left - str_width(prefix_char) - 1), bold=is_act or p_in_cut or p_is_sel)
+                        p_styled = format_entry_name(p_it, max(3, w_left - str_width(prefix_char) - 1), bold=is_act or p_in_cut or p_is_sel or p_it.path in _flash_paths)
                         txt_l = f"{prefix_char}{p_styled}"
                         cell_left = pad_to_width(txt_l, w_left - 1) + " "
                     else:
-                        p_styled = format_entry_name(p_it, max(2, w_left - str_width(prefix_char) - 1), bold=is_act or p_in_cut or p_is_sel)
+                        p_styled = format_entry_name(p_it, max(2, w_left - str_width(prefix_char) - 1), bold=is_act or p_in_cut or p_is_sel or p_it.path in _flash_paths)
                         txt_l = f"{prefix_char}{p_styled}"
                         cell_left = pad_to_width(txt_l, w_left - 1) + " "
                     if is_act:
@@ -219,9 +228,12 @@ class EasyDateienView:
                 is_sel = it.path in self.selected_paths
                 in_cut = (self.clipboard_mode == "cut" and it.path in self.clipboard_paths)
                 in_copy = (self.clipboard_mode == "copy" and it.path in self.clipboard_paths)
+                in_flash = it.path in _flash_paths
 
                 if in_cut:
                     b_char = f"{C_BOLD}×{C_RESET}"
+                elif in_flash:
+                    b_char = f"{C_BOLD}+{C_RESET}"
                 elif is_sel:
                     b_char = f"{C_BOLD}*{C_RESET}"
                 else:
@@ -233,13 +245,13 @@ class EasyDateienView:
                 if s_str:
                     size_field = str_width(s_str)
                     avail_n = max(3, avail - prefix_len - size_field - 1)
-                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or is_sel)
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or is_sel or it.path in _flash_paths)
                     n_w = str_width(ANSI_ESCAPE_RE.sub("", n_styled))
                     body = prefix_str + n_styled + " " * max(1, avail - prefix_len - n_w - size_field - 1)
                     cell_mid = frame_cell(body + f"{s_str:>{size_field}}", w_mid)
                 else:
                     avail_n = max(2, avail - prefix_len)
-                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or is_sel)
+                    n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or is_sel or it.path in _flash_paths)
                     cell_mid = frame_cell(prefix_str + n_styled, w_mid)
             elif len(self.items) == 0 and r == 0:
                 cell_mid = frame_cell("(leer)", w_mid)
@@ -256,6 +268,8 @@ class EasyDateienView:
                         c_is_sel = c_it.path in self.selected_paths
                         if c_in_cut:
                             c_b_char = f"{C_BOLD}×{C_RESET}"
+                        elif c_it.path in _flash_paths:
+                            c_b_char = f"{C_BOLD}+{C_RESET}"
                         elif c_is_sel:
                             c_b_char = f"{C_BOLD}*{C_RESET}"
                         else:
@@ -264,18 +278,18 @@ class EasyDateienView:
                             c_field = str_width(c_size)
                             c_pre = f" {c_b_char} " if c_b_char else " "
                             name_w = max(3, w_right - str_width(c_pre) - c_field - 2)
-                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_is_sel)
+                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_is_sel or c_it.path in _flash_paths)
                             s_part = f" {c_size:>{c_field}} "
                             cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - c_field - 2) + s_part
                         elif w_right >= 26:
                             c_pre = f" {c_b_char} " if c_b_char else " "
                             name_w = max(3, w_right - str_width(c_pre) - 1)
-                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_is_sel)
+                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_is_sel or c_it.path in _flash_paths)
                             cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - 1) + " "
                         else:
                             c_pre = f" {c_b_char} " if c_b_char else " "
                             name_w = max(3, w_right - str_width(c_pre) - 1)
-                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_is_sel)
+                            c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_is_sel or c_it.path in _flash_paths)
                             cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - 1) + " "
                     elif len(child_items) == 0 and r == 0:
                         cell_right = pad_to_width(f" (leer)", w_right)

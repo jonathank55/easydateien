@@ -380,10 +380,15 @@ class EasyDateienActions:
         self.touch_last_used_dir()
         cur_p = self.items[self.selected_idx].path
         targets = list(self.selected_paths) if self.selected_paths else [cur_p]
-        self.selected_paths.clear()
+        # Auswahl bleibt erhalten (wie im Finder): Das Kopieren hebt die
+        # Markierung nicht auf. Nur kurzzeitiges visuelles Feedback: Die
+        # kopierten Eintraege zeigen fuer ~1 Sekunde '+', danach automatisch
+        # zurueck zum vorherigen Zustand ('*' oder unmarkiert).
         self.clipboard_mode = "copy"
         self.clipboard_paths = targets
         sync_to_macos_clipboard(targets)
+        self._copy_flash_paths = set(targets)
+        self._copy_flash_until = time.monotonic() + 1.0
         self.set_status(f"{len(targets)} kopiert (Cmd+V im Finder, p hier)", "success")
 
     def paste_clipboard(self):

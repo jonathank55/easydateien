@@ -211,6 +211,12 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     # die Anzeige aktuell halten, ohne auf eine Taste zu warten.
                     if self.poll_changes():
                         needs_redraw = True
+                    # Kopier-Feedback: Nach Ablauf der ~1 Sekunde das '+'
+                    # automatisch entfernen (ein einmaliger Redraw genuegt).
+                    if getattr(self, "_copy_flash_until", 0.0) and time.monotonic() >= self._copy_flash_until:
+                        self._copy_flash_until = 0.0
+                        self._copy_flash_paths = set()
+                        needs_redraw = True
                     continue
 
                 if self.active_dialog:
