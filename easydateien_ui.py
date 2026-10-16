@@ -679,7 +679,7 @@ def listing_signature(entries: List[FileEntry]) -> Tuple:
     return tuple(sorted((e.name, e.size, e.mtime, e.symlink_target) for e in entries))
 
 def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
-    """Rendert Name (und bei Links „ @ Ziel“ kursiv) exakt auf `width` Spalten.
+    """Rendert Name (und bei Links „ → Ziel“ kursiv) exakt auf `width` Spalten.
 
     Der Name hat Vorrang: Ist er zu lang, wird er mit „…“ gekürzt, die Endung bzw. „/“ bleibt dahinter
     erhalten. Der Linkzielpfad wird nur am Ende gekürzt (nie am Anfang).
@@ -697,11 +697,11 @@ def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
         target = safe_text(it.symlink_target)
         if target and name_w + 3 + 4 <= width:
             tgt = truncate_to_width(target, max(3, width - name_w - 3))
-            body = f"{styled(full_name)} @ {C_ITALIC}{tgt}{C_RESET}"
+            body = f"{styled(full_name)} → {C_ITALIC}{tgt}{C_RESET}"
         elif name_w + 2 <= width:
-            body = f"{styled(full_name)} @"
+            body = f"{styled(full_name)} →"
         elif width >= 6:
-            body = f"{styled(truncate_name(it.name, it.is_dir, width - 2))} @"
+            body = f"{styled(truncate_name(it.name, it.is_dir, width - 2))} →"
         else:
             body = styled(truncate_name(it.name, it.is_dir, width))
     else:

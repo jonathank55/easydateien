@@ -700,7 +700,7 @@ class EasyDateienView:
                         all_lines[r_pos] = replace_ansi_range(all_lines[r_pos], start_x, bl, box_w, term_cols)
         elif self.active_dialog == "copy_menu":
             copy_items = [
-                f"[c] Auswahl kopieren (Finder-kompatibel)",
+                f"[c] Auswahl kopieren",
                 f"[p] Pfad der Auswahl kopieren",
                 f"[f] Dateiname kopieren",
                 f"[d] Ordnerpfad kopieren",
