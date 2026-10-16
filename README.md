@@ -2,7 +2,7 @@
 
 **Minimalistischer, hocheffizienter Terminal-Dateimanager für macOS mit integrierter Konsole und flüssiger Tastaturnavigation.**
 
-EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-Dateimanager ohne externe Python-Abhängigkeiten. Er wurde entwickelt für Anwender, die blitzschnell im Terminal durch Verzeichnisse navigieren, Dateien auswählen, verschieben, kopieren, suchen, komprimieren oder in Editoren bearbeiten möchten — kombiniert mit einem vollintegrierten Terminal-Panel für maximale Produktivität.
+EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-Dateimanager ohne externe Python-Abhängigkeiten. Er wurde entwickelt für Anwender, die blitzschnell im Terminal durch Verzeichnisse navigieren, Dateien auswählen, verschieben, kopieren, suchen, komprimieren oder in Editoren bearbeiten möchten, kombiniert mit einem vollintegrierten Terminal-Panel für maximale Produktivität.
 
 > [!NOTE]
 > **Transparenzhinweis zur Inspiration:**  
