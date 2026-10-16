@@ -74,7 +74,7 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
   - `x`: Auswahl (oder der Eintrag unter dem Cursor) zum **Ausschneiden** vormerken (`×`); erneutes `x` auf einer ausgeschnittenen Datei nimmt die Vormerkung zurück  
   - `c`: **Kopier-Menü** öffnen (invertiertes Menü wie bei `g`/`h`):  
     - `c` im Menü: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notizen eingefügt werden! Die Auswahl bleibt dabei erhalten.  
-    - `p` im Menü: Absoluten Dateipfad der Auswahl in die Zwischenablage kopieren  
+    - `p` im Menü: Absoluten Dateipfad des Eintrags unter dem Cursor als Text in die Zwischenablage kopieren  
     - `f` im Menü: Dateinamen in die Zwischenablage kopieren  
     - `d` im Menü: Ordnerpfad in die Zwischenablage kopieren  
   - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien). Existiert der Name bereits, erscheint eine Rückfrage (`y` ersetzen, `n` überspringen, `a` alle ersetzen; bei Kopien erhalten Duplikate bei Bedarf eine Nummerierung `(1)`).  

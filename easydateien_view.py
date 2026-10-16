@@ -701,7 +701,7 @@ class EasyDateienView:
         elif self.active_dialog == "copy_menu":
             copy_items = [
                 f"[c] Auswahl kopieren",
-                f"[p] Pfad der Auswahl kopieren",
+                f"[p] Pfad kopieren",
                 f"[f] Dateiname kopieren",
                 f"[d] Ordnerpfad kopieren",
             ]
