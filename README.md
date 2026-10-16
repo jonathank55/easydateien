@@ -6,7 +6,10 @@ EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-
 
 > [!NOTE]
 > **Transparenzhinweis zur Inspiration:**  
-> EasyDateien ist von der Tastatur- und Navigationsphilosophie moderner Terminal-Dateimanager wie **Yazi** inspiriert, wurde jedoch bewusst als eigenständiges, radikal vereinfachtes Werkzeug konzipiert. Es soll bewusst sehr viel einfacher, fokussierter und wartungsärmer sein. EasyDateien hat **keine offizielle Verbindung zum Yazi-Projekt** und teilt lediglich die Begeisterung für effiziente Tastaturnavigation im Terminal.
+Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt ist stark von Yazi inspiriert, soll jedoch eine eigenständige, deutschsprachige, minimalistische und fokussierte Alternative mit integrierter Konsole bieten (und hat technisch nichts direkt mit Yazi zu tun).
+
+- Offizielle Website von Yazi: [https://yazi-rs.github.io](https://yazi-rs.github.io)
+- Yazi GitHub Repository: [https://github.com/sxyazi/yazi](https://github.com/sxyazi/yazi)
 
 ---
 
@@ -329,12 +332,3 @@ Die Maus ist standardmäßig aktiv (`mouse_support`) und im Konfigurationsmenü 
 
 Veröffentlicht unter der [MIT-Lizenz](LICENSE).  
 Copyright (c) 2026 Jonathan Klatchko.
-
----
-
-## Note / Danksagung
-
-Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt ist stark von Yazi inspiriert, soll jedoch eine eigenständige, deutschsprachige, minimalistische und fokussierte Alternative mit integrierter Konsole bieten (und hat technisch nichts direkt mit Yazi zu tun).
-
-- Offizielle Website von Yazi: [https://yazi-rs.github.io](https://yazi-rs.github.io)
-- Yazi GitHub Repository: [https://github.com/sxyazi/yazi](https://github.com/sxyazi/yazi)
