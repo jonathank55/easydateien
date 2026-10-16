@@ -22,7 +22,7 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
     - **Native Textauswahl & Kopieren:** Sobald die Konsole fokussiert ist, wird das Maus-Tracking automatisch freigegeben. Textausgaben, Pfade und Befehle können direkt mit der Maus markiert und per `Cmd+C` (oder Kontextmenü) in die Zwischenablage kopiert werden.
     - **`ESC`:** Entzieht der Konsole den Fokus (bei `Konsole immer eingeblendet` = Aus schließt `ESC` die Konsole stattdessen).
     - **`Tab`:** Wechselt den Fokus zurück zum Dateimanager.
-    - **Konsole geöffnet, aber nicht im Fokus:** Sämtliche Tastenkürzel des Dateimanagers sind aktiv; es wird nichts versehentlich in die Konsole eingetippt. `Tab` setzt den Fokus zurück in die Konsole.
+    - **Konsole geöffnet, aber nicht im Fokus:** Sämtliche Tastenkürzel des Dateimanagers sind aktiv; es wird nichts versehentlich in die Konsole eingetippt. `Tab` setzt den Fokus zurück in die Konsole.    - **Hilfeleiste (Statusleiste unten):** Zeigt `[←↑↓→] Navigieren`, `[h] Hilfe`, `[m] Menü`, `[q] Beenden` sowie kontextabhängig `[t] Konsole` (wenn die Konsole nicht dauerhaft eingeblendet ist) bzw. `[Tab] Fokus` (wenn `Konsole immer eingeblendet` = Ein, da `t` dann wirkungslos ist).
   - **Zwei-Wege-Verzeichnissynchronisation:** Das Terminal operiert immer im aktuellen Verzeichnis des Dateimanagers. Navigiert man im Dateimanager, folgt das Terminal automatisch. Wechselt man im Terminal mit `cd ..` das Verzeichnis, folgt der Dateimanager sofort!
   - **Automatische Dateilisten-Aktualisierung:** Sobald im Terminal Befehle wie `touch datei.txt`, `mkdir ordner`, `git checkout` oder `rm bild.png` ausgeführt werden, aktualisiert der Dateimanager die Ansicht unverzüglich. Auch Änderungen von außen (z. B. laufende Downloads) werden selbstständig erkannt.
   - **Voller Terminalkomfort:** Befehlsverlauf (`↑`/`↓`), Zeilennavigation (`Pos1`/`Ende`, `Ctrl+A`/`Ctrl+E`, `Ctrl+W` zum Wortlöschen, `Ctrl+U`/`Ctrl+K` zum Zeilenlöschen mit Zwischenablage, `Ctrl+Y` zum Einfügen, `Ctrl+L` zum Leeren), Bildlauf (`BildAuf`/`BildAb` oder Mausrad) und Schließen per `exit`, `quit` oder `Ctrl+D`.
@@ -72,17 +72,18 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
   - `Space`: Datei oder Ordner markieren / abwählen (`*`)  
   - `a`: Alle sichtbaren Dateien auf einmal markieren oder abwählen  
   - `x`: Auswahl (oder der Eintrag unter dem Cursor) zum **Ausschneiden** vormerken (`×`); erneutes `x` auf einer ausgeschnittenen Datei nimmt die Vormerkung zurück  
-  - `c`: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notizen eingefügt werden!  
+  - `c`: **Kopier-Menü** öffnen (invertiertes Menü wie bei `g`/`h`):  
+    - `c` im Menü: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notizen eingefügt werden! Die Auswahl bleibt dabei erhalten.  
+    - `p` im Menü: Absoluten Dateipfad der Auswahl in die Zwischenablage kopieren  
+    - `f` im Menü: Dateinamen in die Zwischenablage kopieren  
+    - `d` im Menü: Ordnerpfad in die Zwischenablage kopieren  
   - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien). Existiert der Name bereits, erscheint eine Rückfrage (`y` ersetzen, `n` überspringen, `a` alle ersetzen; bei Kopien erhalten Duplikate bei Bedarf eine Nummerierung `(1)`).  
-  - `c c`: Absoluten Dateipfad in die Zwischenablage kopieren  
-  - `c f`: Dateinamen in die Zwischenablage kopieren  
-  - `c d`: Ordnerpfad in die Zwischenablage kopieren  
 
 - **Gehe-zu-Schnellnavigation (`g`):**  
   - `g d`: Downloads (`~/Downloads`)  
   - `g f`: Dokumente (`~/Documents`)  
   - `g -`: Gemerkter Ordner — zuvor mit `-` gemerkt und gültig, bis ein neuer Ordner mit `-` gemerkt wird. Ohne gemerkten Ordner springt `g -` zum zuletzt verwendeten Ordner (der Ordner der letzten Aktion, z. B. Auswahl, Kopieren, Ausschneiden, Einfügen, ZIP, Entpacken, Konsole; reine Navigation zählt nicht)  
-- **Schnellstartmenü (`i`):** Apps und Befehle per Tastendruck starten (Safari, iMessage, VPN-Profile u. a.; Pfeiltasten navigieren, `Enter` führt aus, Ziffern `1`–`9` wählen direkt, `ESC`/`q` schließt, in Untermenüs geht `ESC` eine Ebene zurück). Einträge — auch verschachtelte Untermenüs — werden zentral in der Konfiguration (`schnellstart_eintraege`) verwaltet und im Konfigurator (`m` → Schnellstart-Einträge) hinzugefügt, gelöscht oder auf Standard zurückgesetzt. GUI-Befehle (`open -a`, `osascript`) starten entkoppelt; CLI-Befehle laufen in der integrierten Konsole.
+- **Schnellstartmenü (`i`):** Apps und Befehle per Tastendruck starten (Safari, iMessage, VPN-Profile u. a.; Einträge sind als `[1]`, `[2]`, … nummeriert; Pfeiltasten navigieren, `Enter` führt aus, Ziffern `1`–`9` wählen direkt, `ESC`/`q` schließt, in Untermenüs geht `ESC` eine Ebene zurück). Einträge — auch verschachtelte Untermenüs — werden zentral in der Konfiguration (`schnellstart_eintraege`) verwaltet und im Konfigurator (`m` → Schnellstart-Einträge) hinzugefügt, gelöscht oder auf Standard zurückgesetzt. GUI-Befehle (`open -a`, `osascript`) starten entkoppelt; CLI-Befehle laufen in der integrierten Konsole.
   - `g h` / `~`: Benutzerordner (`~`)  
   - `g t`: Papierkorb (`~/.Trash`)  
   - `g i`: Pfad manuell eingeben  
@@ -269,12 +270,9 @@ Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unver
 | `u` | Letzte Dateiaktion rückgängig machen (Erstellen, Umbenennen, Papierkorb, Einfügen, ZIP erstellen/entpacken) |
 | `z` | ZIP-Archiv aus Auswahl (bzw. Eintrag unter dem Cursor) erstellen; der Cursor springt auf das neue Archiv |
 | `e` | Markierte bzw. das ausgewählte ZIP-Archiv in jeweils einen neuen Ordner entpacken |
-| `c` | Auswahl (oder Eintrag unter dem Cursor) in die macOS-Zwischenablage kopieren (Finder-kompatibel); die Auswahl bleibt dabei erhalten |
+| `c` | Kopier-Menü öffnen: `c` = Auswahl in die macOS-Zwischenablage kopieren (Finder-kompatibel, Auswahl bleibt erhalten), `p` = absoluter Pfad, `f` = Dateiname, `d` = Ordnerpfad |
 | `x` | Auswahl ausschneiden (`×`-Markierung) |
 | `p` | Zwischenablage im aktuellen Ordner einfügen |
-| `c c` | Absoluten Dateipfad in die Zwischenablage kopieren |
-| `c f` | Dateinamen in die Zwischenablage kopieren |
-| `c d` | Ordnerpfad in die Zwischenablage kopieren |
 | `Entfernen` / `Rücktaste` | In macOS-Papierkorb verschieben (Bestätigung mit `y` oder `Enter`, alles andere bricht ab) |
 | `o` | Datei im konfigurierten Texteditor bearbeiten (Standard `nano`, im Menü `m` änderbar) |
 | `.` | Versteckte Dateien ein- oder ausblenden; gilt für die laufende Sitzung |

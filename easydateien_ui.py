@@ -47,7 +47,6 @@ from easydateien_common import (
     distribute_options,
     KEY_BINDINGS,
     KEY_LABELS,
-    CHORD_ACTIONS,
     DEFAULT_CONFIG,
     format_keys,
     CONFIG_FILE,

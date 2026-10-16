@@ -564,6 +564,23 @@ class EasyDateienView:
                     else:
                         hints = distribute_options(opts_mini, avail_r)
                     st_line = pad_to_width(f"{left_str} {hints}" if hints else left_str, term_cols)
+                elif self.active_dialog == "copy_menu":
+                    left_str = " Kopieren: Taste wählen"
+                    avail_r = max(1, term_cols - str_width(left_str) - 1)
+                    _esc = key_display(self.keymap, "cancel", "ESC")
+                    _q = key_display(self.keymap, "quit", "q")
+                    opts_full = [f"[{_esc} / {_q}] Zurück"]
+                    opts_short = [f"[{_esc} / {_q}] Zurück"]
+                    opts_mini = [f"[{_esc}]"]
+                    if sum(str_width(x) for x in opts_full) + 2 <= avail_r:
+                        hints = distribute_options(opts_full, avail_r)
+                    elif str_width(opts_short[0]) <= avail_r:
+                        hints = distribute_options(opts_short, avail_r)
+                    elif str_width(opts_mini[0]) <= avail_r:
+                        hints = distribute_options(opts_mini, avail_r)
+                    else:
+                        hints = ""
+                    st_line = pad_to_width(f"{left_str} {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "goto_menu":
                     left_str = " Menü: Taste wählen"
                     avail_r = max(1, term_cols - str_width(left_str) - 1)
@@ -661,7 +678,7 @@ class EasyDateienView:
             ss_items = []
             for si, se in enumerate(ss_liste):
                 marker = "▸ " if si == self._ss_auswahl else "  "
-                ss_items.append(f"{marker}{si + 1}. {se.get('titel', '')}")
+                ss_items.append(f"{marker}[{si + 1}] {se.get('titel', '')}")
             if self._ss_tiefe:
                 parent = self._schnellstart_eintraege()
                 for idx in self._ss_tiefe[:-1]:
@@ -672,6 +689,26 @@ class EasyDateienView:
             ss_w = min(term_cols - 4, 44)
             if ss_w >= 24 and term_rows >= 8:
                 box_lines, box_w = build_modal_box(titel, ss_items, ss_w)
+                box_h = len(box_lines)
+                start_x = max(0, (term_cols - box_w) // 2)
+                min_y = 2 if has_top_border else 1
+                max_y = max(min_y, (term_rows - (2 if has_bottom_border else 1)) - box_h)
+                start_y = max(min_y, min(max_y, (term_rows - box_h) // 2))
+                for b_idx, bl in enumerate(box_lines):
+                    r_pos = start_y + b_idx
+                    if 0 <= r_pos < len(all_lines):
+                        all_lines[r_pos] = replace_ansi_range(all_lines[r_pos], start_x, bl, box_w, term_cols)
+        elif self.active_dialog == "copy_menu":
+            copy_items = [
+                f"[c] Auswahl kopieren (Finder-kompatibel)",
+                f"[p] Pfad der Auswahl kopieren",
+                f"[f] Dateiname kopieren",
+                f"[d] Ordnerpfad kopieren",
+            ]
+            target_w = min(term_cols - 4, 46)
+            if target_w >= 24 and term_rows >= 8:
+                copy_key = next((k for k, a in self.keymap.items() if a == "copy"), "c")
+                box_lines, box_w = build_modal_box(f"Kopieren [{copy_key}]", copy_items, target_w)
                 box_h = len(box_lines)
                 start_x = max(0, (term_cols - box_w) // 2)
                 min_y = 2 if has_top_border else 1
@@ -739,8 +776,15 @@ class EasyDateienView:
         kd = lambda a, d: key_display(self.keymap, a, d)
         h_lbl, t_lbl = kd("help", "h"), kd("console", "t")
         m_lbl, q_lbl = kd("menu", "m"), kd("quit", "q")
-        # Stufe 1: Vollständig mit 5 Optionen (Navigieren, Hilfe, Konsole, Menü, Beenden)
-        items_full = ["[←↑↓→] Navigieren", f"[{h_lbl}] Hilfe", f"[{t_lbl}] Konsole", f"[{m_lbl}] Menü", f"[{q_lbl}] Beenden"]
+        tab_lbl = kd("console_focus", "Tab")
+        # Bei immer eingeblendeter Konsole entfällt [t] Konsole; stattdessen
+        # erscheint [Tab] Fokus (Fokus-Wechsel zur Konsole).
+        if self.console_always_visible:
+            console_opt = f"[{tab_lbl}] Fokus"
+        else:
+            console_opt = f"[{t_lbl}] Konsole"
+        # Stufe 1: Vollständig mit 5 Optionen (Navigieren, Hilfe, Konsole/Fokus, Menü, Beenden)
+        items_full = ["[←↑↓→] Navigieren", f"[{h_lbl}] Hilfe", console_opt, f"[{m_lbl}] Menü", f"[{q_lbl}] Beenden"]
         w_full = sum(str_width(it) for it in items_full)
         if w_full + (len(items_full) - 1) * 1 <= avail_w:
             return f"{distribute_options(items_full, avail_w)}"

@@ -8,10 +8,10 @@ und die Helfer aus easydateien_ui.
 
 from easydateien_common import (
     CONFIG_FILE, DEFAULT_CONFIG,
-    KEY_BINDINGS, CHORD_ACTIONS, get_keybindings_from_config, build_keymap,
+    KEY_BINDINGS, get_keybindings_from_config, build_keymap,
 )
 from easydateien_ui import (
-    ANSI_ESCAPE_RE, C_INVERT, C_RESET, DEFAULT_CONFIG,
+    ANSI_ESCAPE_RE, C_INVERT, C_RESET, DEFAULT_CONFIG, copy_text_to_clipboard,
     DISABLE_AUTOWRAP, ENABLE_AUTOWRAP, FileEntry, HIDE_CURSOR,
     HOME_DIR, List, Optional, SHOW_CURSOR,
     Tuple, UndoAction, arrange_entries, datetime,
@@ -1684,6 +1684,29 @@ class EasyDateienActions:
                 self.set_status("Ersetzen abgebrochen", "warning")
             return True
 
+        if self.active_dialog == "copy_menu":
+            c = key.lower()
+            self.active_dialog = None
+            if c in ("c", "C"):
+                self.copy_selection()
+            elif c in ("f", "F"):
+                if self.items:
+                    fn = self.items[self.selected_idx].name
+                    copy_text_to_clipboard(fn)
+                    self.set_status(f"Dateiname kopiert: {fn}", "success")
+                else:
+                    self.set_status("Keine Datei zum Kopieren vorhanden", "warning")
+            elif c in ("d", "D"):
+                copy_text_to_clipboard(self.current_dir)
+                self.set_status(f"Ordnerpfad kopiert: {self.get_short_dir(self.current_dir)}", "success")
+            elif c in ("p", "P"):
+                if self.items:
+                    p = self.items[self.selected_idx].path
+                    copy_text_to_clipboard(p)
+                    self.set_status(f"Pfad kopiert: {p}", "success")
+                else:
+                    self.set_status("Keine Datei zum Kopieren vorhanden", "warning")
+            return True
         if self.active_dialog == "goto_menu":
             c = key.lower()
             self.active_dialog = None

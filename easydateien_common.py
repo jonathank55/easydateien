@@ -258,10 +258,9 @@ KEY_BINDINGS = [
     ("Dateioperationen", "new", "Neu", ("n",), "Neue Datei oder Ordner (mit / am Ende)"),
     ("Dateioperationen", "rename", "Umbenennen", ("r",), "Element umbenennen"),
     ("Dateioperationen", "trash", "Löschen", ("DELETE", "BACKSPACE"), "In den Papierkorb verschieben"),
-    ("Dateioperationen", "copy", "Kopieren", ("c",), "Auswahl kopieren"),
+    ("Dateioperationen", "copy", "Kopieren", ("c",), "Kopier-Menü öffnen (Auswahl, Pfad, Name, Ordnerpfad)"),
     ("Dateioperationen", "cut", "Ausschneiden", ("x",), "Auswahl ausschneiden"),
     ("Dateioperationen", "paste", "Einfügen", ("p",), "In aktuellen Ordner einfügen"),
-    ("Dateioperationen", "copy_path", "Pfad", ("c",), "Kopieren: cc Pfad · cf Name · cd Ordnerpfad"),
     ("Dateioperationen", "zip", "Zip", ("z",), "ZIP-Archiv aus Auswahl erstellen"),
     ("Dateioperationen", "extract", "Entpacken", ("e",), "ZIP-Archiv entpacken"),
     ("Dateioperationen", "edit", "Bearbeiten", ("o",), "Im Editor bearbeiten"),
@@ -272,14 +271,6 @@ KEY_BINDINGS = [
     ("Verwaltung", "cancel_cmd", "Abbrechen (Eingabe)", ("CTRL_C",), "Konsoleneingabe leeren, interaktive Befehle beenden"),
     ("Verwaltung", "quit", "Beenden", ("q",), "EasyDateien beenden"),
 ]
-
-# Chord-Aktionen: Die Aktion nutzt ihre Taste als Präfix einer Tastenfolge
-# (z. B. Pfad: "c" gefolgt von c/f/d). Die Einzeltaste selbst bleibt der Aktion
-# zugeordnet, die sie allein auslöst (hier "c" = Kopieren), sodass die geteilte
-# Taste keine Doppelbelegung darstellt.
-CHORD_ACTIONS = {
-    "copy_path": ("c", ("cc", "cf", "cd")),
-}
 
 # Anzeigenamen für Tasten-Tokens im Hilfemenü
 KEY_LABELS = {
@@ -375,18 +366,13 @@ def get_keybindings_from_config(cfg: dict) -> list:
     defaults_by_action = {b[1]: b for b in KEY_BINDINGS}
     # Drei Schutzschichten gegen Tastenkonflikte, automatisch bei jedem Laden:
     # 1. Unbekannte Aktionen fallen weg (nur im Code existierende sind gueltig).
-    # 2. Tasten, die im aktuellen Standard einer ANDEREN Aktion gehoeren
-    #    (inkl. Chord-Sequenzen wie cc/cf/cd), gibt die gespeicherte
-    #    Belegung ab.
+    # 2. Tasten, die im aktuellen Standard einer ANDEREN Aktion gehoeren,
+    #    gibt die gespeicherte Belegung ab.
     # 3. Verbleibende individuelle Tasten bleiben; Doppelbelegungen sind
     #    danach ausgeschlossen.
     reserved = {}
     for b in KEY_BINDINGS:
-        chord = CHORD_ACTIONS.get(b[1])
-        eff = tuple(k for k in b[3] if not (chord and k == chord[0]))
-        if chord:
-            eff = eff + tuple(chord[1])
-        for k in eff:
+        for k in b[3]:
             reserved.setdefault(k, b[1])
     result = []
     for item in custom_bindings:
@@ -405,11 +391,7 @@ def get_keybindings_from_config(cfg: dict) -> list:
                      if isinstance(k, str) and k.strip()
                      and k.strip() not in ("UNBEKANNT", "resize")
                      and all(c.isprintable() for c in k))
-        chord = CHORD_ACTIONS.get(action)
-        eff = tuple(k for k in keys if not (chord and k == chord[0]))
-        if chord:
-            eff = eff + tuple(chord[1])
-        cleaned = tuple(k for k in eff if reserved.get(k, action) == action)
+        cleaned = tuple(k for k in keys if reserved.get(k, action) == action)
         result.append((cur[0], action, cur[2], cleaned or cur[3], cur[4]))
     # Aktionen, die nur im aktuellen Code existieren, ergänzen
     known = {b[1] for b in result}
@@ -423,15 +405,7 @@ def build_keymap(cfg: dict = None) -> dict:
     bindings = get_keybindings_from_config(cfg) if cfg else KEY_BINDINGS
     keymap = {}
     for _section, action, _disp, keys, _desc in bindings:
-        chord = CHORD_ACTIONS.get(action)
-        if chord and chord[0] in keys:
-            # Chord-Aktion: Die Präfix-Einzeltaste zählt nicht als eigene Belegung
-            # (sie gehört der Aktion, die sie allein auslöst); die vollständigen
-            # Tastenfolgen belegen diese Aktion.
-            eff_keys = tuple(k for k in keys if k != chord[0]) + chord[1]
-        else:
-            eff_keys = keys
-        for k in eff_keys:
+        for k in keys:
             if k in keymap:
                 raise ValueError(f"Tastenkonflikt: '{k}' ist doppelt belegt ({keymap[k]} / {action})")
             keymap[k] = action

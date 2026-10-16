@@ -10,7 +10,6 @@ import sys
 import time
 import termios
 import tty
-import select
 import signal
 import argparse
 from typing import Dict, List, Optional, Set, Tuple
@@ -593,29 +592,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     needs_redraw = True
                     continue
                 elif action == "copy":
-                    r, _, _ = select.select([fd], [], [], 0.04)
-                    if r:
-                        next_k = read_key(fd, timeout=0.01)
-                        if next_k in ("c", "C"):
-                            if self.items:
-                                p = self.items[self.selected_idx].path
-                                copy_text_to_clipboard(p)
-                                self.set_status(f"Pfad kopiert: {p}", "success")
-                                needs_redraw = True
-                                continue
-                        elif next_k in ("f", "F"):
-                            if self.items:
-                                fn = self.items[self.selected_idx].name
-                                copy_text_to_clipboard(fn)
-                                self.set_status(f"Dateiname kopiert: {fn}", "success")
-                                needs_redraw = True
-                                continue
-                        elif next_k in ("d", "D"):
-                            copy_text_to_clipboard(self.current_dir)
-                            self.set_status(f"Ordnerpfad kopiert: {self.current_dir}", "success")
-                            needs_redraw = True
-                            continue
-                    self.copy_selection()
+                    self.active_dialog = "copy_menu"
                     needs_redraw = True
                     continue
                 elif action == "cut":

@@ -25,7 +25,6 @@ from easydateien_common import (
     ENABLE_AUTOWRAP,
     DEFAULT_CONFIG,
     KEY_BINDINGS,
-    CHORD_ACTIONS,
     get_keybindings_from_config,
     build_keymap,
     char_width,
@@ -42,7 +41,7 @@ from easydateien_common import (
 # Kompatibilitäts-Re-Exports: Der Dateimanager und externe Aufrufe können diese
 # Namen weiterhin von hier importieren.
 __all__ = [
-    "KEY_BINDINGS", "build_keymap", "fit_hints", "CHORD_ACTIONS",
+    "KEY_BINDINGS", "build_keymap", "fit_hints",
     "load_config", "save_config", "DEFAULT_CONFIG", "run_konfigurator",
 ]
 
@@ -269,14 +268,8 @@ def heal_bindings(bindings: list) -> list:
     healed = []
     for row in bindings:
         section, action, disp, keys, desc = row
-        chord = CHORD_ACTIONS.get(action)
         clean = []
         for k in keys:
-            if chord and k == chord[0]:
-                if k not in seen:
-                    seen[k] = action
-                    clean.append(k)
-                continue
             if k in seen and seen[k] != action:
                 continue
             seen[k] = action
@@ -423,9 +416,6 @@ def edit_keybindings_menu(fd: int):
                             taken_from = []
                             for j, (sec2, act2, disp2, keys2, desc2) in enumerate(editable_bindings):
                                 if j == i:
-                                    continue
-                                chord2 = CHORD_ACTIONS.get(act2)
-                                if chord2 and new_key == chord2[0]:
                                     continue
                                 if new_key in keys2:
                                     rest = tuple(k for k in keys2 if k != new_key)
