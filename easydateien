@@ -109,6 +109,10 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self.console_scroll_offset: int = 0
         self.last_cmd_interactive: bool = False
         self._mouse_tracking_active: bool = False
+        # Terminal-Sicherung: exakter termios-Zustand vor TUI-Start (None = TUI
+        # war nie aktiv). main() stellt daraus den Ausgangszustand wieder her.
+        self._saved_termios = None
+        self._tui_active: bool = False
 
         # Verzeichnis-Cache: Pfad -> (mtime_ns des Ordners, Version, Einträge)
         self._raw_cache: Dict[str, Tuple[int, int, List[FileEntry]]] = {}
@@ -173,12 +177,14 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
             return
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
+        self._saved_termios = old_settings
         try:
             from easydateien_ui import _install_resize_handler
             _install_resize_handler()
         except Exception:
             pass
         tty.setcbreak(fd, termios.TCSADRAIN)
+        self._tui_active = True
         sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
         self.sync_mouse_state()
         sys.stdout.write("\033[2J\033[3J\033[H")
@@ -682,10 +688,22 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                 elif action == "quit":
                     break
         finally:
-            self.set_mouse_tracking(False, force=True)
-            sys.stdout.write("\033[?1007l\033[?1000l\033[?1006l\033[r" + ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
-            sys.stdout.flush()
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            # Stoisch: jeder Schritt einzeln abgesichert — ein Fehler darf
+            # weder die Wiederherstellung verhindern noch die App crashen.
+            try:
+                self.set_mouse_tracking(False, force=True)
+            except Exception:
+                pass
+            try:
+                sys.stdout.write("\033[?1007l\033[?1000l\033[?1006l\033[r" + ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
+                sys.stdout.flush()
+            except Exception:
+                pass
+            try:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            except Exception:
+                pass
+            self._tui_active = False
 
 
 class SingleLineHelpFormatter(argparse.HelpFormatter):
@@ -734,14 +752,15 @@ def main():
             _sys.stdout.flush()
         except Exception:
             pass
+        # termios: nur den von run() gesicherten Ausgangszustand wiederher-
+        # stellen. Niemals setcbreak() aufrufen — das wuerde das Terminal nach
+        # jedem Beenden erneut in den cbreak-Modus (kein Echo, kein kanoni-
+        # scher Modus) versetzen und die Shell danach unbedienbar machen.
         try:
-            import termios, tty
-            _fd = _sys.stdin.fileno()
-            try:
-                tty.setcbreak(_fd, termios.TCSADRAIN)
-            except Exception:
-                pass
-            termios.tcsetattr(_fd, termios.TCSADRAIN, termios.tcgetattr(_fd))
+            import termios as _termios
+            _saved = getattr(app, "_saved_termios", None)
+            if _saved is not None:
+                _termios.tcsetattr(_sys.stdin.fileno(), _termios.TCSADRAIN, _saved)
         except Exception:
             pass
 if __name__ == "__main__":
