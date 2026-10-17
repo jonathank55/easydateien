@@ -259,6 +259,7 @@ KEY_BINDINGS = [
     ("Dateioperationen", "rename", "Umbenennen", ("r",), "Element umbenennen"),
     ("Dateioperationen", "trash", "Löschen", ("DELETE", "BACKSPACE"), "In den Papierkorb verschieben"),
     ("Dateioperationen", "copy", "Kopieren", ("c",), "Kopier-Menü öffnen (Auswahl, Pfad, Name, Ordnerpfad)"),
+    ("Dateioperationen", "symlink", "Verknüpfung", ("v",), "Verknüpfung auf Auswahl/Eintrag erstellen"),
     ("Dateioperationen", "cut", "Ausschneiden", ("x",), "Auswahl ausschneiden"),
     ("Dateioperationen", "paste", "Einfügen", ("p",), "In aktuellen Ordner einfügen"),
     ("Dateioperationen", "zip", "Zip", ("z",), "ZIP-Archiv aus Auswahl erstellen"),

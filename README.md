@@ -76,8 +76,7 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
     - `c` im Menü: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notizen eingefügt werden! Die Auswahl bleibt dabei erhalten.  
     - `p` im Menü: Absoluten Dateipfad des Eintrags unter dem Cursor als Text in die Zwischenablage kopieren  
     - `f` im Menü: Dateinamen in die Zwischenablage kopieren  
-    - `d` im Menü: Ordnerpfad in die Zwischenablage kopieren  
-  - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien). Existiert der Name bereits, erscheint eine Rückfrage (`y` ersetzen, `n` überspringen, `a` alle ersetzen; bei Kopien erhalten Duplikate bei Bedarf eine Nummerierung `(1)`).  
+    - `d` im Menü: Ordnerpfad in die Zwischenablage kopieren    - `v`: **Verknüpfung erstellen** — öffnet einen Eingabedialog für den Link-Namen; leer lassen für den automatischen Vorschlag `<Zielname> - Link`. Die Verknüpfung zeigt auf die Auswahl (ein einzelnes Element) bzw. den Eintrag unter dem Cursor und wird im aktuellen Ordner erstellt (bei Namenskollision automatisch `<Name> (1)`, `<Name> (2)`, …). Rückgängig mit `u`.    - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien). Existiert der Name bereits, erscheint eine Rückfrage (`y` ersetzen, `n` überspringen, `a` alle ersetzen; bei Kopien erhalten Duplikate bei Bedarf eine Nummerierung `(1)`).  
 
 - **Gehe-zu-Schnellnavigation (`g`):**  
   - `g d`: Downloads (`~/Downloads`)  
@@ -243,11 +242,13 @@ Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unver
 | `easydateien_actions.py` | Alle Methoden mit Seiteneffekten: Dateioperationen, Navigation, Konsole, Dialoge, Maus |
 | `easydateien_view.py` | Bildschirmaufbau (`build_screen`, Statusleiste) |
 | `easydateien_common.py` | Zentrale Tastenbelegungen (Single Source of Truth), Konfiguration, gemeinsame Helfer |
+| `easydateien_symlink.py` | Kernfunktion zum Erstellen/Entfernen symbolischer Verknüpfungen (isoliert testbar) |
 | `easydateien_konfigurator.py` | Einstellungsmenü (eigenständig lauffähig) |
 | `test_eazydateien_kern.py` | Regressionstests der Kernfunktionen |
 | `test_konsole.py` | Konsolen-Tests (Ausgabe, Verlauf, PTY-Echtests) |
 | `test_terminal_reset.py` | Terminal-Reset-Regressionstests (termios nach Beenden bit-identisch, Reset-Sequenzen) |
 | `test_rendering_golden.py` | Goldene Rendering-Tests: frieren das exakte Bildschirmverhalten ein; jede Refaktorierung muss die Hashes unverändert lassen |
+| `test_symlink.py` | Verknüpfungs-Tests: Kernfunktion (Erstellen, Überschreiben, Fehlerfälle) und App-Integration (Dialog, Kollision, Undo) |
 | `run_tests.py` | Test-Runner (alle Tests) |
 
 ## Tastatur-Referenz
@@ -267,10 +268,11 @@ Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unver
 | `r` | Datei / Ordner umbenennen |
 | `/` | Such- und Schnellfilter aktivieren (Live-Filter nach Namensteil) |
 | `s` | Sortierkriterium umschalten (Änderungsdatum, Name, Größe, Typ); gilt für die laufende Sitzung (über das Menü `m` ist zusätzlich Zugangsdatum wählbar) |
-| `u` | Letzte Dateiaktion rückgängig machen (Erstellen, Umbenennen, Papierkorb, Einfügen, ZIP erstellen/entpacken) |
+| `u` | Letzte Dateiaktion rückgängig machen (Erstellen, Umbenennen, Papierkorb, Einfügen, ZIP erstellen/entpacken, Verknüpfung erstellen) |
 | `z` | ZIP-Archiv aus Auswahl (bzw. Eintrag unter dem Cursor) erstellen; der Cursor springt auf das neue Archiv |
 | `e` | Markierte bzw. das ausgewählte ZIP-Archiv in jeweils einen neuen Ordner entpacken |
 | `c` | Kopier-Menü öffnen: `c` = Auswahl in die macOS-Zwischenablage kopieren (Finder-kompatibel, Auswahl bleibt erhalten), `p` = absoluter Pfad, `f` = Dateiname, `d` = Ordnerpfad |
+| `v` | Verknüpfung auf die Auswahl (ein Element) bzw. den Eintrag unter dem Cursor erstellen; Name eingeben (leer = automatischer Vorschlag `<Zielname> - Link`); rückgängig mit `u` |
 | `x` | Auswahl ausschneiden (`×`-Markierung) |
 | `p` | Zwischenablage im aktuellen Ordner einfügen |
 | `Entfernen` / `Rücktaste` | In macOS-Papierkorb verschieben (Bestätigung mit `y` oder `Enter`, alles andere bricht ab) |

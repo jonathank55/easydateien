@@ -595,6 +595,13 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     self.active_dialog = "copy_menu"
                     needs_redraw = True
                     continue
+                elif action == "symlink":
+                    if self.items:
+                        self.active_dialog = "symlink"
+                        self.dialog_input = ""
+                        self.dialog_cursor = 0
+                        needs_redraw = True
+                    continue
                 elif action == "cut":
                     self.cut_selection()
                     needs_redraw = True

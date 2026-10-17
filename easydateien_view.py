@@ -403,6 +403,27 @@ class EasyDateienView:
                     else:
                         hints = ""
                     st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
+                elif self.active_dialog == "symlink":
+                    label = " Verknüpfung erstellen: "
+                    inp_w = max(1, term_cols - str_width(label))
+                    disp_inp = render_input_field(self.dialog_input, self.dialog_cursor, inp_w)
+                    field_w = min(str_width(safe_text(self.dialog_input)) + 1, inp_w)
+                    disp_inp = pad_to_width(disp_inp, field_w)
+                    left_str = f"{label}{disp_inp}"
+                    avail_h = max(1, term_cols - str_width(left_str) - 2)
+                    opts_full = [f"[Eingabe] Erstellen", f"[{key_display(self.keymap, 'cancel', 'ESC')}] Zurück"]
+                    _esc_d = key_display(self.keymap, 'cancel', 'ESC')
+                    opts_short = ["[Eingabe]", f"[{_esc_d}]"]
+                    opts_mini = [f"[{_esc_d}]"]
+                    if sum(str_width(x) for x in opts_full) + 2 <= avail_h:
+                        hints = distribute_options(opts_full, avail_h)
+                    elif sum(str_width(x) for x in opts_short) + 1 <= avail_h:
+                        hints = distribute_options(opts_short, avail_h)
+                    elif str_width(opts_mini[0]) <= avail_h:
+                        hints = distribute_options(opts_mini, avail_h)
+                    else:
+                        hints = ""
+                    st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
                 elif self.active_dialog == "new":
                     label = " Neu erstellen: "
                     inp_w = max(1, term_cols - str_width(label))

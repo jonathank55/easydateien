@@ -36,6 +36,7 @@ import zipfile
 import subprocess
 import stat
 import json
+from easydateien_symlink import create_symlink, remove_symlink, SymlinkError
 
 
 class EasyDateienActions:
@@ -390,6 +391,40 @@ class EasyDateienActions:
         self._copy_flash_paths = set(targets)
         self._copy_flash_until = time.monotonic() + 1.0
         self.set_status(f"{len(targets)} kopiert (Cmd+V im Finder, p hier)", "success")
+
+    def create_symlink_for_selection(self, link_name: str):
+        """Erstellt eine Verknuepfung mit dem Namen `link_name` im aktuellen Ordner,
+        die auf die Auswahl (oder den Eintrag unter dem Cursor) zeigt. Leerer Name
+        -> Vorschlag "<Zielname> - Link". Bei Namenskollision wird automatisch
+        " (1)", " (2)", ... angehaengt. Rueckgaengig mit u."""
+        if not self.items:
+            self.set_status("Keine Datei zum Verknuepfen vorhanden", "warning")
+            return
+        link_name = link_name.strip()
+        self.touch_last_used_dir()
+        cur_p = self.items[self.selected_idx].path
+        targets = list(self.selected_paths) if self.selected_paths else [cur_p]
+        if len(targets) > 1:
+            self.set_status("Verknuepfung nur fuer einzelne Datei moeglich (Auswahl hat mehrere Elemente)", "warning")
+            return
+        target = targets[0]
+        if not os.path.exists(target):
+            self.set_status(f"Ziel nicht gefunden: {target}", "error")
+            return
+        stem = os.path.basename(target.rstrip("/"))
+        candidate = self.unique_path(self.current_dir, link_name if link_name else f"{stem} - Link")
+        try:
+            link_p = create_symlink(target, candidate)
+        except SymlinkError as e:
+            self.set_status(f"Verknuepfung fehlgeschlagen: {e}", "error")
+            return
+        except Exception as e:
+            self.set_status(f"Fehler: {e}", "error")
+            return
+        self.undo_stack.append(UndoAction("symlink", f"Verknuepfung {os.path.basename(link_p)}", {"path": link_p}))
+        self.refresh_items(force=True)
+        self.select_filename(os.path.basename(link_p))
+        self.set_status(f"Verknuepfung erstellt: {os.path.basename(link_p)} → {self.get_short_dir(target)}", "success")
 
     def paste_clipboard(self):
         sources = list(self.clipboard_paths) if self.clipboard_paths else get_macos_clipboard_files()
@@ -801,6 +836,14 @@ class EasyDateienActions:
                     self.refresh_items(force=True)
                     self.set_status(f"Rückgängig: {os.path.basename(p)} gelöscht", "success")
 
+            elif action.action_type == "symlink":
+                p = action.data.get("path")
+                if p and os.path.islink(p):
+                    remove_symlink(p)
+                    self.refresh_items(force=True)
+                    self.set_status(f"Rückgängig: Verknüpfung {os.path.basename(p)} entfernt", "success")
+                else:
+                    self.set_status("Rückgängig: Verknüpfung nicht gefunden", "warning")
             elif action.action_type == "paste":
                 is_cut = action.data.get("is_cut", False)
                 records = action.data.get("records", [])
@@ -1850,6 +1893,11 @@ class EasyDateienActions:
                     self.set_status(f"Fehler: {e}", "error")
                 return True
 
+            elif mode == "symlink":
+                # Leerer Name ist erlaubt: Dann wird automatisch
+                # "<Zielname> - Link" als Vorschlagsname verwendet.
+                self.create_symlink_for_selection(val)
+                return True
             elif mode == "goto_path":
                 if not val:
                     self.set_status("Pfad-Navigation abgebrochen")
