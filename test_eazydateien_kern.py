@@ -103,6 +103,26 @@ class TestKeyBindings(unittest.TestCase):
             self.assertIn(expected, text)
         self.assertIn("Navigation & Ansicht", items[0])
 
+    def test_neue_aktion_wird_in_ihren_abschnitt_einsortiert(self):
+        # Alte gespeicherte Config ohne die neueste Aktion: Die Aktion darf nicht
+        # als zweiter Abschnitt gleichen Namens ans Ende geraet (Regression:
+        # "Dateioperationen" erschien doppelt im Hilfemenue).
+        custom = [list(b) for b in common.KEY_BINDINGS if b[1] != "symlink"]
+        bindings = common.get_keybindings_from_config({"keybindings": custom})
+        items = common.build_help_items(bindings)
+        sections = [l.strip() for l in items
+                    if l.strip() in ("Navigation & Ansicht", "Dateioperationen", "Verwaltung")]
+        self.assertEqual(sections.count("Dateioperationen"), 1)
+        # v steht innerhalb des Abschnitts Dateioperationen (nach u, vor Verwaltung)
+        idx_u = next(i for i, l in enumerate(items) if "[u]" in l)
+        idx_v = next(i for i, l in enumerate(items) if "[v]" in l)
+        idx_verwaltung = next(i for i, l in enumerate(items) if l.strip() == "Verwaltung")
+        self.assertLess(idx_u, idx_v)
+        self.assertLess(idx_v, idx_verwaltung)
+        # keymap funktioniert weiterhin
+        km = common.build_keymap({"keybindings": custom})
+        self.assertEqual(km.get("v"), "symlink")
+
 
 class TestHilfsfunktionen(unittest.TestCase):
     """Zentrale Hilfsfunktionen der common-Bibliothek."""

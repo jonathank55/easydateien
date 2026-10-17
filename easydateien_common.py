@@ -394,11 +394,22 @@ def get_keybindings_from_config(cfg: dict) -> list:
                      and all(c.isprintable() for c in k))
         cleaned = tuple(k for k in keys if reserved.get(k, action) == action)
         result.append((cur[0], action, cur[2], cleaned or cur[3], cur[4]))
-    # Aktionen, die nur im aktuellen Code existieren, ergänzen
+    # Aktionen, die nur im aktuellen Code existieren, ergänzen. Sie werden
+    # an der Position ihres Abschnitts einsortiert, damit jeder Abschnitt im
+    # Hilfemenü genau einmal erscheint (sonst entstünde bei einer älteren
+    # gespeicherten Konfiguration ein zweiter Abschnitt gleichen Namens am Ende).
     known = {b[1] for b in result}
     for b in KEY_BINDINGS:
-        if b[1] not in known:
-            result.append(b)
+        if b[1] in known:
+            continue
+        # Position des Abschnitts: nach dem letzten bekannten Eintrag desselben
+        # Abschnitts, sonst ans Ende.
+        insert_at = len(result)
+        for i in range(len(result) - 1, -1, -1):
+            if result[i][0] == b[0]:
+                insert_at = i + 1
+                break
+        result.insert(insert_at, b)
     return result
 
 def build_keymap(cfg: dict = None) -> dict:
