@@ -1742,13 +1742,6 @@ class EasyDateienActions:
             elif c in ("d", "D"):
                 copy_text_to_clipboard(self.current_dir)
                 self.set_status(f"Ordnerpfad kopiert: {self.get_short_dir(self.current_dir)}", "success")
-            elif c in ("p", "P"):
-                if self.items:
-                    p = self.items[self.selected_idx].path
-                    copy_text_to_clipboard(p)
-                    self.set_status(f"Pfad kopiert: {p}", "success")
-                else:
-                    self.set_status("Keine Datei zum Kopieren vorhanden", "warning")
             return True
         if self.active_dialog == "goto_menu":
             c = key.lower()

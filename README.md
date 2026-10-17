@@ -74,7 +74,6 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
   - `x`: Auswahl (oder der Eintrag unter dem Cursor) zum **Ausschneiden** vormerken (`×`); erneutes `x` auf einer ausgeschnittenen Datei nimmt die Vormerkung zurück  
   - `c`: **Kopier-Menü** öffnen (invertiertes Menü wie bei `g`/`h`):  
     - `c` im Menü: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notizen eingefügt werden! Die Auswahl bleibt dabei erhalten.  
-    - `p` im Menü: Absoluten Dateipfad des Eintrags unter dem Cursor als Text in die Zwischenablage kopieren  
     - `f` im Menü: Dateinamen in die Zwischenablage kopieren  
     - `d` im Menü: Ordnerpfad in die Zwischenablage kopieren    - `v`: **Verknüpfung erstellen** — öffnet einen Eingabedialog für den Link-Namen; leer lassen für den automatischen Vorschlag `<Zielname> - Link`. Die Verknüpfung zeigt auf die Auswahl (ein einzelnes Element) bzw. den Eintrag unter dem Cursor und wird im aktuellen Ordner erstellt (bei Namenskollision automatisch `<Name> (1)`, `<Name> (2)`, …). Rückgängig mit `u`.    - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien). Existiert der Name bereits, erscheint eine Rückfrage (`y` ersetzen, `n` überspringen, `a` alle ersetzen; bei Kopien erhalten Duplikate bei Bedarf eine Nummerierung `(1)`).  
 
@@ -271,7 +270,7 @@ Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unver
 | `u` | Letzte Dateiaktion rückgängig machen (Erstellen, Umbenennen, Papierkorb, Einfügen, ZIP erstellen/entpacken, Verknüpfung erstellen) |
 | `z` | ZIP-Archiv aus Auswahl (bzw. Eintrag unter dem Cursor) erstellen; der Cursor springt auf das neue Archiv |
 | `e` | Markierte bzw. das ausgewählte ZIP-Archiv in jeweils einen neuen Ordner entpacken |
-| `c` | Kopier-Menü öffnen: `c` = Auswahl in die macOS-Zwischenablage kopieren (Finder-kompatibel, Auswahl bleibt erhalten), `p` = absoluter Pfad, `f` = Dateiname, `d` = Ordnerpfad |
+| `c` | Kopier-Menü öffnen: `c` = Auswahl in die macOS-Zwischenablage kopieren (Finder-kompatibel, Auswahl bleibt erhalten), `f` = Dateiname, `d` = Ordnerpfad |
 | `v` | Verknüpfung auf die Auswahl (ein Element) bzw. den Eintrag unter dem Cursor erstellen; Name eingeben (leer = automatischer Vorschlag `<Zielname> - Link`); rückgängig mit `u` |
 | `x` | Auswahl ausschneiden (`×`-Markierung) |
 | `p` | Zwischenablage im aktuellen Ordner einfügen |
