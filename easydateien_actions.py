@@ -34,9 +34,11 @@ import signal
 import termios
 import zipfile
 import subprocess
+import threading
 import stat
 import json
 from easydateien_symlink import create_symlink, remove_symlink, SymlinkError
+
 
 
 class EasyDateienActions:
@@ -619,26 +621,65 @@ class EasyDateienActions:
             c += 1
         return dest
 
-    def create_zip_archive(self):
+    @staticmethod
+    def _zip_build_archive(dest: str, valid_targets, progress: Optional[dict] = None) -> int:
+        """Schreibt das ZIP-Archiv (laeuft im Hintergrund-Thread). Liefert die Zahl uebersprungener Dateien."""
+        skipped = 0
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+            for target in valid_targets:
+                base_dir = os.path.dirname(os.path.abspath(target))
+                if os.path.isdir(target):
+                    for root, dirs, files in os.walk(target):
+                        rel_root = os.path.relpath(root, base_dir)
+                        if not dirs and not files:
+                            zf.writestr(rel_root.rstrip("/") + "/", "")  # leere Ordner bewahren
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            try:
+                                if not os.path.exists(file_path) or stat.S_ISSOCK(os.stat(file_path).st_mode):
+                                    skipped += 1
+                                    continue
+                                zf.write(file_path, os.path.relpath(file_path, base_dir))
+                                if progress is not None:
+                                    progress["done"] += 1
+                            except OSError:
+                                skipped += 1
+                else:
+                    try:
+                        zf.write(target, os.path.basename(target))
+                        if progress is not None:
+                            progress["done"] += 1
+                    except OSError:
+                        skipped += 1
+        return skipped
+
+    def start_zip_creation(self):
+        """Startet die ZIP-Erstellung im Hintergrund; die App bleibt bedienbar.
+
+        Liefert True, wenn ein Hintergrund-Job gestartet wurde. Schreibt bei
+        Fehlern (z. B. bereits laufende Erstellung) eine Statusmeldung und
+        liefert False. UI-Updates (Fertigmeldung, Undo, Auswahl) erfolgen
+        erst in poll_zip_creation() im Hauptthread.
+        """
+        if getattr(self, "_zip_thread", None) is not None and self._zip_thread.is_alive():
+            self.set_status("Es wird bereits ein ZIP-Archiv erstellt", "warning")
+            return False
         self.touch_last_used_dir()
-        """Erstellt ein ZIP-Archiv aus der Auswahl (oder dem Eintrag unter dem Cursor) und springt darauf."""
         targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
         if not targets:
             self.set_status("Keine Dateien/Ordner ausgewählt", "warning")
-            return None
+            return False
 
-        # Filtere ungültige Pfade (z. B. Socket-Handles oder nicht existierende Dateien)
         valid_entries = []
         for target in sorted(targets):
             if not os.path.exists(target):
-                self.set_status(f"Warnung: „{os.path.basename(target)}“ existiert nicht und wird übersprungen", "warning")
+                self.set_status(f"Warnung: \u201e{os.path.basename(target)}\u201c existiert nicht und wird \u00fcbersprungen", "warning")
                 continue
             if stat.S_ISSOCK(os.stat(target).st_mode):
-                self.set_status(f"Warnung: „{os.path.basename(target)}“ ist ein Socket und wird übersprungen", "warning")
+                self.set_status(f"Warnung: \u201e{os.path.basename(target)}\u201c ist ein Socket und wird \u00fcbersprungen", "warning")
                 continue
             valid_entries.append(FileEntry(target, os.path.basename(target)))
 
-        # Gleiche Anordnung wie in der Dateiansicht, damit Archiv-Inhalt und Vorschau konsistent sortiert sind
         valid_entries = arrange_entries(
             valid_entries,
             show_hidden=True,
@@ -647,63 +688,97 @@ class EasyDateienActions:
             sort_dir_first=self.config.get("sort_dir_first", True),
         )
         valid_targets = [e.path for e in valid_entries]
-
         if not valid_targets:
             self.set_status("Keine gültigen Dateien/Ordner zum Archivieren", "error")
-            return None
+            return False
 
-        # Bestimme den Basisnamen für das ZIP-Archiv
         if len(valid_targets) == 1:
             base_name = os.path.basename(valid_targets[0])
         else:
             base_name = f"Archiv_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
         if base_name.lower().endswith(".zip"):
             base_name = base_name[:-4]
-
         dest = self.unique_path(self.current_dir, base_name, ".zip")
-        skipped = 0
 
-        try:
-            with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
-                for target in valid_targets:
-                    base_dir = os.path.dirname(os.path.abspath(target))
-                    if os.path.isdir(target):
-                        for root, dirs, files in os.walk(target):
-                            rel_root = os.path.relpath(root, base_dir)
-                            if not dirs and not files:
-                                zf.writestr(rel_root.rstrip("/") + "/", "")  # leere Ordner bewahren
-                            for file in files:
-                                file_path = os.path.join(root, file)
-                                try:
-                                    if not os.path.exists(file_path) or stat.S_ISSOCK(os.stat(file_path).st_mode):
-                                        skipped += 1
-                                        continue
-                                    zf.write(file_path, os.path.relpath(file_path, base_dir))
-                                except OSError:
-                                    skipped += 1
-                    else:
-                        try:
-                            zf.write(target, os.path.basename(target))
-                        except OSError:
-                            skipped += 1
-        except Exception as e:
+        # Gesamtzahl der zu archivierenden Dateien fuer die Fortschrittsanzeige
+        total = 0
+        for t in valid_targets:
+            if os.path.isdir(t):
+                for _root, _dirs, files in os.walk(t):
+                    total += len(files)
+            else:
+                total += 1
+        self._zip_progress = {"done": 0, "total": total}
+        self._zip_result = None
+
+        def worker():
+            progress = self._zip_progress
+            try:
+                skipped = self._zip_build_archive(dest, valid_targets, progress)
+                self._zip_result = {"dest": dest, "skipped": skipped, "error": None}
+            except Exception as e:
+                self._zip_result = {"dest": dest, "skipped": 0, "error": e}
+
+        self._zip_thread = threading.Thread(target=worker, daemon=True)
+        self._zip_thread.start()
+        self.selected_paths.clear()
+        self.set_status(f"ZIP wird erstellt: {os.path.basename(dest)} (0/{total})", "info")
+        return True
+
+    def poll_zip_creation(self) -> bool:
+        """Prueft den Hintergrund-Job; True = Bildschirm neu zeichnen.
+
+        Muss regelmaessig aus dem Hauptthread aufgerufen werden (z. B. in der
+        Poll-Schleife der Hauptschleife). Aktualisiert die Fortschrittsanzeige
+        und schliesst den Job ab, sobald der Thread fertig ist.
+        """
+        thread = getattr(self, "_zip_thread", None)
+        if thread is None:
+            return False
+        progress = getattr(self, "_zip_progress", None) or {}
+        done = progress.get("done", 0)
+        total = progress.get("total", 0)
+        if thread.is_alive():
+            if done != getattr(self, "_zip_last_reported_done", -1):
+                self._zip_last_reported_done = done
+                label = f" ({done}/{total})" if total else ""
+                self.set_status(f"ZIP wird erstellt{label}\u2026", "info")
+            return False
+        thread.join()
+        self._zip_thread = None
+        result = self._zip_result
+        self._zip_result = None
+        self._zip_progress = None
+        self._zip_last_reported_done = -1
+        if result is None:
+            return False
+        dest = result["dest"]
+        if result["error"] is not None:
             try:
                 os.remove(dest)
             except OSError:
                 pass
             self.refresh_items()
-            self.set_status(f"Fehler beim Erstellen des ZIP-Archivs: {e}", "error")
-            return None
-
-        self.selected_paths.clear()
+            self.set_status(f"Fehler beim Erstellen des ZIP-Archivs: {result['error']}", "error")
+            return True
         self.refresh_items()
         zip_name = os.path.basename(dest)
         self.reveal_filename(zip_name)  # Zeiger springt direkt auf das neue Archiv
         self.undo_stack.append(UndoAction("create_zip", f"ZIP {zip_name}", {"path": dest}))
+        skipped = result["skipped"]
         if skipped:
             self.set_status(f"ZIP erstellt: {zip_name} ({skipped} übersprungen)", "warning")
         else:
             self.set_status(f"ZIP erstellt: {zip_name}", "success")
+        return True
+
+    def create_zip_archive(self):
+        """Synchroner Pfad (z. B. fuer Tests): startet den Hintergrund-Job und wartet auf Abschluss."""
+        if not self.start_zip_creation():
+            return None
+        self._zip_thread.join()
+        dest = self._zip_result["dest"] if self._zip_result else None
+        self.poll_zip_creation()
         return dest
 
     def extract_zip_archive(self):

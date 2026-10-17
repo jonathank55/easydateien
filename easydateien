@@ -81,6 +81,12 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self.filter_query: str = ""
         self.quit_requested: bool = False
 
+        # ZIP-Erstellung im Hintergrund: Thread-Handle + Fortschritt/Ergebnis
+        self._zip_thread = None
+        self._zip_progress = None
+        self._zip_result = None
+        self._zip_last_reported_done: int = -1
+
         self.undo_stack: List[UndoAction] = []
 
         self.active_dialog: Optional[str] = None
@@ -215,6 +221,10 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     # rm im Hintergrund, externe Programme) sofort erkennen und
                     # die Anzeige aktuell halten, ohne auf eine Taste zu warten.
                     if self.poll_changes():
+                        needs_redraw = True
+                    # ZIP-Erstellung im Hintergrund: Fortschritt anzeigen und
+                    # fertigen Job abschliessen (Status, Undo, Auswahl).
+                    if self.poll_zip_creation():
                         needs_redraw = True
                     # Kopier-Feedback: Nach Ablauf der ~1 Sekunde das '+'
                     # automatisch entfernen (ein einmaliger Redraw genuegt).
@@ -588,8 +598,10 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         needs_redraw = True
                     continue
                 elif action == "zip":
-                    zip_path = self.create_zip_archive()
-                    needs_redraw = True
+                    # Asynchron: laeuft in einem Hintergrund-Thread, die App
+                    # bleibt voll bedienbar; poll_zip_creation() schliesst ab.
+                    if self.start_zip_creation():
+                        needs_redraw = True
                     continue
                 elif action == "copy":
                     self.active_dialog = "copy_menu"
@@ -674,6 +686,14 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         finally:
             # Stoisch: jeder Schritt einzeln abgesichert — ein Fehler darf
             # weder die Wiederherstellung verhindern noch die App crashen.
+            try:
+                # Laufende ZIP-Erstellung kurz abwarten, damit beim Beenden
+                # keine halb geschriebene Datei zurueckbleibt.
+                zip_thread = getattr(self, "_zip_thread", None)
+                if zip_thread is not None and zip_thread.is_alive():
+                    zip_thread.join(timeout=10.0)
+            except Exception:
+                pass
             try:
                 self.set_mouse_tracking(False, force=True)
             except Exception:

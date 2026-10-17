@@ -57,7 +57,7 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
   - **Umbenennen (`r`):** Inline-Umbenennen mit Sofort-Feedback.  
   - **Papierkorb (`Entfernen` oder `Rücktaste`):** Sicheres Verschieben in den macOS-Papierkorb (`~/.Trash`) mit Sicherheitsabfrage.  
   - **Rückgängig (`u`):** Mehrstufiges Undo-System für Erstellen, Umbenennen, Löschen, Einfügen sowie ZIP-Erstellen und -Entpacken.  
-  - **ZIP-Komprimierung (`z`):** Ausgewählte Dateien und Ordner direkt als ZIP-Archiv komprimieren; der Cursor springt auf das neue Archiv.  
+  - **ZIP-Komprimierung (`z`):** Ausgewählte Dateien und Ordner als ZIP-Archiv komprimieren; läuft im Hintergrund mit Fortschrittsanzeige (z. B. `ZIP wird erstellt (120/400)…`), die App bleibt voll bedienbar; der Cursor springt auf das fertige Archiv.  
   - **ZIP-Entpacken (`e`):** Markierte bzw. ausgewählte ZIP-Archive in einen neuen Ordner entpacken.  
   - **Editor-Integration (`o`):** Dateien im konfigurierten Texteditor bearbeiten (Standard `nano`; im Konfigurationsmenü wählbar).  
   - **Systemweites Öffnen (`Enter`):** Öffnet Dateien mit der macOS-Standard-App oder Ordner direkt im Finder (Befehl über `opener` konfigurierbar).  
@@ -268,7 +268,7 @@ Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unver
 | `/` | Such- und Schnellfilter aktivieren (Live-Filter nach Namensteil) |
 | `s` | Sortierkriterium umschalten (Änderungsdatum, Name, Größe, Typ); gilt für die laufende Sitzung (über das Menü `m` ist zusätzlich Zugangsdatum wählbar) |
 | `u` | Letzte Dateiaktion rückgängig machen (Erstellen, Umbenennen, Papierkorb, Einfügen, ZIP erstellen/entpacken, Verknüpfung erstellen) |
-| `z` | ZIP-Archiv aus Auswahl (bzw. Eintrag unter dem Cursor) erstellen; der Cursor springt auf das neue Archiv |
+| `z` | ZIP-Archiv aus Auswahl (bzw. Eintrag unter dem Cursor) erstellen; läuft im Hintergrund (App bleibt bedienbar, Fortschritt in der Statuszeile); der Cursor springt auf das fertige Archiv |
 | `e` | Markierte bzw. das ausgewählte ZIP-Archiv in jeweils einen neuen Ordner entpacken |
 | `c` | Kopier-Menü öffnen: `c` = Auswahl in die macOS-Zwischenablage kopieren (Finder-kompatibel, Auswahl bleibt erhalten), `f` = Dateiname, `d` = Ordnerpfad |
 | `v` | Verknüpfung auf die Auswahl (ein Element) bzw. den Eintrag unter dem Cursor erstellen; Name eingeben (leer = automatischer Vorschlag `<Zielname> - Link`); rückgängig mit `u` |
