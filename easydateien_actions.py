@@ -454,34 +454,37 @@ class EasyDateienActions:
             self.conflict_resolution = {}
             return
 
-        # Keine Konflikte - direkt einfügen
-        self._perform_paste(sources)
+        # Keine Konflikte - Einfügen im Hintergrund starten
+        self.start_paste(sources)
 
-    def _perform_paste(self, sources: List[str], allow_replace: bool = False):
-        """Führt das eigentliche Einfügen durch, nachdem Konflikte aufgelöst wurden.
+    @staticmethod
+    def _paste_count_items(sources) -> int:
+        """Gesamtzahl der Dateien/Ordner fuer die Fortschrittsanzeige (Top-Level + rekursiv)."""
+        total = 0
+        for src in sources:
+            if not os.path.exists(src):
+                continue
+            if os.path.isdir(src) and not os.path.islink(src):
+                for _root, _dirs, files in os.walk(src):
+                    total += len(files) + 1  # Dateien + der Ordner selbst
+            else:
+                total += 1
+        return total
 
-        allow_replace=True wird nach bestätigter Ersetzungsanfrage übergeben: Vorhandene
-        Ziele werden dann gesichert und tatsächlich ersetzt statt mit „ (1)“ umzubenennen.
+    def _paste_plan(self, sources: List[str], allow_replace: bool, is_cut: bool):
+        """Plant das Einfügen: Quellen pruefen, Ziele und Sicherungen bestimmen.
+
+        Liefert (plan, error). plan ist eine Liste von Dicts mit src/dest/backup_dest/
+        backup_path; bei Namenskollisionen ohne Ersetzungsfreigabe wird „ (n)“ angehaengt.
         """
-        success = 0
-        last_name = ""
-        pasted_records = []
-        failed = False
-        is_cut = (self.clipboard_mode == "cut")
-        replaced_backups = []
-
+        plan = []
         for src in sources:
             if not os.path.exists(src):
                 continue
             name = os.path.basename(src)
             dest = os.path.join(self.current_dir, name)
-
-            # Überspringe, wenn Quelle und Ziel identisch sind (bei Ausschneiden)
             if os.path.abspath(src) == os.path.abspath(dest) and is_cut:
                 continue
-
-            # Bei Kopieren: Füge Nummerierung hinzu, wenn Datei bereits existiert.
-            # Nur wenn der Ersetzungsdialog bestätigt wurde, wird wirklich ersetzt.
             backup_dest = None
             if not is_cut and os.path.lexists(dest):
                 if allow_replace:
@@ -492,51 +495,145 @@ class EasyDateienActions:
                     while os.path.lexists(dest):
                         dest = os.path.join(self.current_dir, f"{base} ({c}){ext}")
                         c += 1
+            backup_path = None
+            if is_cut and os.path.lexists(dest) and os.path.abspath(src) != os.path.abspath(dest):
+                backup_path = self._stash_existing(dest)
+            plan.append({"src": src, "dest": dest, "backup_dest": backup_dest, "backup_path": backup_path})
+        return plan, None
 
+    def _paste_execute(self, plan, is_cut: bool, progress: Optional[dict] = None):
+        """Führt den geplanten Paste aus (Thread-sicher). Liefert (pasted_records, replaced_backups, error)."""
+        pasted_records = []
+        replaced_backups = []
+        for entry in plan:
+            src = entry["src"]
+            dest = entry["dest"]
             try:
-                backup_path = None
-                if is_cut and os.path.lexists(dest) and os.path.abspath(src) != os.path.abspath(dest):
-                    backup_path = self._stash_existing(dest)
                 if is_cut:
                     try:
                         shutil.move(src, dest)
                     except Exception:
-                        self._restore_backup(backup_path, dest)
+                        self._restore_backup(entry["backup_path"], dest)
                         raise
                     pasted_records.append((src, dest))
-                    if backup_path:
-                        replaced_backups.append((dest, backup_path))
+                    if entry["backup_path"]:
+                        replaced_backups.append((dest, entry["backup_path"]))
                 else:
                     try:
-                        if os.path.isdir(src):
-                            shutil.copytree(src, dest)
+                        if os.path.isdir(src) and not os.path.islink(src):
+                            shutil.copytree(src, dest, copy_function=shutil.copy2)
                         else:
                             shutil.copy2(src, dest)
                     except Exception:
-                        self._restore_backup(backup_dest, dest)
+                        self._restore_backup(entry["backup_dest"], dest)
                         raise
                     pasted_records.append((None, dest))
-                    if backup_dest:
-                        replaced_backups.append((dest, backup_dest))
-                success += 1
-                last_name = os.path.basename(dest)
+                    if entry["backup_dest"]:
+                        replaced_backups.append((dest, entry["backup_dest"]))
+                if progress is not None:
+                    progress["done"] += 1
             except Exception as e:
-                self.set_status(f"Fehler beim Einfügen: {e}", "error")
-                failed = True
-                break
+                return pasted_records, replaced_backups, e
+        return pasted_records, replaced_backups, None
 
+    def _paste_finish(self, pasted_records, replaced_backups, is_cut: bool, error, success_count: int, last_name: str, failed: bool):
+        """Schliesst einen Paste-Job im Hauptthread ab (Undo, Zwischenablage, Anzeige)."""
         if pasted_records:
             desc = f"Einfügen von {len(pasted_records)} Element(en)"
             self.undo_stack.append(UndoAction("paste", desc, {"is_cut": is_cut, "records": pasted_records, "replaced_backups": replaced_backups}))
-
         if not failed:
             self.clipboard_mode = None
             self.clipboard_paths = []
         self.refresh_items()
         if last_name:
             self.reveal_filename(last_name)
-        if not failed:
-            self.set_status(f"{success} eingefügt", "success")
+        if failed:
+            self.set_status(f"Fehler beim Einfügen: {error}", "error")
+        else:
+            self.set_status(f"{success_count} eingefügt", "success")
+
+    def start_paste(self, sources: List[str], allow_replace: bool = False):
+        """Startet das Einfügen im Hintergrund; die App bleibt bedienbar.
+
+        Liefert True, wenn ein Hintergrund-Job gestartet wurde. UI-Updates
+        (Fertigmeldung, Undo, Zwischenablage leeren) erfolgen in poll_paste().
+        """
+        if getattr(self, "_paste_thread", None) is not None and self._paste_thread.is_alive():
+            self.set_status("Es wird bereits eingefügt", "warning")
+            return False
+        is_cut = (self.clipboard_mode == "cut")
+        plan, plan_error = self._paste_plan(sources, allow_replace, is_cut)
+        if plan_error is not None:
+            self.set_status(f"Fehler beim Einfügen: {plan_error}", "error")
+            return False
+        if not plan:
+            self.set_status("Nichts einzufügen", "warning")
+            return False
+        total = self._paste_count_items(sources)
+        self._paste_progress = {"done": 0, "total": total}
+        self._paste_result = None
+        self._paste_ctx = {"is_cut": is_cut, "plan": plan}
+
+        def worker():
+            try:
+                records, backups, error = self._paste_execute(plan, is_cut, self._paste_progress)
+                last_name = os.path.basename(records[-1][1]) if records else ""
+                self._paste_result = {
+                    "records": records, "backups": backups, "error": error,
+                    "success": len(records), "last_name": last_name,
+                }
+            except Exception as e:
+                self._paste_result = {"records": [], "backups": [], "error": e, "success": 0, "last_name": ""}
+
+        self._paste_thread = threading.Thread(target=worker, daemon=True)
+        self._paste_thread.start()
+        self.set_status(f"Einfügen läuft: {len(plan)} Element(e) (0/{total})", "info")
+        return True
+
+    def poll_paste(self) -> bool:
+        """Prueft den Paste-Hintergrund-Job; True = Bildschirm neu zeichnen."""
+        thread = getattr(self, "_paste_thread", None)
+        if thread is None:
+            return False
+        progress = getattr(self, "_paste_progress", None) or {}
+        done = progress.get("done", 0)
+        total = progress.get("total", 0)
+        if thread.is_alive():
+            if done != getattr(self, "_paste_last_reported_done", -1):
+                self._paste_last_reported_done = done
+                label = f" ({done}/{total})" if total else ""
+                self.set_status(f"Einfügen läuft{label}…", "info")
+            return False
+        thread.join()
+        self._paste_thread = None
+        result = self._paste_result
+        ctx = getattr(self, "_paste_ctx", None) or {}
+        self._paste_result = None
+        self._paste_progress = None
+        self._paste_ctx = None
+        self._paste_last_reported_done = -1
+        if result is None:
+            return False
+        self._paste_finish(
+            result["records"], result["backups"], ctx.get("is_cut", False),
+            result["error"], result["success"], result["last_name"],
+            failed=result["error"] is not None,
+        )
+        return True
+
+    def _perform_paste(self, sources: List[str], allow_replace: bool = False):
+        """Synchroner Pfad (z. B. fuer Tests): plant, führt aus und schliesst ab."""
+        is_cut = (self.clipboard_mode == "cut")
+        plan, plan_error = self._paste_plan(sources, allow_replace, is_cut)
+        if plan_error is not None:
+            self.set_status(f"Fehler beim Einfügen: {plan_error}", "error")
+            return
+        if not plan:
+            self.set_status("Nichts einzufügen", "warning")
+            return
+        records, backups, error = self._paste_execute(plan, is_cut)
+        last_name = os.path.basename(records[-1][1]) if records else ""
+        self._paste_finish(records, backups, is_cut, error, len(records), last_name, failed=error is not None)
 
     def _perform_replace(self, pr: dict):
         """Führt das bestätigte Ersetzen eines vorhandenen Eintrags aus (Umbenennen bzw. Neuerstellen)."""
@@ -1747,7 +1844,7 @@ class EasyDateienActions:
                                 filtered_sources.append(s)
                         else:
                             filtered_sources.append(s)
-                    self._perform_paste(filtered_sources, allow_replace=True)
+                    self.start_paste(filtered_sources, allow_replace=True)
                 return True
             elif key in ("a", "A"):
                 # Alle Dateien ersetzen
@@ -1755,7 +1852,7 @@ class EasyDateienActions:
                     self.conflict_resolution[d] = "replace"
                 self.conflicts_to_resolve = []
                 sources = list(self.clipboard_paths) if self.clipboard_paths else get_macos_clipboard_files()
-                self._perform_paste(sources, allow_replace=True)
+                self.start_paste(sources, allow_replace=True)
                 return True
             elif key in ("n", "N"):
                 # Aktuelle Datei überspringen
@@ -1775,7 +1872,7 @@ class EasyDateienActions:
                                 filtered_sources.append(s)
                         else:
                             filtered_sources.append(s)
-                    self._perform_paste(filtered_sources, allow_replace=True)
+                    self.start_paste(filtered_sources, allow_replace=True)
                 return True
             else:
                 # Abbrechen

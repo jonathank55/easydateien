@@ -75,7 +75,7 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
   - `c`: **Kopier-Menü** öffnen (invertiertes Menü wie bei `g`/`h`):  
     - `c` im Menü: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notizen eingefügt werden! Die Auswahl bleibt dabei erhalten.  
     - `f` im Menü: Dateinamen in die Zwischenablage kopieren  
-    - `d` im Menü: Ordnerpfad in die Zwischenablage kopieren    - `v`: **Verknüpfung erstellen** — öffnet einen Eingabedialog für den Link-Namen; leer lassen für den automatischen Vorschlag `<Zielname> - Link`. Die Verknüpfung zeigt auf die Auswahl (ein einzelnes Element) bzw. den Eintrag unter dem Cursor und wird im aktuellen Ordner erstellt (bei Namenskollision automatisch `<Name> (1)`, `<Name> (2)`, …). Rückgängig mit `u`.    - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien). Existiert der Name bereits, erscheint eine Rückfrage (`y` ersetzen, `n` überspringen, `a` alle ersetzen; bei Kopien erhalten Duplikate bei Bedarf eine Nummerierung `(1)`).  
+    - `d` im Menü: Ordnerpfad in die Zwischenablage kopieren    - `v`: **Verknüpfung erstellen** — öffnet einen Eingabedialog für den Link-Namen; leer lassen für den automatischen Vorschlag `<Zielname> - Link`. Die Verknüpfung zeigt auf die Auswahl (ein einzelnes Element) bzw. den Eintrag unter dem Cursor und wird im aktuellen Ordner erstellt (bei Namenskollision automatisch `<Name> (1)`, `<Name> (2)`, …). Rückgängig mit `u`.    - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien). Läuft im Hintergrund mit Fortschrittsanzeige (z. B. `Einfügen läuft (120/401)…`), die App bleibt voll bedienbar. Existiert der Name bereits, erscheint eine Rückfrage (`y` ersetzen, `n` überspringen, `a` alle ersetzen; bei Kopien erhalten Duplikate bei Bedarf eine Nummerierung `(1)`).  
 
 - **Gehe-zu-Schnellnavigation (`g`):**  
   - `g d`: Downloads (`~/Downloads`)  
@@ -273,7 +273,7 @@ Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unver
 | `c` | Kopier-Menü öffnen: `c` = Auswahl in die macOS-Zwischenablage kopieren (Finder-kompatibel, Auswahl bleibt erhalten), `f` = Dateiname, `d` = Ordnerpfad |
 | `v` | Verknüpfung auf die Auswahl (ein Element) bzw. den Eintrag unter dem Cursor erstellen; Name eingeben (leer = automatischer Vorschlag `<Zielname> - Link`); rückgängig mit `u` |
 | `x` | Auswahl ausschneiden (`×`-Markierung) |
-| `p` | Zwischenablage im aktuellen Ordner einfügen |
+| `p` | Zwischenablage im aktuellen Ordner einfügen; läuft im Hintergrund (App bleibt bedienbar, Fortschritt in der Statuszeile) |
 | `Entfernen` / `Rücktaste` | In macOS-Papierkorb verschieben (Bestätigung mit `y` oder `Enter`, alles andere bricht ab) |
 | `o` | Datei im konfigurierten Texteditor bearbeiten (Standard `nano`, im Menü `m` änderbar) |
 | `.` | Versteckte Dateien ein- oder ausblenden; gilt für die laufende Sitzung |
