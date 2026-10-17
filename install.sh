@@ -15,7 +15,7 @@ set -e
 echo "=== Installation von EasyDateien ==="
 
 RAW_BASE="https://raw.githubusercontent.com/jonathank55/easydateien/main"
-PROGRAMM_DATEIEN=("easydateien" "easydateien_ui.py" "easydateien_actions.py" "easydateien_view.py" "easydateien_common.py" "easydateien_konfigurator.py" "config.json")
+PROGRAMM_DATEIEN=("easydateien" "easydateien_ui.py" "easydateien_actions.py" "easydateien_view.py" "easydateien_common.py" "easydateien_symlink.py" "easydateien_konfigurator.py" "config.json")
 
 # ---------------------------------------------------------------- Quelle ermitteln
 # Wurde das Skript aus einem vorhandenem Repository ausgeführt, liegt dieses
@@ -83,7 +83,7 @@ mkdir -p "$CONFIG_DIR"
 
 echo "Verlinke Programmdateien nach $CONFIG_DIR..."
 # Selbstheilung: Tote Symlinks und Altreste aus frueheren Installationen entfernen
-for DATEI in easydateien easydateien_ui.py easydateien_actions.py easydateien_view.py easydateien_common.py easydateien_konfigurator.py config.example.json; do
+for DATEI in easydateien easydateien_ui.py easydateien_actions.py easydateien_view.py easydateien_common.py easydateien_symlink.py easydateien_konfigurator.py config.example.json; do
     ZIEL="$CONFIG_DIR/$DATEI"
     if [ -L "$ZIEL" ] && [ ! -e "$ZIEL" ]; then
         rm -f "$ZIEL"
@@ -95,6 +95,7 @@ ln -sf "$SRC_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_ui.py"
     ln -sf "$SRC_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_actions.py"
     ln -sf "$SRC_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_view.py"
     ln -sf "$SRC_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_common.py"
+ln -sf "$SRC_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_symlink.py"
 ln -sf "$SRC_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
 chmod +x "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_konfigurator.py"
 
@@ -102,12 +103,13 @@ chmod +x "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_konfigurator.py"
 # geladen, das nach Abschluss gelöscht wird. Damit die Verweise in $CONFIG_DIR
 # gültig bleiben, werden sie in diesem Fall fest kopiert statt nur verlinkt.
 if [ -n "$CLEANUP_DIR" ]; then
-    rm -f "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_konfigurator.py"
+    rm -f "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_konfigurator.py"
     cp "$SRC_DIR/easydateien" "$CONFIG_DIR/easydateien"
     cp "$SRC_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_ui.py"
         cp "$SRC_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_actions.py"
         cp "$SRC_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_view.py"
         cp "$SRC_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_common.py"
+    cp "$SRC_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_symlink.py"
     cp "$SRC_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
     chmod +x "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_konfigurator.py"
     trap - EXIT
@@ -192,7 +194,7 @@ done
 # ---------------------------------------------------------------- Selbst-Verifikation
 # Prueft, dass die Installation vollstaendig und lauffaehig ist. Schlaegt etwas
 # fehl, bricht das Skript LAUT ab, statt einen halbfertigen Zustand zu melden.
-VERIFY_FILES=("easydateien" "easydateien_ui.py" "easydateien_actions.py" "easydateien_view.py" "easydateien_common.py" "easydateien_konfigurator.py")
+VERIFY_FILES=("easydateien" "easydateien_ui.py" "easydateien_actions.py" "easydateien_view.py" "easydateien_common.py" "easydateien_symlink.py" "easydateien_konfigurator.py")
 VERIFY_FAILED=0
 for DATEI in "${VERIFY_FILES[@]}"; do
     ZIEL="$CONFIG_DIR/$DATEI"
@@ -206,7 +208,7 @@ if command -v python3 >/dev/null 2>&1; then
         echo "FEHLER: Hauptprogramm hat keine gueltige Python-Syntax" >&2
         VERIFY_FAILED=1
     fi
-    if ! python3 -c "import sys; sys.path.insert(0, '$CONFIG_DIR'); import easydateien_ui, easydateien_actions, easydateien_view, easydateien_common" 2>/dev/null; then
+    if ! python3 -c "import sys; sys.path.insert(0, '$CONFIG_DIR'); import easydateien_ui, easydateien_actions, easydateien_view, easydateien_common, easydateien_symlink" 2>/dev/null; then
         echo "FEHLER: Programmmodule konnten nicht geladen werden (Import-Test)" >&2
         VERIFY_FAILED=1
     fi

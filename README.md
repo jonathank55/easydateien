@@ -133,7 +133,7 @@ Das Skript lädt die Programmdateien selbstständig von GitHub herunter und inst
 
 Das Skript
 
-- installiert die Programmdateien (`easydateien`, `easydateien_ui.py`, `easydateien_actions.py`, `easydateien_view.py`, `easydateien_common.py`, `easydateien_konfigurator.py`) nach `~/.config/easydateien/` (bei Option 1 fest kopiert, bei Option 2 als Symlinks auf das Repository),
+- installiert die Programmdateien (`easydateien`, `easydateien_ui.py`, `easydateien_actions.py`, `easydateien_view.py`, `easydateien_common.py`, `easydateien_symlink.py`, `easydateien_konfigurator.py`) nach `~/.config/easydateien/` (bei Option 1 fest kopiert, bei Option 2 als Symlinks auf das Repository),
 - kompiliert (sofern `clang` vorhanden ist) das native macOS-Clipboard-Modul `easydateien_clip` nach `~/.config/easydateien/`,
 - legt `~/.config/easydateien/config.json` an, falls noch keine Konfiguration existiert (eine vorhandene gültige bleibt unberührt; eine korrupte wird durch gültige Standardwerte ersetzt),
 - erstellt die Symlinks `easydateien` und `ed` in `~/.local/bin/` und/oder `~/bin/` (je nachdem, welches Verzeichnis existiert; `~/.local/bin/` wird bei Bedarf angelegt und sollte im `PATH` liegen),
