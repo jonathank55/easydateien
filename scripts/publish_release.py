@@ -22,11 +22,12 @@ import urllib.request
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 MAIN_FILE = os.path.join(REPO_ROOT, "easydateien")
 TEST_RUNNER = os.path.join(REPO_ROOT, "run_tests.py")
+
 FORMULA_TEMPLATE = """class Easydateien < Formula
   desc "Deutschsprachiger Terminal-Dateimanager für macOS mit integrierter Konsole"
   homepage "https://github.com/jonathank55/easydateien"
-  url "https://github.com/jonathank55/easydateien/archive/refs/tags/v{version}.tar.gz"
-  sha256 "{sha256}"
+  url "https://github.com/jonathank55/easydateien/archive/refs/tags/v__VERSION__.tar.gz"
+  sha256 "__SHA256__"
   license "MIT"
 
   depends_on "python@3.12"
@@ -37,6 +38,7 @@ FORMULA_TEMPLATE = """class Easydateien < Formula
                     "easydateien_clip.m",
                     "easydateien_common.py",
                     "easydateien_konfigurator.py",
+                    "easydateien_symlink.py",
                     "easydateien_ui.py",
                     "easydateien_view.py",
                     "config.json"
@@ -60,7 +62,7 @@ FORMULA_TEMPLATE = """class Easydateien < Formula
   test do
     assert_predicate libexec/"easydateien", :executable?
     assert_path_exists libexec/"easydateien_common.py"
-    assert_match "EasyDateien {version}", shell_output("#{bin}/easydateien -v")
+    assert_match "EasyDateien __VERSION__", shell_output("#{bin}/easydateien -v")
   end
 end
 """
@@ -135,7 +137,7 @@ def update_homebrew_tap(version, sha256_hash, is_ci=False):
         os.makedirs(formula_dir, exist_ok=True)
         formula_path = os.path.join(formula_dir, "easydateien.rb")
 
-        rendered = FORMULA_TEMPLATE.format(version=version, sha256=sha256_hash)
+        rendered = FORMULA_TEMPLATE.replace("__VERSION__", version).replace("__SHA256__", sha256_hash)
         with open(formula_path, "w", encoding="utf-8") as f:
             f.write(rendered)
 
