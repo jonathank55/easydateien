@@ -133,6 +133,8 @@ class TestMainFinallyReset(unittest.TestCase):
 
         master, slave = pty.openpty()
         try:
+            if sys.platform == "darwin":
+                self.skipTest("os.fork() ohne exec auf macOS nicht sicher verfuegbar")
             attrs = termios.tcgetattr(slave)
             attrs[3] |= (termios.ECHO | termios.ICANON | termios.IEXTEN)
             termios.tcsetattr(slave, termios.TCSADRAIN, attrs)

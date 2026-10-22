@@ -102,7 +102,7 @@ class TestKonsoleUnit(unittest.TestCase):
     def test_fehlermeldung_fehlender_befehl(self):
         self.app.run_console_command("gibts-nicht-xyz", None, None)
         joined = "\n".join(self.out())
-        self.assertTrue(any(k in joined.lower() for k in ("not found", "command not found")))
+        self.assertTrue(any(k in joined.lower() for k in ("not found", "command not found", "nicht gefunden", "kommando nicht gefunden")))
 
     def test_mehrzeilenausgabe_vollstaendig(self):
         self.app.run_console_command("for i in 1 2 3 4 5; do echo zeile-$i; done", None, None)
