@@ -1,8 +1,8 @@
 # EasyDateien
 
-**Minimalistischer, hocheffizienter Terminal-Dateimanager für macOS mit integrierter Konsole und flüssiger Tastaturnavigation.**
+**Minimalistischer, hocheffizienter Terminal-Dateimanager für macOS mit integrierter Konsole und flüssiger Tastaturnavigation (deutschsprachig).**
 
-EasyDateien ist ein extrem schlanker, reaktionsschneller und autonomer Terminal-Dateimanager ohne externe Python-Abhängigkeiten. Er wurde entwickelt für Anwender, die blitzschnell im Terminal durch Verzeichnisse navigieren, Dateien auswählen, verschieben, kopieren, suchen, komprimieren oder in Editoren bearbeiten möchten, kombiniert mit einem vollintegrierten Terminal-Panel für maximale Produktivität.
+EasyDateien ist ein extrem schlanker, reaktionsschneller und rein deutschsprachiger Terminal-Dateimanager ohne externe Python-Abhängigkeiten. Er wurde entwickelt für Anwender, die blitzschnell im Terminal durch Verzeichnisse navigieren, Dateien auswählen, verschieben, kopieren, suchen, komprimieren oder in Editoren bearbeiten möchten, kombiniert mit einem vollintegrierten Terminal-Panel für maximale Produktivität.
 
 > [!NOTE]
 > **Transparenzhinweis zur Inspiration:**  
@@ -106,7 +106,19 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
 
 ## Installation
 
-### Option 1: Ein-Zeilen-Installation (ohne Klon)
+### Option 1: Über Homebrew (empfohlen)
+EasyDateien lässt sich auf macOS mit einem einzigen Befehl über den offiziellen Tap installieren:
+
+```bash
+brew install jonathank55/tap/easydateien
+```
+
+Aktualisierungen erfolgen danach automatisch via Homebrew:
+```bash
+brew update && brew upgrade easydateien
+```
+
+### Option 2: Ein-Zeilen-Installation (ohne Klon)
 
 Das Installationsskript kann direkt von GitHub ausgeführt werden — kein `git clone` nötig:
 
@@ -116,7 +128,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/jonathank55/easydateien/main
 
 Das Skript lädt die Programmdateien selbstständig von GitHub herunter und installiert sie fest nach `~/.config/easydateien/`. Ein Repository-Ordner, der nach der Installation bestehen bleiben muss, entfällt bei dieser Variante.
 
-### Option 2: Installation aus dem geklonten Repository
+### Option 3: Installation aus dem geklonten Repository
 
 1. **Repository klonen:**
    ```bash
