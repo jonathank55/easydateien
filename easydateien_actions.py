@@ -1722,6 +1722,14 @@ class EasyDateienActions:
                 self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
             return True
         else:
+            # Mauszeiger ueber der rechten Spalte (Datei-Vorschau): Vorschau
+            # scrollen, exakt wie mit BildAuf/BildAb. Sonst: Cursor bewegen.
+            if x is not None and y is not None and self._preview_aktiv() and layout.get("eff_cols") == 3:
+                col_x = x - 1
+                w_left = layout.get("w_left", 0)
+                w_mid = layout.get("w_mid", 0)
+                if col_x >= (w_left + w_mid + 2):
+                    return self._scroll_preview(-1 if direction == "up" else 1)
             if direction == "up":
                 if self.items:
                     self.selected_idx = max(0, self.selected_idx - 1)
