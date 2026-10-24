@@ -736,7 +736,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.9", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.10", help="Programmversion anzeigen")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
 
