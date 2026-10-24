@@ -136,6 +136,9 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self.cached_file_preview_key: Optional[Tuple] = None
         self.cached_file_preview_lines: List[str] = []
         self.cached_file_preview_path: Optional[str] = None
+        self._cached_wrap_key: Optional[Tuple] = None
+        self._cached_wrapped_lines: List[str] = []
+        self._cached_wrap_raw_idx: int = 0
 
         # Parent/Child pane caches
         self.cached_parent_dir: Optional[str] = None
@@ -543,12 +546,12 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         self.selected_idx = min(len(self.items) - 1, self.selected_idx + 1)
                         needs_redraw = True
                     continue
-                elif action == "page_up":
+                elif action == "page_up" or (action is None and key in ("SHIFT_UP", "CTRL_UP", "ALT_UP", "ALT_SHIFT_UP", "CTRL_SHIFT_UP")):
                     if self._preview_aktiv():
                         self._scroll_preview(-1)
                         needs_redraw = True
                     continue
-                elif action == "page_down":
+                elif action == "page_down" or (action is None and key in ("SHIFT_DOWN", "CTRL_DOWN", "ALT_DOWN", "ALT_SHIFT_DOWN", "CTRL_SHIFT_DOWN")):
                     if self._preview_aktiv():
                         self._scroll_preview(1)
                         needs_redraw = True

@@ -217,6 +217,8 @@ class EasyDateienActions:
         self.items = []
         self.selected_idx = 0
         self.view_start = 0
+        self.preview_scroll_offset = 0
+        self.preview_scroll_item = None
         if self.filter_query:
             self.filter_query = ""
         self.refresh_items()
@@ -1147,17 +1149,32 @@ class EasyDateienActions:
             self.cached_file_preview_path = path
             self.cached_file_preview_key = cache_key
             self.cached_file_preview_lines = lines
+            self._cached_wrap_key = None
+            self._cached_wrapped_lines = []
+            self._cached_wrap_raw_idx = 0
 
         lines = self.cached_file_preview_lines
 
-        # Umbruch nach dem Cache anwenden, damit auch Cache-Treffer und Breitenänderungen (Resize) umbrechen
+        # Umbruch nach dem Cache anwenden, damit auch Cache-Treffer und Breitenänderungen (Resize) umbrechen.
+        # Inkrementeller Umbruch-Cache: bricht alle benötigten Zeilen exakt um (ohne vorzeitigen
+        # 3x-Zeilenschnitt) und hält bereits umgebrochene Zeilen für verzögerungsfreies Scrollen bereit.
         if self.preview_wrap and wrap_width and wrap_width > 0:
-            wrapped = []
-            for l in lines[:max_lines * 3]:
-                wrapped.extend(wrap_line_to_width(l, wrap_width))
-            return wrapped[:max_lines]
+            wrap_key = (path, cache_key, wrap_width)
+            if getattr(self, "_cached_wrap_key", None) != wrap_key:
+                self._cached_wrap_key = wrap_key
+                self._cached_wrapped_lines = []
+                self._cached_wrap_raw_idx = 0
+            wrapped = self._cached_wrapped_lines
+            raw_idx = self._cached_wrap_raw_idx
+            n_raw = len(lines)
+            target_len = max_lines if max_lines > 0 else 1_000_000_000
+            while len(wrapped) < target_len and raw_idx < n_raw:
+                wrapped.extend(wrap_line_to_width(lines[raw_idx], wrap_width))
+                raw_idx += 1
+            self._cached_wrap_raw_idx = raw_idx
+            return wrapped[:max_lines] if max_lines > 0 else list(wrapped)
 
-        return lines[:max_lines]
+        return lines[:max_lines] if max_lines > 0 else list(lines)
 
     def get_console_display_lines(self, width: int, height: int) -> List[str]:
         if height <= 0 or width <= 0:
@@ -1590,28 +1607,57 @@ class EasyDateienActions:
         cur = self.items[self.selected_idx] if 0 <= self.selected_idx < len(self.items) else None
         return bool(cur and not cur.is_dir)
 
+    def _preview_geometrie(self, cur_item=None) -> Tuple[int, Optional[int]]:
+        """Liefert (sichtbare_vorschau_zeilen, wrap_width) exakt deckungsgleich mit build_screen."""
+        if cur_item is None and self.items and 0 <= self.selected_idx < len(self.items):
+            cur_item = self.items[self.selected_idx]
+        layout = self.last_layout or {}
+        fm_rows = layout.get("avail_rows", 0)
+        w_right = layout.get("w_right", 0)
+        if fm_rows <= 0 or w_right <= 0:
+            curr_size = shutil.get_terminal_size((80, 24))
+            term_cols, term_rows = curr_size.columns, curr_size.lines
+            consumed = 1 + (3 if term_rows >= 4 else 0)
+            avail_total = max(1, term_rows - consumed)
+            active_console = self.show_console or self.console_always_visible
+            if active_console:
+                console_h = max(2, min(16, int(avail_total * 0.3)))
+                fm_rows = (avail_total - console_h - 1) if (avail_total - console_h - 1 >= 3) else avail_total
+            else:
+                fm_rows = avail_total
+            avail = max(10, term_cols - 4)
+            w_right = max(10, int(avail * 0.33))
+        is_sym = bool(cur_item and getattr(cur_item, "is_symlink", False))
+        card_h = 5 + (1 if is_sym else 0)
+        if fm_rows < 10:
+            sichtbar = 0
+        else:
+            sichtbar = max(1, fm_rows - (card_h + 1))
+        preview_wrap_width = max(2, w_right - 2) if self.preview_wrap else None
+        return sichtbar, preview_wrap_width
+
     def _scroll_preview(self, richtung: int) -> bool:
         """Scrollt die Datei-Vorschau um eine Stufe (richtung: -1 hoch, +1 runter).
         Gibt True zurück, wenn gescrollt wurde (am Anschlag ohne Bewegung: False,
         damit PG_UP/DOWN dann das gewohnte Listen-Verhalten behalten)."""
+        if not self.items or not (0 <= self.selected_idx < len(self.items)):
+            return False
         cur = self.items[self.selected_idx]
+        if cur.is_dir:
+            return False
         if self.preview_scroll_item != cur.path:
             self.preview_scroll_item = cur.path
             self.preview_scroll_offset = 0
-        # Sichtbare Vorschau-Höhe exakt wie im Rendering (build_screen):
-        # needed_p = fm_rows - 6; die Karte belegt len(card) Zeilen plus
-        # Trennlinie, danach beginnt die Vorschau.
-        layout = self.last_layout or {}
-        avail_rows = layout.get("avail_rows", 0)
-        needed_p = max(1, avail_rows - 6)
-        card_h = 5 + (1 if cur.is_symlink else 0)
-        sichtbar = max(1, needed_p - card_h - 1)
-        # Vorschau in unbegrenzter Laenge laden (Cache liefert nur den
-        # anfaenglich geladenen Ausschnitt; hier bewusst frisch)
-        voll = len(self.load_file_preview_lines(cur.path, 100000, None))
+        sichtbar, preview_wrap_width = self._preview_geometrie(cur)
+        if sichtbar <= 0:
+            return False
+        ziel = max(0, self.preview_scroll_offset + richtung)
+        # Exakt mit derselben Umbruchbreite wie build_screen laden, damit
+        # auch umgebrochene Zeilen vollständig bis ganz nach unten erreichbar sind.
+        voll = len(self.load_file_preview_lines(cur.path, ziel + sichtbar, preview_wrap_width))
         # Anschlag: letzte Zeile bleibt sichtbar, nie weiter
         max_off = max(0, voll - sichtbar)
-        neu = max(0, min(max_off, self.preview_scroll_offset + richtung))
+        neu = max(0, min(max_off, ziel))
         if neu == self.preview_scroll_offset:
             return False
         self.preview_scroll_offset = neu
@@ -1723,6 +1769,14 @@ class EasyDateienActions:
                 self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
             return True
         else:
+            # Mauszeiger über der rechten Spalte (Datei-Vorschau): Vorschau
+            # scrollen, exakt wie mit BildAuf/BildAb. Sonst: Cursor bewegen.
+            if x is not None and y is not None and self._preview_aktiv() and layout.get("eff_cols") == 3:
+                col_x = x - 1
+                w_left = layout.get("w_left", 0)
+                w_mid = layout.get("w_mid", 0)
+                if col_x >= (w_left + w_mid + 2):
+                    return self._scroll_preview(-1 if direction == "up" else 1)
             if direction == "up":
                 if self.items:
                     self.selected_idx = max(0, self.selected_idx - 1)

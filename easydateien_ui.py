@@ -785,30 +785,39 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
         if raw == b"\x1b":
             seq = b""
             while True:
-                r2, _, _ = select.select([fd], [], [], 0.05)
+                r2, _, _ = select.select([fd], [], [], 0.05 if not seq else 0.02)
                 if not r2:
                     break
                 c = os.read(fd, 1)
                 if not c:
                     break
                 seq += c
-                if seq.startswith(b"[<"):
-                    if seq.endswith(b"M") or seq.endswith(b"m") or len(seq) >= 30:
+                body = seq[1:] if seq.startswith(b"\x1b") else seq
+                if body.startswith(b"[<"):
+                    if body.endswith(b"M") or body.endswith(b"m") or len(seq) >= 32:
                         break
-                elif len(seq) >= 2 and seq[-1:] in b"ABCDHFS~":
+                elif body.startswith(b"["):
+                    if len(body) >= 2 and 0x40 <= body[-1] <= 0x7E:
+                        break
+                    if len(seq) >= 16:
+                        break
+                elif body.startswith(b"O"):
+                    if len(body) >= 2:
+                        break
+                elif seq != b"\x1b":
                     break
-                elif len(seq) >= 6:
-                    break
-            if not seq:
+            if not seq or seq == b"\x1b":
                 return "ESC"
-            if seq.startswith(b"[<") and (seq.endswith(b"M") or seq.endswith(b"m")):
+            body = seq[1:] if seq.startswith(b"\x1b") else seq
+            has_esc_prefix = seq.startswith(b"\x1b")
+            if body.startswith(b"[<") and (body.endswith(b"M") or body.endswith(b"m")):
                 try:
-                    is_rel = seq.endswith(b"m")
-                    b_s, x_s, y_s = seq[2:-1].decode("ascii").split(";")
+                    is_rel = body.endswith(b"m")
+                    b_s, x_s, y_s = body[2:-1].decode("ascii").split(";")
                     b_c = int(b_s)
-                    if b_c == 64:
+                    if (b_c & 64) and (b_c & 3) == 0:
                         return f"MOUSE_WHEEL_UP:{int(x_s)}:{int(y_s)}"
-                    elif b_c == 65:
+                    elif (b_c & 64) and (b_c & 3) == 1:
                         return f"MOUSE_WHEEL_DOWN:{int(x_s)}:{int(y_s)}"
                     elif not is_rel and b_c == 0:
                         return f"MOUSE_CLICK:{int(x_s)}:{int(y_s)}"
@@ -818,15 +827,31 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
                     pass
                 return "MOUSE_EVENT"
 
+            if body in (b"[5~", b"[5z", b"[I") or (body.startswith(b"[5;") and body.endswith(b"~")):
+                return "PAGE_UP"
+            if body in (b"[6~", b"[6z", b"[G") or (body.startswith(b"[6;") and body.endswith(b"~")):
+                return "PAGE_DOWN"
+            if has_esc_prefix and body in (b"[A", b"OA"):
+                return "ALT_UP"
+            if has_esc_prefix and body in (b"[B", b"OB"):
+                return "ALT_DOWN"
+
             mapping = {
                 b"[A": "UP", b"[B": "DOWN", b"[C": "RIGHT", b"[D": "LEFT",
                 b"OA": "UP", b"OB": "DOWN", b"OC": "RIGHT", b"OD": "LEFT",
                 b"[1;2A": "SHIFT_UP", b"[1;2B": "SHIFT_DOWN",
+                b"[2A": "SHIFT_UP", b"[2B": "SHIFT_DOWN",
                 b"[1;3A": "ALT_UP", b"[1;3B": "ALT_DOWN",
+                b"[3A": "ALT_UP", b"[3B": "ALT_DOWN",
                 b"[1;4A": "ALT_SHIFT_UP", b"[1;4B": "ALT_SHIFT_DOWN",
+                b"[4A": "ALT_SHIFT_UP", b"[4B": "ALT_SHIFT_DOWN",
                 b"[1;5A": "CTRL_UP", b"[1;5B": "CTRL_DOWN",
+                b"[5A": "CTRL_UP", b"[5B": "CTRL_DOWN",
+                b"Oa": "CTRL_UP", b"Ob": "CTRL_DOWN",
                 b"[1;6A": "CTRL_SHIFT_UP", b"[1;6B": "CTRL_SHIFT_DOWN",
+                b"[6A": "CTRL_SHIFT_UP", b"[6B": "CTRL_SHIFT_DOWN",
                 b"[1;9A": "ALT_UP", b"[1;9B": "ALT_DOWN",
+                b"[1;10A": "ALT_SHIFT_UP", b"[1;10B": "ALT_SHIFT_DOWN",
                 b"[H": "HOME", b"[F": "END", b"OH": "HOME", b"OF": "END",
                 b"[1~": "HOME", b"[4~": "END", b"[7~": "HOME", b"[8~": "END",
                 b"[5~": "PAGE_UP", b"[6~": "PAGE_DOWN",
@@ -835,7 +860,7 @@ def read_key(fd: int, timeout: float = 0.05) -> str:
                 b"[3~": "DELETE",
                 b"[Z": "SHIFT_TAB"
             }
-            return mapping.get(seq, "")
+            return mapping.get(body, "")
 
         if raw in (bytes([13]), bytes([10])):
             return "ENTER"

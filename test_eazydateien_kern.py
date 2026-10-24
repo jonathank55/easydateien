@@ -396,6 +396,122 @@ class TestAppKern(unittest.TestCase):
             self.assertNotIn("\033[90m", line)
         self.assertEqual(common.C_GRAY, common.C_DIM)
 
+    def test_vorschau_scrollen_mit_umbruch_bis_ganz_nach_unten(self):
+        # Datei mit langen Zeilen (jede Rohzeile bricht mehrfach um):
+        # Das Scrollen muss bis zur allerletzten umgebrochenen Zeile reichen.
+        long_file = os.path.join(self.dir_a, "lang.txt")
+        lines_raw = [
+            f"Zeile-{i:02d} " + "Wort " * 25 + f"ENDE-{i:02d}"
+            for i in range(1, 26)
+        ]
+        with open(long_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines_raw))
+        self.app.preview_wrap = True
+        self.app.select_filename("lang.txt")
+        self.app.build_screen(80, 24)
+
+        steps = 0
+        while self.app._scroll_preview(1):
+            steps += 1
+            self.assertLess(steps, 1000)
+
+        self.assertGreater(steps, 25, "Umbruch-Zeilen wurden beim Scrollen nicht berücksichtigt")
+        screen = self.app.build_screen(80, 24)
+        joined = "\n".join(common.ANSI_ESCAPE_RE.sub("", l) for l in screen)
+        self.assertIn("ENDE-25", joined, "Letzte Zeile der Datei wird am unteren Anschlag nicht angezeigt")
+        self.assertFalse(self.app._scroll_preview(1), "Am unteren Anschlag darf nicht weiter gescrollt werden")
+
+    def test_vorschau_scrollen_ohne_umbruch_exakter_anschlag(self):
+        plain_file = os.path.join(self.dir_a, "zeilen.txt")
+        with open(plain_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(f"Eintrag-{i:02d}" for i in range(1, 31)))
+        self.app.preview_wrap = False
+        self.app.select_filename("zeilen.txt")
+        self.app.build_screen(80, 24)
+
+        sichtbar, _ = self.app._preview_geometrie(self.app.items[self.app.selected_idx])
+        while self.app._scroll_preview(1):
+            pass
+        self.assertEqual(self.app.preview_scroll_offset, 30 - sichtbar)
+        screen = self.app.build_screen(80, 24)
+        joined = "\n".join(common.ANSI_ESCAPE_RE.sub("", l) for l in screen)
+        self.assertIn("Eintrag-30", joined)
+
+    def test_vorschau_scrollen_reset_bei_datei_und_ordnerwechsel(self):
+        f1 = os.path.join(self.dir_a, "eins.txt")
+        with open(f1, "w", encoding="utf-8") as f:
+            f.write("\n".join(f"Z-{i}" for i in range(50)))
+        sub = os.path.join(self.dir_a, "unterordner")
+        os.makedirs(sub, exist_ok=True)
+        self.app.select_filename("eins.txt")
+        self.app.build_screen(80, 24)
+        self.assertTrue(self.app._scroll_preview(5))
+        self.assertEqual(self.app.preview_scroll_offset, 5)
+
+        # Wechsel auf Ordner und zurück auf dieselbe Datei setzt Offset auf 0 zurück
+        self.app.select_filename("unterordner")
+        self.app.build_screen(80, 24)
+        self.assertEqual(self.app.preview_scroll_offset, 0)
+        self.app.select_filename("eins.txt")
+        self.app.build_screen(80, 24)
+        self.assertEqual(self.app.preview_scroll_offset, 0)
+
+    def test_vorschau_scrollen_clamping_bei_resize(self):
+        f1 = os.path.join(self.dir_a, "resize.txt")
+        with open(f1, "w", encoding="utf-8") as f:
+            f.write("\n".join(f"Zeile {i} mit etwas Text für den Umbruch" for i in range(30)))
+        self.app.preview_wrap = True
+        self.app.select_filename("resize.txt")
+        self.app.build_screen(60, 24)
+        while self.app._scroll_preview(1):
+            pass
+        narrow_off = self.app.preview_scroll_offset
+        self.assertGreater(narrow_off, 0)
+
+        # Breiteres Terminal -> weniger Umbruchzeilen -> Offset wird automatisch begrenzt
+        screen = self.app.build_screen(140, 30)
+        self.assertLess(self.app.preview_scroll_offset, narrow_off)
+        joined = "\n".join(common.ANSI_ESCAPE_RE.sub("", l) for l in screen)
+        self.assertIn("Zeile 29", joined)
+
+    def test_vorschau_scrollen_per_mausrad_ueber_rechter_spalte(self):
+        f1 = os.path.join(self.dir_a, "maus.txt")
+        with open(f1, "w", encoding="utf-8") as f:
+            f.write("\n".join(f"Mauszeile-{i}" for i in range(40)))
+        self.app.select_filename("maus.txt")
+        self.app.build_screen(90, 24)
+        idx_vorher = self.app.selected_idx
+
+        # Mausrad rechts (in der Vorschau-Spalte x=80, y=10) scrollt Vorschau, nicht Dateiliste
+        self.app.handle_mouse_wheel("down", x=80, y=10)
+        self.assertEqual(self.app.selected_idx, idx_vorher)
+        self.assertEqual(self.app.preview_scroll_offset, 1)
+        self.app.handle_mouse_wheel("up", x=80, y=10)
+        self.assertEqual(self.app.preview_scroll_offset, 0)
+
+    def test_read_key_page_up_down_varianten(self):
+        r, w = os.pipe()
+        try:
+            def send_and_read(seq: bytes) -> str:
+                os.write(w, seq)
+                return ed.read_key(r, timeout=0.1)
+
+            self.assertEqual(send_and_read(b"\x1b[5~"), "PAGE_UP")
+            self.assertEqual(send_and_read(b"\x1b[6~"), "PAGE_DOWN")
+            self.assertEqual(send_and_read(b"\x1b[5;2~"), "PAGE_UP")
+            self.assertEqual(send_and_read(b"\x1b[6;2~"), "PAGE_DOWN")
+            self.assertEqual(send_and_read(b"\x1b[5;3~"), "PAGE_UP")
+            self.assertEqual(send_and_read(b"\x1b[6;3~"), "PAGE_DOWN")
+            self.assertEqual(send_and_read(b"\x1b[5;10~"), "PAGE_UP")
+            self.assertEqual(send_and_read(b"\x1b[6;10~"), "PAGE_DOWN")
+            self.assertEqual(send_and_read(b"\x1b\x1b[5~"), "PAGE_UP")
+            self.assertEqual(send_and_read(b"\x1b\x1b[6~"), "PAGE_DOWN")
+            self.assertEqual(send_and_read(b"\x1b\x1b[A"), "ALT_UP")
+            self.assertEqual(send_and_read(b"\x1b\x1b[B"), "ALT_DOWN")
+        finally:
+            os.close(r)
+            os.close(w)
+
 
 if __name__ == "__main__":
     unittest.main()

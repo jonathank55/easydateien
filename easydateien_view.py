@@ -175,17 +175,27 @@ class EasyDateienView:
                 self.cached_child_path = cur_item.path
                 self.cached_child_items = child_items
 
+        cur_preview_path = cur_item.path if (cur_item and not is_cur_dir) else None
+        if self.preview_scroll_item != cur_preview_path:
+            self.preview_scroll_offset = 0
+            self.preview_scroll_item = cur_preview_path
+
         preview_lines = []
+        preview_wrap_width = None
         if eff_cols == 3 and cur_item and not is_cur_dir:
-            needed_p = max(1, fm_rows - 6)
+            card_h = 5 + (1 if cur_item.is_symlink else 0)
+            needed_p = max(1, fm_rows - (card_h + 1)) if fm_rows >= 10 else 0
             # Umbruch in der exakten Zellinnenbreite (w_right - 2): dann
             # passt jede umgebrochene Zeile ohne zweiten Schnitt, und es
             # erscheint kein sinnloses "..." am Zeilenende.
             preview_wrap_width = max(2, w_right - 2) if self.preview_wrap else None
-            # Fenster ab Scroll-Offset laden: die Anzeige zeigt genau den
-            # Bereich [offset, offset + bereich]; der Cache haelt die volle Datei.
-            bereich = needed_p + max(0, self.preview_scroll_offset)
-            preview_lines = self.load_file_preview_lines(cur_item.path, bereich, preview_wrap_width)
+            if needed_p > 0:
+                # Fenster ab Scroll-Offset laden: die Anzeige zeigt genau den
+                # Bereich [offset, offset + needed_p]; der Cache hält die volle Datei.
+                bereich = needed_p + max(0, self.preview_scroll_offset)
+                preview_lines = self.load_file_preview_lines(cur_item.path, bereich, preview_wrap_width)
+                max_off = max(0, len(preview_lines) - needed_p)
+                self.preview_scroll_offset = max(0, min(self.preview_scroll_offset, max_off))
 
         self.last_layout = {
             "header_lines": header_lines_count, "avail_rows": fm_rows, "eff_cols": eff_cols,
@@ -327,12 +337,8 @@ class EasyDateienView:
                         # Trennlinie nur in der rechten Spalte (Trenner vor der Vorschau)
                         cell_right = f"{C_DIM}{'─' * w_right}{C_RESET}"
                         sep_row = True
-                    else:
-                        p_line_idx = r - (len(card) + 1) if fm_rows >= 10 else -1
-                        if p_line_idx == 0 and self.preview_scroll_item != (cur_item.path if cur_item else None):
-                            self.preview_scroll_offset = 0
-                            self.preview_scroll_item = cur_item.path if cur_item else None
-                        p_line_idx += self.preview_scroll_offset
+                    elif fm_rows >= 10:
+                        p_line_idx = (r - (len(card) + 1)) + self.preview_scroll_offset
                         if 0 <= p_line_idx < len(preview_lines) and p_line_idx >= self.preview_scroll_offset:
                             p_txt = preview_lines[p_line_idx]
                             if self.preview_wrap and preview_wrap_width:
@@ -341,6 +347,8 @@ class EasyDateienView:
                                 cell_right = f" {pad_to_width(truncate_to_width(p_txt, max(2, w_right - 2)), w_right - 2)} "
                         else:
                             cell_right = " " * w_right
+                    else:
+                        cell_right = " " * w_right
                 else:
                     cell_right = " " * w_right
             else:
