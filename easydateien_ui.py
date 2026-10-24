@@ -33,8 +33,20 @@ from easydateien_common import (
     ANSI_ESCAPE_RE,
     C_RESET,
     C_BOLD,
+    C_DIM,
     C_ITALIC,
     C_INVERT,
+    C_BLUE,
+    C_BOLD_BLUE,
+    C_CYAN,
+    C_BOLD_CYAN,
+    C_GREEN,
+    C_BOLD_GREEN,
+    C_YELLOW,
+    C_BOLD_YELLOW,
+    C_RED,
+    C_BOLD_RED,
+    C_GRAY,
     HIDE_CURSOR,
     SHOW_CURSOR,
     DISABLE_AUTOWRAP,
@@ -336,6 +348,7 @@ def replace_ansi_range(base_line: str, start_col: int, replacement: str, repl_wi
 
     left_chars = []
     right_chars = []
+    active_right = []
     cur_w = 0
     end_col = start_col + repl_width
 
@@ -348,7 +361,12 @@ def replace_ansi_range(base_line: str, start_col: int, replacement: str, repl_wi
                 esc = m.group(0)
                 if cur_w < start_col:
                     left_chars.append(esc)
-                elif cur_w >= end_col:
+                if cur_w < end_col:
+                    if esc in ("\033[0m", "\033[m"):
+                        active_right.clear()
+                    else:
+                        active_right.append(esc)
+                else:
                     right_chars.append(esc)
                 i = m.end()
                 continue
@@ -364,7 +382,8 @@ def replace_ansi_range(base_line: str, start_col: int, replacement: str, repl_wi
         i += 1
 
     left_str = "".join(left_chars)
-    right_str = "".join(right_chars)
+    right_raw = "".join(right_chars)
+    right_str = ("".join(active_right) + right_raw) if right_raw else ""
     if ANSI_ESCAPE_RE.search(left_str) and not left_str.endswith(C_RESET):
         left_str += C_RESET
 
@@ -686,22 +705,33 @@ def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
     """
     if width <= 0:
         return ""
-    st_on = C_BOLD if bold else ""
+    if it.is_broken:
+        st_on = C_BOLD_RED if bold else C_RED
+    elif it.is_symlink:
+        st_on = C_BOLD_CYAN if bold else C_CYAN
+    elif it.is_dir:
+        st_on = C_BOLD_BLUE
+    elif it.name.startswith("."):
+        st_on = C_BOLD if bold else C_DIM
+    else:
+        st_on = C_BOLD if bold else ""
     full_name = safe_text(it.name) + ("/" if it.is_dir else "")
     name_w = str_width(full_name)
 
     def styled(txt: str) -> str:
-        return f"{st_on}{txt}{C_RESET}" if txt else ""
+        if not txt:
+            return ""
+        return f"{st_on}{txt}{C_RESET}" if st_on else txt
 
     if it.is_symlink:
         target = safe_text(it.symlink_target)
         if target and name_w + 3 + 4 <= width:
             tgt = truncate_to_width(target, max(3, width - name_w - 3))
-            body = f"{styled(full_name)} → {C_ITALIC}{tgt}{C_RESET}"
+            body = f"{styled(full_name)} {C_DIM}→ {C_ITALIC}{tgt}{C_RESET}"
         elif name_w + 2 <= width:
-            body = f"{styled(full_name)} →"
+            body = f"{styled(full_name)} {C_DIM}→{C_RESET}"
         elif width >= 6:
-            body = f"{styled(truncate_name(it.name, it.is_dir, width - 2))} →"
+            body = f"{styled(truncate_name(it.name, it.is_dir, width - 2))} {C_DIM}→{C_RESET}"
         else:
             body = styled(truncate_name(it.name, it.is_dir, width))
     else:

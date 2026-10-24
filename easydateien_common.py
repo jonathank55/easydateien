@@ -18,23 +18,30 @@ import unicodedata
 CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
-# Farbcodes - Farben deaktiviert, nur Formatierungen (Fett, Kursiv, Invertiert) beibehalten
-C_RESET = "\033[0m"
-C_BOLD = "\033[1m"
-C_DIM = "\033[2m"
-C_ITALIC = "\033[3m"
-C_BLUE = ""
-C_BOLD_BLUE = ""
-C_CYAN = ""
-C_BOLD_CYAN = ""
-C_GREEN = ""
-C_BOLD_GREEN = ""
-C_YELLOW = ""
-C_RED = ""
-C_BOLD_RED = ""
-C_MAGENTA = ""
-C_GRAY = ""
-C_INVERT = "\033[7m"
+# Dynamisches, Theme-adaptives Farbschema:
+# Nutzt ausschließlich SGR-Attribute (Fett, Gedimmt, Kursiv, Invertiert) und die
+# semantischen ANSI-Grundfarben (31–36) des jeweiligen Terminal-Themes — ohne
+# fest verdrahtete RGB-/256-Farbwerte. Passt sich dadurch jedem hellen und
+# dunklen Theme in jeder Terminal-App automatisch an (respektiert NO_COLOR).
+_NO_COLOR = bool(os.environ.get("NO_COLOR")) or os.environ.get("TERM") == "dumb"
+
+C_RESET = "" if _NO_COLOR else "\033[0m"
+C_BOLD = "" if _NO_COLOR else "\033[1m"
+C_DIM = "" if _NO_COLOR else "\033[2m"
+C_ITALIC = "" if _NO_COLOR else "\033[3m"
+C_BLUE = "" if _NO_COLOR else "\033[34m"
+C_BOLD_BLUE = "" if _NO_COLOR else "\033[1;34m"
+C_CYAN = "" if _NO_COLOR else "\033[36m"
+C_BOLD_CYAN = "" if _NO_COLOR else "\033[1;36m"
+C_GREEN = "" if _NO_COLOR else "\033[32m"
+C_BOLD_GREEN = "" if _NO_COLOR else "\033[1;32m"
+C_YELLOW = "" if _NO_COLOR else "\033[33m"
+C_BOLD_YELLOW = "" if _NO_COLOR else "\033[1;33m"
+C_RED = "" if _NO_COLOR else "\033[31m"
+C_BOLD_RED = "" if _NO_COLOR else "\033[1;31m"
+C_MAGENTA = "" if _NO_COLOR else "\033[35m"
+C_GRAY = C_DIM
+C_INVERT = "" if _NO_COLOR else "\033[7m"
 
 CLEAR_LINE = "\033[2K"
 HIDE_CURSOR = "\033[?25l"

@@ -94,6 +94,9 @@ def bump_patch_version(current_ver):
     new_content = content.replace(f"EasyDateien {current_ver}", f"EasyDateien {new_ver}", 1)
     with open(MAIN_FILE, "w", encoding="utf-8") as f:
         f.write(new_content)
+    py_copy = os.path.join(REPO_ROOT, "easydateien.py")
+    if os.path.exists(py_copy):
+        shutil.copy2(MAIN_FILE, py_copy)
     print(f"-> Version automatisch erhöht: {current_ver} -> {new_ver}")
     return new_ver
 

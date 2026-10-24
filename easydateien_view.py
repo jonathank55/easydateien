@@ -6,7 +6,8 @@ easydateien_ui und die Zustandsattribute des Kerns.
 """
 
 from easydateien_ui import (
-    ANSI_ESCAPE_RE, C_BOLD, C_INVERT, C_RESET,
+    ANSI_ESCAPE_RE, C_BOLD, C_DIM, C_INVERT, C_RESET,
+    C_GREEN, C_BOLD_GREEN, C_YELLOW, C_BOLD_YELLOW, C_RED, C_BOLD_RED,
     List, build_help_items, build_modal_box, cell_inner_width,
     distribute_options, format_entry_name, format_mtime, format_size,
     frame_cell, get_file_type_desc, os, pad_to_width,
@@ -43,12 +44,23 @@ class EasyDateienView:
         else:
             msg_str = ""
 
-        right_header = (msg_str + "  " + cur_idx_str).strip() if msg_str else cur_idx_str
-        right_header_plain = right_header
+        right_header_plain = (msg_str + "  " + cur_idx_str).strip() if msg_str else cur_idx_str
+        lvl = getattr(self, "status_level", "info")
+        if lvl == "error":
+            msg_color = C_BOLD_RED
+        elif lvl == "warning":
+            msg_color = C_YELLOW
+        elif lvl == "success":
+            msg_color = C_GREEN
+        else:
+            msg_color = C_DIM
+        msg_styled = f"{msg_color}{msg_str.strip()}{C_RESET}" if msg_str else ""
+        idx_styled = f"{C_DIM}{cur_idx_str}{C_RESET}"
+        right_header = f"{msg_styled}  {idx_styled}" if msg_styled else idx_styled
 
         avail_for_path = max(1, term_cols - str_width(right_header_plain) - 2)
         path_truncated = truncate_to_width(disp_path, avail_for_path)
-        path_styled = path_truncated
+        path_styled = f"{C_BOLD}{path_truncated}{C_RESET}"
         pad_space = " " * max(1, term_cols - str_width(path_styled) - str_width(right_header_plain))
         header_line = f"{path_styled}{pad_space}{right_header}"
         header_line = pad_to_width(header_line, term_cols)
@@ -196,11 +208,11 @@ class EasyDateienView:
                     p_in_copy = (self.clipboard_mode == "copy" and p_it.path in self.clipboard_paths)
                     p_is_sel = p_it.path in self.selected_paths
                     if p_in_cut:
-                        p_b_char = f"{C_BOLD}×{C_RESET}"
+                        p_b_char = f"{C_BOLD_RED}×{C_RESET}"
                     elif p_it.path in _flash_paths:
-                        p_b_char = f"{C_BOLD}+{C_RESET}"
+                        p_b_char = f"{C_BOLD_GREEN}+{C_RESET}"
                     elif p_is_sel:
-                        p_b_char = f"{C_BOLD}*{C_RESET}"
+                        p_b_char = f"{C_BOLD_YELLOW}*{C_RESET}"
                     else:
                         p_b_char = ""
                     prefix_char = f" {p_b_char} " if p_b_char else " "
@@ -231,11 +243,11 @@ class EasyDateienView:
                 in_flash = it.path in _flash_paths
 
                 if in_cut:
-                    b_char = f"{C_BOLD}×{C_RESET}"
+                    b_char = f"{C_BOLD_RED}×{C_RESET}"
                 elif in_flash:
-                    b_char = f"{C_BOLD}+{C_RESET}"
+                    b_char = f"{C_BOLD_GREEN}+{C_RESET}"
                 elif is_sel:
-                    b_char = f"{C_BOLD}*{C_RESET}"
+                    b_char = f"{C_BOLD_YELLOW}*{C_RESET}"
                 else:
                     b_char = ""
                 prefix_str = f"{b_char} " if b_char else ""
@@ -248,13 +260,13 @@ class EasyDateienView:
                     n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or is_sel or it.path in _flash_paths)
                     n_w = str_width(ANSI_ESCAPE_RE.sub("", n_styled))
                     body = prefix_str + n_styled + " " * max(1, avail - prefix_len - n_w - size_field - 1)
-                    cell_mid = frame_cell(body + f"{s_str:>{size_field}}", w_mid)
+                    cell_mid = frame_cell(body + f"{C_DIM}{s_str:>{size_field}}{C_RESET}", w_mid)
                 else:
                     avail_n = max(2, avail - prefix_len)
                     n_styled = format_entry_name(it, avail_n, bold=is_cur or in_cut or is_sel or it.path in _flash_paths)
                     cell_mid = frame_cell(prefix_str + n_styled, w_mid)
             elif len(self.items) == 0 and r == 0:
-                cell_mid = frame_cell("(leer)", w_mid)
+                cell_mid = frame_cell(f"{C_DIM}(leer){C_RESET}", w_mid)
             else:
                 cell_mid = " " * w_mid
 
@@ -267,11 +279,11 @@ class EasyDateienView:
                         c_in_copy = (self.clipboard_mode == "copy" and c_it.path in self.clipboard_paths)
                         c_is_sel = c_it.path in self.selected_paths
                         if c_in_cut:
-                            c_b_char = f"{C_BOLD}×{C_RESET}"
+                            c_b_char = f"{C_BOLD_RED}×{C_RESET}"
                         elif c_it.path in _flash_paths:
-                            c_b_char = f"{C_BOLD}+{C_RESET}"
+                            c_b_char = f"{C_BOLD_GREEN}+{C_RESET}"
                         elif c_is_sel:
-                            c_b_char = f"{C_BOLD}*{C_RESET}"
+                            c_b_char = f"{C_BOLD_YELLOW}*{C_RESET}"
                         else:
                             c_b_char = ""
                         if w_right >= 26 and c_size:
@@ -279,7 +291,7 @@ class EasyDateienView:
                             c_pre = f" {c_b_char} " if c_b_char else " "
                             name_w = max(3, w_right - str_width(c_pre) - c_field - 2)
                             c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_is_sel or c_it.path in _flash_paths)
-                            s_part = f" {c_size:>{c_field}} "
+                            s_part = f" {C_DIM}{c_size:>{c_field}}{C_RESET} "
                             cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - c_field - 2) + s_part
                         elif w_right >= 26:
                             c_pre = f" {c_b_char} " if c_b_char else " "
@@ -292,7 +304,7 @@ class EasyDateienView:
                             c_styled = format_entry_name(c_it, name_w, bold=c_in_cut or c_is_sel or c_it.path in _flash_paths)
                             cell_right = pad_to_width(f"{c_pre}{c_styled}", w_right - 1) + " "
                     elif len(child_items) == 0 and r == 0:
-                        cell_right = pad_to_width(f" (leer)", w_right)
+                        cell_right = pad_to_width(f" {C_DIM}(leer){C_RESET}", w_right)
                     else:
                         cell_right = " " * w_right
                 elif cur_item and not is_cur_dir:
@@ -301,19 +313,19 @@ class EasyDateienView:
                     mode_str = cur_item.mode_str
                     card = [
                         f"{C_BOLD}Details{C_RESET}",
-                        f"{'Typ:':<9}{truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 11))}",
-                        f"{'Größe:':<9}{truncate_to_width(size_str, max(3, w_right - 11))}",
-                        f"{'Datum:':<9}{truncate_to_width(date_str, max(3, w_right - 11))}",
-                        f"{'Rechte:':<9}{truncate_to_width(mode_str, max(3, w_right - 11))}",
+                        f"{C_DIM}{'Typ:':<9}{C_RESET}{truncate_to_width(get_file_type_desc(cur_item), max(3, w_right - 11))}",
+                        f"{C_DIM}{'Größe:':<9}{C_RESET}{truncate_to_width(size_str, max(3, w_right - 11))}",
+                        f"{C_DIM}{'Datum:':<9}{C_RESET}{truncate_to_width(date_str, max(3, w_right - 11))}",
+                        f"{C_DIM}{'Rechte:':<9}{C_RESET}{truncate_to_width(mode_str, max(3, w_right - 11))}",
                     ]
                     if cur_item.is_symlink:
-                        card.append(f"{'Ziel:':<9}{truncate_to_width(cur_item.symlink_target, max(3, w_right - 11))}")
+                        card.append(f"{C_DIM}{'Ziel:':<9}{C_RESET}{truncate_to_width(cur_item.symlink_target, max(3, w_right - 11))}")
 
                     if r < len(card):
                         cell_right = f" {pad_to_width(card[r], w_right - 2)} "
                     elif r == len(card) and fm_rows >= 10:
                         # Trennlinie nur in der rechten Spalte (Trenner vor der Vorschau)
-                        cell_right = "─" * w_right
+                        cell_right = f"{C_DIM}{'─' * w_right}{C_RESET}"
                         sep_row = True
                     else:
                         p_line_idx = r - (len(card) + 1) if fm_rows >= 10 else -1
@@ -337,22 +349,22 @@ class EasyDateienView:
             if sep_row:
                 # Trennlinie nur in der rechten Spalte: links mit ├ an den
                 # Spaltentrenner angebunden, rechts ┤ am äusseren Rand
-                j_edge_l = "│"
-                j_edge_r = "┤"
-                j_in_lm = "│"
-                j_in_mr = "├"
+                j_edge_l = f"{C_DIM}│{C_RESET}"
+                j_edge_r = f"{C_DIM}┤{C_RESET}"
+                j_in_lm = f"{C_DIM}│{C_RESET}"
+                j_in_mr = f"{C_DIM}├{C_RESET}"
                 g_lm = g_mr = "  "
             else:
-                j_edge_l = j_edge_r = j_in_lm = j_in_mr = "│"
+                j_edge_l = j_edge_r = j_in_lm = j_in_mr = f"{C_DIM}│{C_RESET}"
                 g_lm = g_mr = "  "
 
             if True:
                 if eff_cols == 3:
                     row_line = f"{j_edge_l}{cell_left}{j_in_lm}{cell_mid}{j_in_mr}{cell_right}{j_edge_r}"
                 elif eff_cols == 2:
-                    row_line = f"│{cell_left}│{cell_mid}│"
+                    row_line = f"{j_edge_l}{cell_left}{j_in_lm}{cell_mid}{j_edge_r}"
                 else:
-                    row_line = f"│{cell_mid}│"
+                    row_line = f"{j_edge_l}{cell_mid}{j_edge_r}"
 
             if is_cur_row and cell_mid:
                 inv_mid = f"{C_BOLD}{C_INVERT}{ANSI_ESCAPE_RE.sub('', cell_mid)}{C_RESET}"
@@ -361,24 +373,24 @@ class EasyDateienView:
 
         all_lines = [header_line]
         if has_top_border and top_line:
-            all_lines.append(pad_to_width(top_line, term_cols))
+            all_lines.append(pad_to_width(f"{C_DIM}{top_line}{C_RESET}", term_cols))
         all_lines.extend(file_lines)
 
         if active_console and console_h > 0:
-            all_lines.append(pad_to_width(mid_sep, term_cols))
+            all_lines.append(pad_to_width(f"{C_DIM}{mid_sep}{C_RESET}", term_cols))
             inner_cw = max(4, term_cols - 2)
             c_lines = self.get_console_display_lines(max(2, inner_cw - 2), console_h)
             for cl in c_lines:
                 if True:
-                    all_lines.append(f"│ {pad_to_width(cl, inner_cw - 2)} │")
+                    all_lines.append(f"{C_DIM}│{C_RESET} {pad_to_width(cl, inner_cw - 2)} {C_DIM}│{C_RESET}")
                 else:
                     all_lines.append(pad_to_width(cl, term_cols))
             if has_bottom_border:
                 c_bot = f"╰{'─' * (term_cols - 2)}╯"
                 if c_bot:
-                    all_lines.append(pad_to_width(c_bot, term_cols))
+                    all_lines.append(pad_to_width(f"{C_DIM}{c_bot}{C_RESET}", term_cols))
         elif has_bottom_border and bot_line:
-            all_lines.append(pad_to_width(bot_line, term_cols))
+            all_lines.append(pad_to_width(f"{C_DIM}{bot_line}{C_RESET}", term_cols))
 
         if has_status_bar:
             if self.active_dialog:
@@ -402,7 +414,7 @@ class EasyDateienView:
                         hints = distribute_options(opts_mini, avail_h)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str}  {C_DIM}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "symlink":
                     label = " Verknüpfung erstellen: "
                     inp_w = max(1, term_cols - str_width(label))
@@ -423,7 +435,7 @@ class EasyDateienView:
                         hints = distribute_options(opts_mini, avail_h)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str}  {C_DIM}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "new":
                     label = " Neu erstellen: "
                     inp_w = max(1, term_cols - str_width(label))
@@ -444,7 +456,7 @@ class EasyDateienView:
                         hints = distribute_options(opts_mini, avail_h)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str}  {C_DIM}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "search":
                     label = " Filtern/Suche: "
                     inp_w = max(1, term_cols - str_width(label))
@@ -465,7 +477,7 @@ class EasyDateienView:
                         hints = distribute_options(opts_mini, avail_h)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str}  {C_DIM}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "goto_path":
                     label = " Pfad: "
                     inp_w = max(1, term_cols - str_width(label))
@@ -486,7 +498,7 @@ class EasyDateienView:
                         hints = distribute_options(opts_mini, avail_h)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str}  {hints}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str}  {C_DIM}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "trash_confirm":
                     targets_c = len(self.selected_paths) if self.selected_paths else 1
                     t_name = f"{targets_c} Elemente" if targets_c > 1 else f"„{cur_item.name if cur_item else ''}“"
@@ -511,7 +523,7 @@ class EasyDateienView:
                     avail_right = max(0, term_cols - str_width(left_str) - 1)
                     if chosen_opts:
                         hints = " ".join(chosen_opts)
-                        st_line = pad_to_width(f"{left_str} {hints}", term_cols)
+                        st_line = pad_to_width(f"{left_str} {C_DIM}{hints}{C_RESET}", term_cols)
                     else:
                         st_line = pad_to_width(left_str, term_cols)
                 elif self.active_dialog == "overwrite_confirm":
@@ -544,7 +556,7 @@ class EasyDateienView:
                         avail_right = max(0, term_cols - str_width(left_str) - 1)
                         if chosen_opts:
                             hints = " ".join(chosen_opts)
-                            st_line = pad_to_width(f"{left_str} {hints}", term_cols)
+                            st_line = pad_to_width(f"{left_str} {C_DIM}{hints}{C_RESET}", term_cols)
                         else:
                             st_line = pad_to_width(left_str, term_cols)
                     else:
@@ -568,7 +580,7 @@ class EasyDateienView:
                     left_str = f" „{t_trunc}“ ersetzen?"
                     if chosen_opts:
                         hints = " ".join(chosen_opts)
-                        st_line = pad_to_width(f"{left_str} {hints}", term_cols)
+                        st_line = pad_to_width(f"{left_str} {C_DIM}{hints}{C_RESET}", term_cols)
                     else:
                         st_line = pad_to_width(left_str, term_cols)
                 elif self.active_dialog == "schnellstart":
@@ -584,7 +596,7 @@ class EasyDateienView:
                         hints = distribute_options(opts_short, avail_r)
                     else:
                         hints = distribute_options(opts_mini, avail_r)
-                    st_line = pad_to_width(f"{left_str} {hints}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str} {C_DIM}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "copy_menu":
                     left_str = " Kopieren: Taste wählen"
                     avail_r = max(1, term_cols - str_width(left_str) - 1)
@@ -601,7 +613,7 @@ class EasyDateienView:
                         hints = distribute_options(opts_mini, avail_r)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str} {hints}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str} {C_DIM}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "goto_menu":
                     left_str = " Menü: Taste wählen"
                     avail_r = max(1, term_cols - str_width(left_str) - 1)
@@ -618,7 +630,7 @@ class EasyDateienView:
                         hints = distribute_options(opts_mini, avail_r)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str} {hints}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str} {C_DIM}{hints}{C_RESET}" if hints else left_str, term_cols)
                 elif self.active_dialog == "help_menu":
                     left_str = " Hilfe: ↑↓ Scrollen"
                     avail_r = max(1, term_cols - str_width(left_str) - 1)
@@ -635,12 +647,12 @@ class EasyDateienView:
                         hints = distribute_options(opts_mini, avail_r)
                     else:
                         hints = ""
-                    st_line = pad_to_width(f"{left_str} {hints}" if hints else left_str, term_cols)
+                    st_line = pad_to_width(f"{left_str} {C_DIM}{hints}{C_RESET}" if hints else left_str, term_cols)
                 else:
                     st_line = " " * term_cols
             else:
                 if self.show_console and self.console_focused:
-                    mode_lbl = "Konsole"
+                    mode_lbl = f"{C_BOLD}Konsole{C_RESET}"
                     left_b = f" {mode_lbl}  " if mode_lbl else " "
                     avail_ctrl = max(1, term_cols - str_width(left_b) - 1)
 
@@ -671,24 +683,26 @@ class EasyDateienView:
                         ctrl = distribute_options(opt_esc_mini, avail_ctrl)
                     else:
                         ctrl = ""
-                    st_line = pad_to_width(f"{left_b}{ctrl}" if ctrl else left_b, term_cols)
+                    ctrl_styled = f"{C_DIM}{ctrl}{C_RESET}" if ctrl else ""
+                    st_line = pad_to_width(f"{left_b}{ctrl_styled}" if ctrl_styled else left_b, term_cols)
                 else:
                     if self.selected_paths:
                         c = len(self.selected_paths)
-                        mode_lbl = f"Auswahl: {c}"
+                        mode_lbl = f"{C_BOLD_YELLOW}Auswahl: {c}{C_RESET}"
                     elif self.clipboard_mode == "cut":
                         c = len(self.clipboard_paths)
-                        mode_lbl = f"Ausschneiden: {c}"
+                        mode_lbl = f"{C_BOLD_RED}Ausschneiden: {c}{C_RESET}"
                     elif self.clipboard_mode == "copy":
                         c = len(self.clipboard_paths)
-                        mode_lbl = f"Kopieren: {c}"
+                        mode_lbl = f"{C_BOLD_GREEN}Kopieren: {c}{C_RESET}"
                     else:
                         mode_lbl = ""
 
                     left_b = f" {mode_lbl}  " if mode_lbl else " "
                     avail_ctrl = max(1, term_cols - str_width(left_b) - (1 if mode_lbl else 2))
                     ctrl = self.build_dynamic_controls(avail_ctrl)
-                    st_line = pad_to_width(f"{left_b}{ctrl}", term_cols)
+                    ctrl_styled = f"{C_DIM}{ctrl}{C_RESET}" if ctrl else ""
+                    st_line = pad_to_width(f"{left_b}{ctrl_styled}", term_cols)
 
             all_lines.append(st_line)
 

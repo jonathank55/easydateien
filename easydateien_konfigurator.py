@@ -20,6 +20,8 @@ from easydateien_common import (
     ANSI_ESCAPE_RE,
     C_RESET,
     C_BOLD,
+    C_DIM,
+    C_BOLD_GREEN,
     C_INVERT,
     DISABLE_AUTOWRAP,
     ENABLE_AUTOWRAP,
@@ -189,55 +191,57 @@ def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str)
         view_rows = rows
 
     lines = []
-    lines.append(f"╭{'─' * inner}╮")
+    lines.append(f"{C_DIM}╭{'─' * inner}╮{C_RESET}")
     t_styled = f"{C_BOLD}{truncate_to_width(title, inner - 4)}{C_RESET}"
-    lines.append(f"│ {pad_to_width(t_styled, inner - 1)}│")
-    s_styled = truncate_to_width(subtitle, inner - 4)
-    lines.append(f"│ {pad_to_width(s_styled, inner - 1)}│")
-    lines.append(f"├{'─' * inner}┤")
+    lines.append(f"{C_DIM}│{C_RESET} {pad_to_width(t_styled, inner - 1)}{C_DIM}│{C_RESET}")
+    s_styled = f"{C_DIM}{truncate_to_width(subtitle, inner - 4)}{C_RESET}"
+    lines.append(f"{C_DIM}│{C_RESET} {pad_to_width(s_styled, inner - 1)}{C_DIM}│{C_RESET}")
+    lines.append(f"{C_DIM}├{'─' * inner}┤{C_RESET}")
 
     for i, (key, label, tag) in enumerate(view_rows):
         actual_idx = start + i
         is_sel = (actual_idx == cur_idx)
-        if tag in ("[Ein]", "Ein"):
-            tag_colored = f"{C_BOLD}{tag}{C_RESET}"
-        elif tag in ("[Aus]", "Aus"):
-            tag_colored = tag
-        elif tag:
-            tag_colored = tag
-        else:
-            tag_colored = ""
-
         # Tag dynamisch kuerzen: Titel bekommt mindestens 2 Spalten,
         # der Tag den Rest; laengere Tags enden mit "..." statt hartem Schnitt.
         MIN_TITEL = 12
         tag_max = max(2, inner - 4 - MIN_TITEL)
         tag_visible = truncate_to_width(tag, tag_max)
         tag = tag_visible
+        if tag in ("[Ein]", "Ein", "[ein]", "ein"):
+            tag_colored = f"{C_BOLD_GREEN}{tag}{C_RESET}"
+        elif tag in ("[Aus]", "Aus", "[aus]", "aus"):
+            tag_colored = f"{C_DIM}{tag}{C_RESET}"
+        elif tag:
+            tag_colored = f"{C_DIM}{tag}{C_RESET}"
+        else:
+            tag_colored = ""
+
         avail_lbl = max(MIN_TITEL, inner - str_width(tag_visible) - 3)
         lbl_trunc = truncate_to_width(label, avail_lbl)
         lbl_styled = lbl_trunc
         content_row = f"{lbl_styled}{' ' * max(1, inner - 2 - str_width(lbl_trunc) - str_width(tag_visible))}{tag_colored}"
         if is_sel:
             content_row = f"{C_BOLD}{C_INVERT} {pad_to_width(ANSI_ESCAPE_RE.sub('', content_row), inner - 2)} {C_RESET}"
-            lines.append(f"│{content_row}│")
+            lines.append(f"{C_DIM}│{C_RESET}{content_row}{C_DIM}│{C_RESET}")
         else:
-            lines.append(f"│ {pad_to_width(content_row, inner - 2)} │")
+            lines.append(f"{C_DIM}│{C_RESET} {pad_to_width(content_row, inner - 2)} {C_DIM}│{C_RESET}")
 
     empty_needed = avail_rows - len(view_rows)
     for _ in range(empty_needed):
-        lines.append(f"│{' ' * inner}│")
+        lines.append(f"{C_DIM}│{C_RESET}{' ' * inner}{C_DIM}│{C_RESET}")
 
-    lines.append(f"├{'─' * inner}┤")
+    lines.append(f"{C_DIM}├{'─' * inner}┤{C_RESET}")
     avail_f_w = max(1, inner - 4)
     if isinstance(footer, (list, tuple)):
-        f_styled = fit_hints(list(footer), avail_f_w, ellipsis=False)
+        f_styled = f"{C_DIM}{fit_hints(list(footer), avail_f_w, ellipsis=False)}{C_RESET}"
     elif footer:
         f_styled = truncate_to_width(footer, avail_f_w)
+        if "\x1b" not in f_styled:
+            f_styled = f"{C_DIM}{f_styled}{C_RESET}"
     else:
         f_styled = ""
-    lines.append(f"│ {pad_to_width(f_styled, inner - 1)}│")
-    lines.append(f"╰{'─' * inner}╯")
+    lines.append(f"{C_DIM}│{C_RESET} {pad_to_width(f_styled, inner - 1)}{C_DIM}│{C_RESET}")
+    lines.append(f"{C_DIM}╰{'─' * inner}╯{C_RESET}")
 
     out = []
     for r_i, l in enumerate(lines[:term_rows]):

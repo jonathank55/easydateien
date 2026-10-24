@@ -384,6 +384,18 @@ class TestAppKern(unittest.TestCase):
         self.assertIsInstance(kurz, str)
         self.assertTrue(kurz)
 
+    def test_dynamisches_farbschema_ohne_feste_rgb_werte(self):
+        # Keine 256-Farb- oder TrueColor-Sequenzen und kein festes Bright-Black (\033[90m);
+        # nur SGR-Attribute und semantische ANSI-Grundfarben (31-36).
+        screen = self.app.build_screen(80, 24)
+        self.assertEqual(len(screen), 24)
+        for line in screen:
+            self.assertEqual(common.str_width(line), 80)
+            self.assertNotIn("\033[38;", line)
+            self.assertNotIn("\033[48;", line)
+            self.assertNotIn("\033[90m", line)
+        self.assertEqual(common.C_GRAY, common.C_DIM)
+
 
 if __name__ == "__main__":
     unittest.main()

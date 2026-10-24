@@ -11,7 +11,7 @@ from easydateien_common import (
     KEY_BINDINGS, get_keybindings_from_config, build_keymap,
 )
 from easydateien_ui import (
-    ANSI_ESCAPE_RE, C_INVERT, C_RESET, DEFAULT_CONFIG, copy_text_to_clipboard,
+    ANSI_ESCAPE_RE, C_BOLD, C_DIM, C_INVERT, C_RESET, DEFAULT_CONFIG, copy_text_to_clipboard,
     DISABLE_AUTOWRAP, ENABLE_AUTOWRAP, FileEntry, HIDE_CURSOR,
     HOME_DIR, List, Optional, SHOW_CURSOR,
     Tuple, UndoAction, arrange_entries, datetime,
@@ -1193,7 +1193,8 @@ class EasyDateienActions:
             else:
                 disp_inp = inp
 
-        prompt_line = pad_to_width(f"{prompt}{disp_inp}", width)
+        prompt_styled = f"{C_BOLD}{prompt}{C_RESET}" if self.console_focused else f"{C_DIM}{prompt}{C_RESET}"
+        prompt_line = pad_to_width(f"{prompt_styled}{disp_inp}", width)
         out = []
         needed = height - 1
         if needed > 0:
