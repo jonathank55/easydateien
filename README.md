@@ -113,6 +113,11 @@ EasyDateien lässt sich auf macOS mit einem einzigen Befehl über den offizielle
 brew install jonathank55/tap/easydateien
 ```
 
+Für den automatischen Verzeichniswechsel beim Beenden einfach die Shell-Integration in die `~/.zshrc` (bzw. `~/.bashrc`) einfügen:
+```bash
+eval "$(easydateien --init zsh)"
+```
+
 Aktualisierungen erfolgen danach automatisch via Homebrew:
 ```bash
 brew update && brew upgrade easydateien

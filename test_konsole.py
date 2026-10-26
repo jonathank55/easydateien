@@ -50,6 +50,7 @@ class TestKonsoleUnit(unittest.TestCase):
     """Ebene 1: Ausgabe-Verarbeitung und Konsolenverhalten ohne Terminal."""
 
     def setUp(self):
+        self.orig_cwd = os.getcwd()
         os.environ["HOME"] = tempfile.mkdtemp(prefix="ed-home-")
         self.base = make_base(["a.txt", "b.md", "lange-datei-mit-langen-namen.txt"], ["sub"])
         self.app = ed.EasyDateienApp(self.base)
@@ -57,6 +58,7 @@ class TestKonsoleUnit(unittest.TestCase):
         self.app.console_focused = True
 
     def tearDown(self):
+        os.chdir(self.orig_cwd)
         shutil.rmtree(self.base, ignore_errors=True)
 
     def out(self):
@@ -137,6 +139,7 @@ class TestKonsoleUnit(unittest.TestCase):
                     len(visible(l)), 80,
                     f"ls-Zeile breiter als Terminal: {l!r}")
         finally:
+            os.chdir(self.orig_cwd)
             shutil.rmtree(base, ignore_errors=True)
 
     def test_umbruch_erhaelt_inhalt(self):
@@ -210,6 +213,9 @@ class TestKonsoleEchtest(unittest.TestCase):
         cls.pty = pty
         cls.select = select
 
+    def setUp(self):
+        self.orig_cwd = os.getcwd()
+
     def _starte_app(self):
         base = make_base(["a.txt", "b.md"], ["sub"])
         pid, fd = self.pty.fork()
@@ -266,6 +272,7 @@ class TestKonsoleEchtest(unittest.TestCase):
                 pass
             os.waitpid(pid, 0)
         finally:
+            os.chdir(self.orig_cwd)
             shutil.rmtree(base, ignore_errors=True)
 
     def test_strg_c_bricht_laufenden_befehl_ab(self):
@@ -294,6 +301,7 @@ class TestKonsoleEchtest(unittest.TestCase):
                 pass
             os.waitpid(pid, 0)
         finally:
+            os.chdir(self.orig_cwd)
             shutil.rmtree(base, ignore_errors=True)
 
 

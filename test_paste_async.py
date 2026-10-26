@@ -45,6 +45,7 @@ class TestPasteAsync(unittest.TestCase):
         ed.HOME_DIR = self.base
         ed.CONFIG_DIR = os.path.join(self.base, ".config", "easydateien")
         ed.CONFIG_FILE = os.path.join(ed.CONFIG_DIR, "config.json")
+        self.orig_cwd = os.getcwd()
         self.app = ed.EasyDateienApp(self.dst_dir)
         self.app.clipboard_mode = "copy"
         self.app.clipboard_paths = [self.big_src]
@@ -53,6 +54,7 @@ class TestPasteAsync(unittest.TestCase):
         thread = getattr(self.app, "_paste_thread", None)
         if thread is not None and thread.is_alive():
             thread.join(timeout=10.0)
+        os.chdir(self.orig_cwd)
         self._tmp.cleanup()
 
     def _warte_auf_abschluss(self, timeout=15.0):

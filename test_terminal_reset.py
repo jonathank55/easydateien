@@ -200,11 +200,13 @@ class TestRunRestoresTermios(unittest.TestCase):
 
     def test_run_sichert_und_schaltet_tui_status(self):
         base = make_base(["a.txt"])
+        orig_cwd = os.getcwd()
         try:
             app = self._make_app(base)
             self.assertIsNone(getattr(app, "_saved_termios", None))
             self.assertFalse(getattr(app, "_tui_active", False))
         finally:
+            os.chdir(orig_cwd)
             shutil.rmtree(base, ignore_errors=True)
 
 

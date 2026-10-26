@@ -207,6 +207,35 @@ class EasyDateienActions:
                     changed = True
         return changed
 
+    def _sync_cwd(self):
+        """Synchronisiert das aktuelle Arbeitsverzeichnis des Prozesses und schreibt den Pfad
+        in die cwd_file (für Shell-Wrapper) sowie ~/.config/easydateien/.last_dir."""
+        try:
+            os.chdir(self.current_dir)
+        except OSError:
+            pass
+        cwd_file = getattr(self, "cwd_file", None)
+        if cwd_file:
+            try:
+                with open(cwd_file, "w", encoding="utf-8") as f:
+                    f.write(self.current_dir)
+            except OSError:
+                pass
+        try:
+            last_dir = os.path.expanduser("~/.config/easydateien/.last_dir")
+            os.makedirs(os.path.dirname(last_dir), exist_ok=True)
+            with open(last_dir, "w", encoding="utf-8") as f:
+                f.write(self.current_dir)
+        except OSError:
+            pass
+        try:
+            if getattr(sys.stdout, "isatty", lambda: False)():
+                import urllib.parse
+                sys.stdout.write(f"\033]7;file://localhost{urllib.parse.quote(self.current_dir)}\007")
+                sys.stdout.flush()
+        except Exception:
+            pass
+
     def enter_directory(self, new_path: str):
         """Wechselt in einen Ordner und setzt Cursor, Ansicht und Filter zurück.
         Eine zuvor gemerkte Zeigerposition des Zielordners wird wiederhergestellt."""
@@ -214,6 +243,7 @@ class EasyDateienActions:
         if new_path != self.current_dir:
             self.dir_cursor_memory[self.current_dir] = self.selected_idx
         self.current_dir = new_path
+        self._sync_cwd()
         self.items = []
         self.selected_idx = 0
         self.view_start = 0

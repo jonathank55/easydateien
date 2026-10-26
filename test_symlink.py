@@ -77,6 +77,7 @@ class TestSymlinkApp(unittest.TestCase):
     """App-Integration: v oeffnet Dialog, Eingabe erstellt Link, Undo entfernt ihn."""
 
     def setUp(self):
+        self.orig_cwd = os.getcwd()
         self.base = tempfile.mkdtemp(prefix="ed-sl-app-")
         self.ziel = os.path.join(self.base, "meine-datei.txt")
         with open(self.ziel, "w") as f:
@@ -86,6 +87,7 @@ class TestSymlinkApp(unittest.TestCase):
         self.app = ed.EasyDateienApp(self.base)
 
     def tearDown(self):
+        os.chdir(self.orig_cwd)
         shutil.rmtree(self.base, ignore_errors=True)
 
     def test_keymap_v(self):
@@ -171,6 +173,7 @@ class TestSymlinkApp(unittest.TestCase):
             app2.create_symlink_for_selection("egal")
             self.assertIn("Keine Datei", app2.status_message)
         finally:
+            os.chdir(self.orig_cwd)
             shutil.rmtree(leer, ignore_errors=True)
 
     def test_undo_entfernt_link(self):

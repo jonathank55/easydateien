@@ -56,6 +56,10 @@ FORMULA_TEMPLATE = """class Easydateien < Formula
       Hinweis: EasyDateien ist ein rein deutschsprachiges Programm.
       Konfiguration liegt unter ~/.config/easydateien/config.json.
       Startbefehle: 'easydateien' oder 'ed'.
+
+      Automatischer Verzeichniswechsel beim Beenden:
+      Füge Folgendes in deine ~/.zshrc (oder ~/.bashrc) ein:
+        eval "$(easydateien --init zsh)"
     EOS
   end
 
@@ -63,6 +67,7 @@ FORMULA_TEMPLATE = """class Easydateien < Formula
     assert_predicate libexec/"easydateien", :executable?
     assert_path_exists libexec/"easydateien_common.py"
     assert_match "EasyDateien __VERSION__", shell_output("#{bin}/easydateien -v")
+    assert_match "easydateien()", shell_output("#{bin}/easydateien --init zsh")
   end
 end
 """

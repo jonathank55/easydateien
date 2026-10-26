@@ -57,8 +57,10 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
 
     STATUS_TIMEOUT = 6.0  # Sekunden, nach denen Statusmeldungen automatisch verschwinden
 
-    def __init__(self, initial_path: Optional[str] = None):
+    def __init__(self, initial_path: Optional[str] = None, cwd_file: Optional[str] = None):
+        self.cwd_file = cwd_file or os.environ.get("EASYDATEIEN_CWD_FILE")
         self.current_dir = os.path.abspath(initial_path if initial_path else os.getcwd())
+        self._sync_cwd()
         self.config = self.load_config()
         self.keymap: Dict[str, str] = build_keymap(self.config)
         self.keybindings = get_keybindings_from_config(self.config)
@@ -698,6 +700,10 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                 elif action == "quit":
                     break
         finally:
+            try:
+                self._sync_cwd()
+            except Exception:
+                pass
             # Stoisch: jeder Schritt einzeln abgesichert — ein Fehler darf
             # weder die Wiederherstellung verhindern noch die App crashen.
             try:
@@ -730,6 +736,48 @@ class SingleLineHelpFormatter(argparse.HelpFormatter):
     def _split_lines(self, text, width):
         return [text]
 
+def print_shell_init(shell_name: str):
+    shell_name = (shell_name or "zsh").strip().lower()
+    if shell_name in ("zsh", "bash"):
+        code = '''easydateien() {
+    local cwd_file
+    cwd_file="$(mktemp -t "easydateien-cwd.XXXXXX" 2>/dev/null || mktemp "${TMPDIR:-/tmp}/easydateien-cwd.XXXXXX")"
+    command easydateien --cwd-file="$cwd_file" "$@"
+    local ret=$?
+    if [ -f "$cwd_file" ]; then
+        local new_dir
+        new_dir="$(cat "$cwd_file" 2>/dev/null)"
+        rm -f "$cwd_file"
+        if [ -n "$new_dir" ] && [ -d "$new_dir" ] && [ "$new_dir" != "$PWD" ]; then
+            builtin cd -- "$new_dir"
+        fi
+    fi
+    return $ret
+}
+alias ed="easydateien"
+'''
+        sys.stdout.write(code)
+    elif shell_name == "fish":
+        code = '''function easydateien
+    set -l cwd_file (mktemp -t "easydateien-cwd.XXXXXX" 2>/dev/null; or mktemp "/tmp/easydateien-cwd.XXXXXX")
+    command easydateien --cwd-file=$cwd_file $argv
+    set -l ret $status
+    if test -f $cwd_file
+        set -l new_dir (cat $cwd_file 2>/dev/null)
+        rm -f $cwd_file
+        if test -n "$new_dir" -a -d "$new_dir" -a "$new_dir" != "$PWD"
+            builtin cd -- $new_dir
+        end
+    end
+    return $ret
+end
+alias ed=easydateien
+'''
+        sys.stdout.write(code)
+    else:
+        sys.stderr.write(f"Unbekannte Shell: '{shell_name}'. Unterstützt: zsh, bash, fish\n")
+        sys.exit(1)
+
 def main():
     parser = argparse.ArgumentParser(
         prog="easydateien",
@@ -740,8 +788,14 @@ def main():
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
     parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.11", help="Programmversion anzeigen")
+    parser.add_argument("--cwd-file", dest="cwd_file", default=None, help="Pfad zur Datei, in die das Arbeitsverzeichnis geschrieben wird")
+    parser.add_argument("--init", dest="init_shell", nargs="?", const="zsh", default=None, help="Shell-Integrationscode ausgeben (zsh, bash, fish)")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
+
+    if args.init_shell:
+        print_shell_init(args.init_shell)
+        return
 
     if args.config:
         from easydateien_konfigurator import run_konfigurator
@@ -752,7 +806,7 @@ def main():
         return
 
     try:
-        app = EasyDateienApp(initial_path=args.pfad)
+        app = EasyDateienApp(initial_path=args.pfad, cwd_file=args.cwd_file)
         app.run()
     except KeyboardInterrupt:
         pass

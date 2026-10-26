@@ -191,6 +191,37 @@ for TARGET_BIN in "$HOME/.local/bin" "$HOME/bin"; do
     fi
 done
 
+# 5. Shell-Integration für automatischen Verzeichniswechsel beim Beenden
+INTEGRATION_MARKER="# EasyDateien Shell-Integration"
+INTEGRATION_CODE='
+# EasyDateien Shell-Integration (automatischer Verzeichniswechsel beim Beenden)
+easydateien() {
+    local cwd_file
+    cwd_file="$(mktemp -t "easydateien-cwd.XXXXXX" 2>/dev/null || mktemp "${TMPDIR:-/tmp}/easydateien-cwd.XXXXXX")"
+    command easydateien --cwd-file="$cwd_file" "$@"
+    local ret=$?
+    if [ -f "$cwd_file" ]; then
+        local new_dir
+        new_dir="$(cat "$cwd_file" 2>/dev/null)"
+        rm -f "$cwd_file"
+        if [ -n "$new_dir" ] && [ -d "$new_dir" ] && [ "$new_dir" != "$PWD" ]; then
+            builtin cd -- "$new_dir"
+        fi
+    fi
+    return $ret
+}
+alias ed="easydateien"
+'
+
+for RC_FILE in "$HOME/.zshrc" "$HOME/.bashrc"; do
+    if [ -f "$RC_FILE" ]; then
+        if ! grep -q "$INTEGRATION_MARKER" "$RC_FILE"; then
+            echo "$INTEGRATION_CODE" >> "$RC_FILE"
+            echo "Shell-Integration zu $RC_FILE hinzugefügt."
+        fi
+    fi
+done
+
 # ---------------------------------------------------------------- Selbst-Verifikation
 # Prueft, dass die Installation vollstaendig und lauffaehig ist. Schlaegt etwas
 # fehl, bricht das Skript LAUT ab, statt einen halbfertigen Zustand zu melden.

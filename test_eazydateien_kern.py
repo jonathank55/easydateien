@@ -179,10 +179,43 @@ class TestAppKern(unittest.TestCase):
         ed.HOME_DIR = self.base
         ed.CONFIG_DIR = os.path.join(self.base, ".config", "easydateien")
         ed.CONFIG_FILE = os.path.join(ed.CONFIG_DIR, "config.json")
+        self.orig_cwd = os.getcwd()
         self.app = ed.EasyDateienApp(self.dir_a)
 
     def tearDown(self):
+        os.chdir(self.orig_cwd)
         self._tmp.cleanup()
+
+    def test_sync_cwd_wechselt_arbeitsverzeichnis(self):
+        self.app.enter_directory(self.dir_b)
+        self.assertEqual(os.path.realpath(os.getcwd()), os.path.realpath(self.dir_b))
+        self.app.enter_directory(self.dir_a)
+        self.assertEqual(os.path.realpath(os.getcwd()), os.path.realpath(self.dir_a))
+
+    def test_cwd_file_wird_geschrieben(self):
+        cwd_file = os.path.join(self.base, "test_cwd.txt")
+        test_app = ed.EasyDateienApp(self.dir_a, cwd_file=cwd_file)
+        with open(cwd_file, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read().strip(), self.dir_a)
+        test_app.enter_directory(self.dir_b)
+        with open(cwd_file, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read().strip(), self.dir_b)
+
+    def test_shell_init_ausgabe(self):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            ed.print_shell_init("zsh")
+        out = buf.getvalue()
+        self.assertIn("easydateien()", out)
+        self.assertIn("builtin cd", out)
+        self.assertIn("alias ed=", out)
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            ed.print_shell_init("fish")
+        self.assertIn("function easydateien", buf.getvalue())
 
     def test_start_im_verzeichnis(self):
         self.assertEqual(self.app.current_dir, self.dir_a)
