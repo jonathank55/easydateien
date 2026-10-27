@@ -6,3 +6,6 @@ __pycache__/
 *~
 .aider*
 easydateien.py
+easydateien_clip
+.last_dir
+undo_backups/

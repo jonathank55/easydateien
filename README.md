@@ -137,8 +137,8 @@ Das Skript lädt die Programmdateien selbstständig von GitHub herunter und inst
 
 1. **Repository klonen:**
    ```bash
-   git clone https://github.com/jonathank55/easydateien.git
-   cd easydateien
+   git clone https://github.com/jonathank55/easydateien.git ~/.config/easydateien
+   cd ~/.config/easydateien
    ```
 
 2. **Installationsskript ausführen:**

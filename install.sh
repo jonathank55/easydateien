@@ -90,13 +90,15 @@ for DATEI in easydateien easydateien_ui.py easydateien_actions.py easydateien_vi
         echo "Entferne toten Symlink: $ZIEL"
     fi
 done
-ln -sf "$SRC_DIR/easydateien" "$CONFIG_DIR/easydateien"
-ln -sf "$SRC_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_ui.py"
+if [ "$SRC_DIR" != "$CONFIG_DIR" ]; then
+    ln -sf "$SRC_DIR/easydateien" "$CONFIG_DIR/easydateien"
+    ln -sf "$SRC_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_ui.py"
     ln -sf "$SRC_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_actions.py"
     ln -sf "$SRC_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_view.py"
     ln -sf "$SRC_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_common.py"
-ln -sf "$SRC_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_symlink.py"
-ln -sf "$SRC_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
+    ln -sf "$SRC_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_symlink.py"
+    ln -sf "$SRC_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
+fi
 chmod +x "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_konfigurator.py"
 
 # Bei einer curl-Installation wurden die Dateien in ein temporäres Verzeichnis
