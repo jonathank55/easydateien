@@ -15,7 +15,7 @@ set -e
 echo "=== Installation von EasyDateien ==="
 
 RAW_BASE="https://raw.githubusercontent.com/jonathank55/easydateien/main"
-PROGRAMM_DATEIEN=("easydateien" "easydateien_ui.py" "easydateien_actions.py" "easydateien_view.py" "easydateien_common.py" "easydateien_symlink.py" "easydateien_konfigurator.py" "config.json")
+PROGRAMM_DATEIEN=("easydateien" "easydateien_ui.py" "easydateien_actions.py" "easydateien_view.py" "easydateien_common.py" "easydateien_preview.py" "easydateien_symlink.py" "easydateien_konfigurator.py" "config.json")
 
 # ---------------------------------------------------------------- Quelle ermitteln
 # Wurde das Skript aus einem vorhandenem Repository ausgeführt, liegt dieses
@@ -83,7 +83,7 @@ mkdir -p "$CONFIG_DIR"
 
 echo "Verlinke Programmdateien nach $CONFIG_DIR..."
 # Selbstheilung: Tote Symlinks und Altreste aus frueheren Installationen entfernen
-for DATEI in easydateien easydateien_ui.py easydateien_actions.py easydateien_view.py easydateien_common.py easydateien_symlink.py easydateien_konfigurator.py config.example.json; do
+for DATEI in easydateien easydateien_ui.py easydateien_actions.py easydateien_view.py easydateien_common.py easydateien_preview.py easydateien_symlink.py easydateien_konfigurator.py config.example.json; do
     ZIEL="$CONFIG_DIR/$DATEI"
     if [ -L "$ZIEL" ] && [ ! -e "$ZIEL" ]; then
         rm -f "$ZIEL"
@@ -96,6 +96,7 @@ if [ "$SRC_DIR" != "$CONFIG_DIR" ]; then
     ln -sf "$SRC_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_actions.py"
     ln -sf "$SRC_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_view.py"
     ln -sf "$SRC_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_common.py"
+    ln -sf "$SRC_DIR/easydateien_preview.py" "$CONFIG_DIR/easydateien_preview.py"
     ln -sf "$SRC_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_symlink.py"
     ln -sf "$SRC_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
 fi
@@ -105,12 +106,13 @@ chmod +x "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_konfigurator.py"
 # geladen, das nach Abschluss gelöscht wird. Damit die Verweise in $CONFIG_DIR
 # gültig bleiben, werden sie in diesem Fall fest kopiert statt nur verlinkt.
 if [ -n "$CLEANUP_DIR" ]; then
-    rm -f "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_konfigurator.py"
+    rm -f "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_preview.py" "$CONFIG_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_konfigurator.py"
     cp "$SRC_DIR/easydateien" "$CONFIG_DIR/easydateien"
     cp "$SRC_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_ui.py"
-        cp "$SRC_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_actions.py"
-        cp "$SRC_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_view.py"
-        cp "$SRC_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_common.py"
+    cp "$SRC_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_actions.py"
+    cp "$SRC_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_view.py"
+    cp "$SRC_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_common.py"
+    cp "$SRC_DIR/easydateien_preview.py" "$CONFIG_DIR/easydateien_preview.py"
     cp "$SRC_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_symlink.py"
     cp "$SRC_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
     chmod +x "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_konfigurator.py"

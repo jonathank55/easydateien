@@ -70,6 +70,7 @@ DEFAULT_CONFIG = {
     "show_console": False,
     "console_always_visible": True,
     "preview_wrap": True,
+    "preview_media": True,
     "text_editor": "nano %s",
     "opener": "open %s",
     "sort_by": "name",

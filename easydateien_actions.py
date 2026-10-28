@@ -38,6 +38,11 @@ import threading
 import stat
 import json
 from easydateien_symlink import create_symlink, remove_symlink, SymlinkError
+from easydateien_preview import (
+    is_previewable_media, supports_kitty_graphics, generate_preview_thumbnail,
+    make_chafa_preview_lines, KITTY_CLEAR_VISIBLE, KITTY_PURGE_ALL,
+    get_image_pixel_size, compute_fit_dimensions, get_terminal_font_ratio,
+)
 
 
 
@@ -75,6 +80,8 @@ class EasyDateienActions:
         """Verlässt die Vollbildansicht (für Editor, Shell, interaktive Programme)."""
         self.set_mouse_tracking(False)
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        if supports_kitty_graphics():
+            sys.stdout.write(KITTY_CLEAR_VISIBLE)
         sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
         sys.stdout.flush()
 
@@ -90,6 +97,7 @@ class EasyDateienActions:
         sys.stdout.write("\033[2J\033[3J\033[H")
         sys.stdout.flush()
         self._prev_frame = None
+        self._kitty_last_shown = False
         self.refresh_items()
 
     def load_config(self) -> dict:
@@ -1110,7 +1118,8 @@ class EasyDateienActions:
             file_stamp: Optional[Tuple[int, int]] = (st.st_mtime_ns, st.st_size)
         except OSError:
             file_stamp = None
-        cache_key = (sort_key, file_stamp)
+        is_media = cfg.get("preview_media", True) and is_previewable_media(path)
+        cache_key = (sort_key, file_stamp, (wrap_width, max_lines) if (is_media and not supports_kitty_graphics()) else None)
         if (self.cached_file_preview_path != path or self.cached_file_preview_key != cache_key
                 or not self.cached_file_preview_lines):
             lines = []
@@ -1142,6 +1151,27 @@ class EasyDateienActions:
                                 lines.append(f" {fe.name}")
                             else:
                                 lines.append(f" {fe.name} ({format_size(fe.size)})")
+                elif is_media:
+                    thumb = generate_preview_thumbnail(path)
+                    if thumb:
+                        if supports_kitty_graphics():
+                            # Kitty-Grafikmodus: Terminal rendert Pixelbild direkt in den Bereich
+                            lines = [""] * max(1, max_lines)
+                        else:
+                            # Fallback für Terminals ohne Kitty-Grafik (z.B. Terminal.app):
+                            max_w = wrap_width if wrap_width and wrap_width > 0 else 30
+                            max_h = max_lines if max_lines > 0 else 15
+                            dims = get_image_pixel_size(thumb)
+                            if dims:
+                                font_ratio = get_terminal_font_ratio()
+                                fit_w, fit_h = compute_fit_dimensions(dims[0], dims[1], max_w, max_h, font_ratio)
+                            else:
+                                fit_w, fit_h = max_w, max_h
+                            lines = make_chafa_preview_lines(thumb, fit_w, fit_h)
+                            if not lines:
+                                lines = ["[Vorschau nicht verfügbar]"]
+                    else:
+                        lines = ["[Vorschau nicht verfügbar]"]
                 else:
                     # Dateigroesse pruefen: Riesen-Dateien (Modelle, Videos)
                     # brauchen keinen vollstaendigen Vorschau-Cache; sie
@@ -1188,7 +1218,7 @@ class EasyDateienActions:
         # Umbruch nach dem Cache anwenden, damit auch Cache-Treffer und Breitenänderungen (Resize) umbrechen.
         # Inkrementeller Umbruch-Cache: bricht alle benötigten Zeilen exakt um (ohne vorzeitigen
         # 3x-Zeilenschnitt) und hält bereits umgebrochene Zeilen für verzögerungsfreies Scrollen bereit.
-        if self.preview_wrap and wrap_width and wrap_width > 0:
+        if self.preview_wrap and wrap_width and wrap_width > 0 and not is_media:
             wrap_key = (path, cache_key, wrap_width)
             if getattr(self, "_cached_wrap_key", None) != wrap_key:
                 self._cached_wrap_key = wrap_key

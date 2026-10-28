@@ -20,6 +20,10 @@ from easydateien_common import (
     CONFIG_FILE,
     KEY_BINDINGS, get_keybindings_from_config, build_keymap, load_config,
 )
+from easydateien_preview import (
+    supports_kitty_graphics, make_kitty_image_sequence,
+    KITTY_CLEAR_VISIBLE, KITTY_PURGE_ALL,
+)
 from easydateien_ui import (
     CONFIG_DIR, DISABLE_AUTOWRAP, ENABLE_AUTOWRAP, FileEntry,
     HIDE_CURSOR, HOME_DIR, SHOW_CURSOR, UndoAction,
@@ -151,8 +155,30 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         # Frame-Puffer für differenzielles Zeichnen
         self._prev_frame: Optional[List[str]] = None
 
+        self._kitty_preview: Optional[Tuple] = None
+        self._kitty_last_shown: bool = False
+        self._kitty_seq_cache: Dict = {}
+
         ensure_clip_helper()
         self.refresh_items()
+
+    def get_kitty_image_sequence(self, png_path: str, cols: int, rows: int, row_pos: int, col_pos: int) -> str:
+        """Gibt die Kitty-Graphics-Escape-Sequenz zurück (mit In-Memory-Caching)."""
+        if not hasattr(self, "_kitty_seq_cache"):
+            self._kitty_seq_cache = {}
+        try:
+            mtime = os.path.getmtime(png_path)
+            cache_key = (png_path, mtime, cols, rows, row_pos, col_pos)
+        except OSError:
+            return ""
+        if cache_key in self._kitty_seq_cache:
+            return self._kitty_seq_cache[cache_key]
+        seq = make_kitty_image_sequence(png_path, cols, rows, row_pos, col_pos)
+        self._kitty_seq_cache[cache_key] = seq
+        if len(self._kitty_seq_cache) > 50:
+            first_k = next(iter(self._kitty_seq_cache))
+            del self._kitty_seq_cache[first_k]
+        return seq
 
     UNDO_BACKUP_DIR = os.path.join(CONFIG_DIR, "undo_backups")
 
@@ -219,9 +245,26 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
 
                 if needs_redraw:
                     lines = self.build_screen(term_cols, term_rows)
-                    out_buf = [f"\033[1;{term_rows}r"]
+                    out_buf = []
+                    # Kitty Graphics löschen, wenn zuvor gezeichnet oder jetzt aktiv
+                    if supports_kitty_graphics() and (getattr(self, "_kitty_last_shown", False) or getattr(self, "_kitty_preview", None)):
+                        out_buf.append(KITTY_CLEAR_VISIBLE)
+                        self._kitty_last_shown = False
+
+                    out_buf.append(f"\033[1;{term_rows}r")
                     for r_idx, l in enumerate(lines[:term_rows]):
                         out_buf.append(f"\033[{r_idx+1};1H\033[2K{l}")
+
+                    kp = getattr(self, "_kitty_preview", None)
+                    if kp and not self.active_dialog and supports_kitty_graphics():
+                        png_path, pw, ph, prow, pcol = kp
+                        seq = self.get_kitty_image_sequence(png_path, pw, ph, prow, pcol)
+                        if seq:
+                            out_buf.append(seq)
+                            self._kitty_last_shown = True
+                        if not (self.show_console and self.console_focused):
+                            out_buf.append(f"\033[{term_rows};1H\033[?25l")
+
                     sys.stdout.write("".join(out_buf))
                     sys.stdout.flush()
                     needs_redraw = False
@@ -720,6 +763,8 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
             except Exception:
                 pass
             try:
+                if supports_kitty_graphics():
+                    sys.stdout.write(KITTY_PURGE_ALL)
                 sys.stdout.write("\033[?1007l\033[?1000l\033[?1006l\033[r" + ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
                 sys.stdout.flush()
             except Exception:
@@ -787,7 +832,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.4.13", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.5.0", help="Programmversion anzeigen")
     parser.add_argument("--cwd-file", dest="cwd_file", default=None, help="Pfad zur Datei, in die das Arbeitsverzeichnis geschrieben wird")
     parser.add_argument("--init", dest="init_shell", nargs="?", const="zsh", default=None, help="Shell-Integrationscode ausgeben (zsh, bash, fish)")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")

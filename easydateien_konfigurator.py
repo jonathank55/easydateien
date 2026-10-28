@@ -56,6 +56,7 @@ MAIN_MENU_ITEMS = [
     ("hidden", "Versteckte Dateien anzeigen", "aus"),
     ("console_always_visible", "Konsole immer eingeblendet", "aus"),
     ("preview_wrap", "Vorschau-Umbruch", "ein"),
+    ("preview_media", "Medien-Vorschau (Bilder/PDF)", "ein"),
     ("sort", "Datei- und Ordneranordnung", "öffnen"),
     ("editor", "Editor", "nano"),
     ("keybindings", "Tastenbelegungen", "öffnen"),
@@ -562,6 +563,7 @@ MENU_VALUE_RENDERERS = {
     "hidden": lambda cfg: f"[{'ein' if cfg.get('show_hidden', False) else 'aus'}]",
     "console_always_visible": lambda cfg: f"[{'ein' if cfg.get('console_always_visible', False) else 'aus'}]",
     "preview_wrap": lambda cfg: f"[{'ein' if cfg.get('preview_wrap', True) else 'aus'}]",
+    "preview_media": lambda cfg: f"[{'ein' if cfg.get('preview_media', True) else 'aus'}]",
     "sort": lambda cfg: "[öffnen]",
     "editor": lambda cfg: f"[{editor_command(cfg)}]",
     "keybindings": lambda cfg: f"[{len(cfg.get('schnellstart_eintraege') or cfg.get('__ss_default', []) or [])}]" if False else "[öffnen]",
@@ -932,6 +934,9 @@ def main_menu(fd: int):
                 save_config(cfg)
             elif act == "preview_wrap":
                 _toggle_option(cfg, "preview_wrap", True)
+                save_config(cfg)
+            elif act == "preview_media":
+                _toggle_option(cfg, "preview_media", True)
                 save_config(cfg)
             elif act == "editor":
                 cycle_editor(cfg, -1 if k == "LEFT" else 1)

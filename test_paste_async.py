@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 APP_PATH = os.path.join(REPO, "easydateien")
@@ -154,9 +155,10 @@ class TestPasteAsync(unittest.TestCase):
         self.app.clipboard_paths = []
         self.app.clipboard_mode = None
         # Keine macOS-Zwischenablage in der Testumgebung -> leer
-        self.app.paste_clipboard()
-        self.assertIsNone(getattr(self.app, "_paste_thread", None))
-        self.assertIn("Zwischenablage leer", self.app.status_message)
+        with patch("easydateien_actions.get_macos_clipboard_files", return_value=[]):
+            self.app.paste_clipboard()
+            self.assertIsNone(getattr(self.app, "_paste_thread", None))
+            self.assertIn("Zwischenablage leer", self.app.status_message)
 
     def test_synchroner_pfad_perform_paste(self):
         # Direkter synchroner Aufruf muss unveraendert funktionieren

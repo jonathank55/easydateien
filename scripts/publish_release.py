@@ -38,6 +38,7 @@ FORMULA_TEMPLATE = """class Easydateien < Formula
                     "easydateien_clip.m",
                     "easydateien_common.py",
                     "easydateien_konfigurator.py",
+                    "easydateien_preview.py",
                     "easydateien_symlink.py",
                     "easydateien_ui.py",
                     "easydateien_view.py",
@@ -66,6 +67,7 @@ FORMULA_TEMPLATE = """class Easydateien < Formula
   test do
     assert_predicate libexec/"easydateien", :executable?
     assert_path_exists libexec/"easydateien_common.py"
+    assert_path_exists libexec/"easydateien_preview.py"
     assert_match "EasyDateien __VERSION__", shell_output("#{bin}/easydateien -v")
     assert_match "easydateien()", shell_output("#{bin}/easydateien --init zsh")
   end

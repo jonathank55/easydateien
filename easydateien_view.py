@@ -14,6 +14,10 @@ from easydateien_ui import (
     render_input_field, replace_ansi_range, safe_text, scan_directory,
     str_width, truncate_name, truncate_to_width, key_display,
 )
+from easydateien_preview import (
+    is_previewable_media, supports_kitty_graphics, generate_preview_thumbnail,
+    get_image_pixel_size, compute_fit_dimensions, get_terminal_font_ratio,
+)
 
 import os
 import time
@@ -196,6 +200,31 @@ class EasyDateienView:
                 preview_lines = self.load_file_preview_lines(cur_item.path, bereich, preview_wrap_width)
                 max_off = max(0, len(preview_lines) - needed_p)
                 self.preview_scroll_offset = max(0, min(self.preview_scroll_offset, max_off))
+
+        # Kitty Graphics Vorschaudaten ermitteln
+        self._kitty_preview = None
+        if (eff_cols == 3 and cur_item and not is_cur_dir and not self.active_dialog
+                and self.config.get("preview_media", True)
+                and is_previewable_media(cur_item.path)
+                and supports_kitty_graphics()):
+            card_h = 5 + (1 if cur_item.is_symlink else 0)
+            needed_p = max(1, fm_rows - (card_h + 1)) if fm_rows >= 10 else 0
+            if needed_p > 0:
+                thumb = generate_preview_thumbnail(cur_item.path)
+                if thumb:
+                    max_cols = max(1, w_right - 2)
+                    max_rows = needed_p
+                    dims = get_image_pixel_size(thumb)
+                    if dims:
+                        font_ratio = get_terminal_font_ratio()
+                        fit_cols, fit_rows = compute_fit_dimensions(dims[0], dims[1], max_cols, max_rows, font_ratio)
+                    else:
+                        fit_cols, fit_rows = max_cols, max_rows
+
+                    term_preview_row = header_lines_count + card_h + 2
+                    col_offset = max(0, (max_cols - fit_cols) // 2)
+                    term_preview_col = w_left + w_mid + 5 + col_offset
+                    self._kitty_preview = (thumb, fit_cols, fit_rows, term_preview_row, term_preview_col)
 
         self.last_layout = {
             "header_lines": header_lines_count, "avail_rows": fm_rows, "eff_cols": eff_cols,
