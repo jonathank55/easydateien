@@ -22,7 +22,8 @@ from easydateien_common import (
 )
 from easydateien_preview import (
     supports_kitty_graphics, make_kitty_image_sequence,
-    KITTY_CLEAR_VISIBLE, KITTY_PURGE_ALL,
+    KITTY_CLEAR_VISIBLE, KITTY_PURGE_ALL, poll_preview_ready,
+    get_terminal_font_ratio,
 )
 from easydateien_ui import (
     CONFIG_DIR, DISABLE_AUTOWRAP, ENABLE_AUTOWRAP, FileEntry,
@@ -166,19 +167,27 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         """Gibt die Kitty-Graphics-Escape-Sequenz zurück (mit In-Memory-Caching)."""
         if not hasattr(self, "_kitty_seq_cache"):
             self._kitty_seq_cache = {}
-        try:
-            mtime = os.path.getmtime(png_path)
-            cache_key = (png_path, mtime, cols, rows, row_pos, col_pos)
-        except OSError:
-            return ""
+        cache_key = (png_path, cols, rows, row_pos, col_pos)
         if cache_key in self._kitty_seq_cache:
             return self._kitty_seq_cache[cache_key]
         seq = make_kitty_image_sequence(png_path, cols, rows, row_pos, col_pos)
-        self._kitty_seq_cache[cache_key] = seq
-        if len(self._kitty_seq_cache) > 50:
-            first_k = next(iter(self._kitty_seq_cache))
-            del self._kitty_seq_cache[first_k]
+        if seq:
+            self._kitty_seq_cache[cache_key] = seq
+            if len(self._kitty_seq_cache) > 100:
+                first_k = next(iter(self._kitty_seq_cache))
+                del self._kitty_seq_cache[first_k]
         return seq
+
+    def poll_preview(self) -> bool:
+        """Prüft, ob ein asynchrones Vorschaubild fertiggestellt wurde."""
+        if not self.items or self.selected_idx >= len(self.items):
+            return False
+        cur = self.items[self.selected_idx].path
+        if poll_preview_ready(cur):
+            self.cached_file_preview_path = None
+            self.cached_file_preview_lines = []
+            return True
+        return False
 
     UNDO_BACKUP_DIR = os.path.join(CONFIG_DIR, "undo_backups")
 
@@ -241,6 +250,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                 term_cols, term_rows = curr_size.columns, curr_size.lines
                 if curr_size != last_size:
                     last_size = curr_size
+                    get_terminal_font_ratio(force_refresh=True)
                     needs_redraw = True
 
                 if needs_redraw:
@@ -283,6 +293,9 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     # Einfuegen im Hintergrund: Fortschritt anzeigen und
                     # fertigen Job abschliessen (Status, Undo, Zwischenablage).
                     if self.poll_paste():
+                        needs_redraw = True
+                    # Medienvorschau im Hintergrund: Sobald Konvertierung fertig ist, neu zeichnen.
+                    if self.poll_preview():
                         needs_redraw = True
                     # Kopier-Feedback: Nach Ablauf der ~1 Sekunde das '+'
                     # automatisch entfernen (ein einmaliger Redraw genuegt).
@@ -832,7 +845,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.5.0", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.5.1", help="Programmversion anzeigen")
     parser.add_argument("--cwd-file", dest="cwd_file", default=None, help="Pfad zur Datei, in die das Arbeitsverzeichnis geschrieben wird")
     parser.add_argument("--init", dest="init_shell", nargs="?", const="zsh", default=None, help="Shell-Integrationscode ausgeben (zsh, bash, fish)")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")

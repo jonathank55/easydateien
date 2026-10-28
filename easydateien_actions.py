@@ -39,9 +39,10 @@ import stat
 import json
 from easydateien_symlink import create_symlink, remove_symlink, SymlinkError
 from easydateien_preview import (
-    is_previewable_media, supports_kitty_graphics, generate_preview_thumbnail,
-    make_chafa_preview_lines, KITTY_CLEAR_VISIBLE, KITTY_PURGE_ALL,
-    get_image_pixel_size, compute_fit_dimensions, get_terminal_font_ratio,
+    is_previewable_media, supports_kitty_graphics, get_cached_thumbnail,
+    generate_preview_thumbnail, make_chafa_preview_lines,
+    KITTY_CLEAR_VISIBLE, KITTY_PURGE_ALL, get_image_pixel_size,
+    compute_fit_dimensions, get_terminal_font_ratio, clear_preview_queue,
 )
 
 
@@ -1090,6 +1091,7 @@ class EasyDateienActions:
         self.cached_child_path = None
         self.cached_child_items = []
         self._arranged_cache.clear()
+        clear_preview_queue()
 
     def toggle_sort(self):
         modes = ["mtime", "name", "size", "ext"]
@@ -1152,7 +1154,7 @@ class EasyDateienActions:
                             else:
                                 lines.append(f" {fe.name} ({format_size(fe.size)})")
                 elif is_media:
-                    thumb = generate_preview_thumbnail(path)
+                    thumb = get_cached_thumbnail(path)
                     if thumb:
                         if supports_kitty_graphics():
                             # Kitty-Grafikmodus: Terminal rendert Pixelbild direkt in den Bereich
@@ -1171,7 +1173,8 @@ class EasyDateienActions:
                             if not lines:
                                 lines = ["[Vorschau nicht verfügbar]"]
                     else:
-                        lines = ["[Vorschau nicht verfügbar]"]
+                        ext_desc = "PDF" if path.lower().endswith(".pdf") else "Bild"
+                        lines = [f" [Lade {ext_desc}-Vorschau...]"]
                 else:
                     # Dateigroesse pruefen: Riesen-Dateien (Modelle, Videos)
                     # brauchen keinen vollstaendigen Vorschau-Cache; sie

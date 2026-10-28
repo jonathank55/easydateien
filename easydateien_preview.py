@@ -16,7 +16,8 @@ import base64
 import struct
 import fcntl
 import termios
-from typing import List, Optional, Tuple
+import threading
+from typing import Dict, List, Optional, Set, Tuple
 
 IMAGE_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".bmp",
@@ -32,6 +33,12 @@ KITTY_CLEAR_VISIBLE = "\033_Ga=d\033\\"
 KITTY_PURGE_ALL = "\033_Ga=d,d=A\033\\"
 
 _MEDIA_CACHE_DIR = os.path.expanduser("~/.cache/easydateien/previews")
+
+# Schnelle In-Memory-Caches für verzögerungsfreie TUI-Aktualisierung
+_CACHE_KEY_MEM: Dict[Tuple[str, int, int], str] = {}
+_THUMB_MEM_CACHE: Dict[str, Optional[str]] = {}
+_IMAGE_SIZE_MEM: Dict[str, Optional[Tuple[int, int]]] = {}
+_FONT_RATIO_CACHE: Optional[float] = None
 
 
 def get_media_cache_dir() -> str:
@@ -73,8 +80,11 @@ def supports_kitty_graphics() -> bool:
     return False
 
 
-def get_terminal_font_ratio() -> float:
-    """Ermittelt das Breite-zu-Höhe-Verhältnis einer Terminal-Textzelle."""
+def get_terminal_font_ratio(force_refresh: bool = False) -> float:
+    """Ermittelt das Breite-zu-Höhe-Verhältnis einer Terminal-Textzelle (mit Zwischenspeicherung)."""
+    global _FONT_RATIO_CACHE
+    if _FONT_RATIO_CACHE is not None and not force_refresh:
+        return _FONT_RATIO_CACHE
     try:
         s = struct.pack("HHHH", 0, 0, 0, 0)
         res = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, s)
@@ -85,14 +95,16 @@ def get_terminal_font_ratio() -> float:
             if cell_h > 0:
                 ratio = cell_w / cell_h
                 if 0.3 <= ratio <= 0.8:
+                    _FONT_RATIO_CACHE = ratio
                     return ratio
     except Exception:
         pass
+    _FONT_RATIO_CACHE = 0.5
     return 0.5
 
 
-def get_image_pixel_size(path: str) -> Optional[Tuple[int, int]]:
-    """Liest die tatsächlichen Pixel-Dimensionen (Breite, Höhe) einer Bilddatei aus."""
+def _read_image_pixel_size_raw(path: str) -> Optional[Tuple[int, int]]:
+    """Liest die tatsächlichen Pixel-Dimensionen (Breite, Höhe) direkt aus Dateiheadern."""
     if not path or not os.path.isfile(path):
         return None
     try:
@@ -131,6 +143,20 @@ def get_image_pixel_size(path: str) -> Optional[Tuple[int, int]]:
     return None
 
 
+def get_image_pixel_size(path: str) -> Optional[Tuple[int, int]]:
+    """Liefert Pixel-Dimensionen mit speicherresidenter Pufferung für maximale Geschwindigkeit."""
+    if not path:
+        return None
+    if path in _IMAGE_SIZE_MEM:
+        return _IMAGE_SIZE_MEM[path]
+    dims = _read_image_pixel_size_raw(path)
+    if dims:
+        if len(_IMAGE_SIZE_MEM) > 1000:
+            _IMAGE_SIZE_MEM.clear()
+        _IMAGE_SIZE_MEM[path] = dims
+    return dims
+
+
 def compute_fit_dimensions(img_w: int, img_h: int, max_cols: int, max_rows: int, font_ratio: float = 0.5) -> Tuple[int, int]:
     """Berechnet Zell-Dimensionen unter strikter Beibehaltung des nativen Seitenverhältnisses."""
     if img_w <= 0 or img_h <= 0 or max_cols <= 0 or max_rows <= 0:
@@ -156,17 +182,70 @@ def get_file_cache_key(path: str) -> str:
     """Erzeugt einen deterministischen Hash aus Pfad, Zeitstempel und Größe."""
     try:
         st = os.stat(path)
+        stat_tuple = (path, st.st_mtime_ns, st.st_size)
+        if stat_tuple in _CACHE_KEY_MEM:
+            return _CACHE_KEY_MEM[stat_tuple]
         raw = f"{path}_{st.st_mtime_ns}_{st.st_size}"
+        key = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+        if len(_CACHE_KEY_MEM) > 2000:
+            _CACHE_KEY_MEM.clear()
+        _CACHE_KEY_MEM[stat_tuple] = key
+        return key
     except OSError:
-        raw = path
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+        return hashlib.sha256(path.encode("utf-8")).hexdigest()[:16]
+
+
+def get_cached_thumbnail(path: str) -> Optional[str]:
+    """Prüft rein im Speicher und auf der Festplatte, ob ein gültiges Vorschaubild vorliegt.
+
+    Blockiert niemals den Hauptthread und führt keine Konvertierungsbefehle aus.
+    """
+    if not path or not is_previewable_media(path):
+        return None
+
+    cache_key = get_file_cache_key(path)
+    if cache_key in _THUMB_MEM_CACHE:
+        cached = _THUMB_MEM_CACHE[cache_key]
+        if cached and os.path.exists(cached):
+            return cached
+        elif cached == "":
+            return None
+
+    ext = os.path.splitext(path)[1].lower()
+
+    # Lokale Web-Bildformate bis 2 MB können direkt ohne Konvertierung angezeigt werden
+    if ext in (".png", ".jpg", ".jpeg", ".webp"):
+        try:
+            if os.path.getsize(path) <= 2 * 1024 * 1024:
+                _THUMB_MEM_CACHE[cache_key] = path
+                return path
+        except OSError:
+            pass
+
+    # Prüfen, ob die Datei bereits im lokalen Vorschauordner liegt
+    cache_dir = get_media_cache_dir()
+    if ext in PDF_EXTENSIONS:
+        target = os.path.join(cache_dir, f"pdf_{cache_key}.png")
+    elif ext in VIDEO_EXTENSIONS:
+        target = os.path.join(cache_dir, f"vid_{cache_key}.png")
+    else:
+        target = os.path.join(cache_dir, f"img_{cache_key}.png")
+
+    try:
+        if os.path.exists(target) and os.path.getsize(target) > 0:
+            _THUMB_MEM_CACHE[cache_key] = target
+            return target
+    except OSError:
+        pass
+
+    return None
 
 
 def generate_preview_thumbnail(path: str, max_dim: int = 800) -> Optional[str]:
     """Erzeugt ein optimiertes PNG-Vorschaubild im Cache und gibt dessen Pfad zurück.
 
     Verwendet deterministische Fallback-Ketten:
-    - PDF: pdftoppm -> sips (macOS) -> magick -> qlmanage
+    - PDF: sips (macOS nativ & schnell) -> pdftoppm (Poppler) -> magick -> qlmanage
     - Bild: Direktnutzung bei Standardformaten <= 2 MB, sonst sips -> magick
     - Video: ffmpeg Frame 1 -> qlmanage
     """
@@ -181,9 +260,22 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800) -> Optional[str]:
     if ext in PDF_EXTENSIONS:
         cached_png = os.path.join(cache_dir, f"pdf_{cache_key}.png")
         if os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
+            _THUMB_MEM_CACHE[cache_key] = cached_png
             return cached_png
 
-        # A) pdftoppm (Poppler - schnell und scharf)
+        # A) sips (macOS nativ vorinstalliert & extrem schnell in einem Einzelschritt)
+        sips = shutil.which("sips")
+        if sips:
+            try:
+                cmd = [sips, "-s", "format", "png", "-Z", str(max_dim), path, "--out", cached_png]
+                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3.0)
+                if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
+                    _THUMB_MEM_CACHE[cache_key] = cached_png
+                    return cached_png
+            except (subprocess.TimeoutExpired, OSError):
+                pass
+
+        # B) pdftoppm (Poppler - scharf und portabel)
         pdftoppm = shutil.which("pdftoppm")
         if pdftoppm:
             prefix = os.path.join(cache_dir, f"tmp_pdf_{cache_key}")
@@ -197,18 +289,7 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800) -> Optional[str]:
                 gen_file = f"{prefix}-1.png"
                 if res.returncode == 0 and os.path.exists(gen_file):
                     os.replace(gen_file, cached_png)
-                    return cached_png
-            except (subprocess.TimeoutExpired, OSError):
-                pass
-
-        # B) sips (macOS nativ vorinstalliert)
-        sips = shutil.which("sips")
-        if sips:
-            try:
-                cmd = [sips, "-s", "format", "png", path, "--out", cached_png]
-                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4.0)
-                if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
-                    subprocess.run([sips, "-Z", str(max_dim), cached_png], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2.0)
+                    _THUMB_MEM_CACHE[cache_key] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
@@ -220,6 +301,7 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800) -> Optional[str]:
                 cmd = [magick, "-density", "150", f"{path}[0]", "-resize", f"{max_dim}x{max_dim}>", cached_png]
                 res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4.0)
                 if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
+                    _THUMB_MEM_CACHE[cache_key] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
@@ -233,10 +315,12 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800) -> Optional[str]:
                 gen_file = os.path.join(cache_dir, f"{os.path.basename(path)}.png")
                 if res.returncode == 0 and os.path.exists(gen_file):
                     os.replace(gen_file, cached_png)
+                    _THUMB_MEM_CACHE[cache_key] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
 
+        _THUMB_MEM_CACHE[cache_key] = ""
         return None
 
     # 2. Bilddatei
@@ -248,21 +332,22 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800) -> Optional[str]:
 
         # Standard-Webformate mit moderater Größe können direkt übertragen werden
         if ext in (".png", ".jpg", ".jpeg", ".webp") and fsize <= 2 * 1024 * 1024:
+            _THUMB_MEM_CACHE[cache_key] = path
             return path
 
         cached_png = os.path.join(cache_dir, f"img_{cache_key}.png")
         if os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
+            _THUMB_MEM_CACHE[cache_key] = cached_png
             return cached_png
 
         # Konvertierung / Skalierung via sips
         sips = shutil.which("sips")
         if sips:
             try:
-                cmd = [sips, "-s", "format", "png", path, "--out", cached_png]
+                cmd = [sips, "-s", "format", "png", "-Z", str(max_dim), path, "--out", cached_png]
                 res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3.0)
                 if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
-                    if fsize > 2 * 1024 * 1024:
-                        subprocess.run([sips, "-Z", str(max_dim), cached_png], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2.0)
+                    _THUMB_MEM_CACHE[cache_key] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
@@ -274,20 +359,26 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800) -> Optional[str]:
                 cmd = [magick, path, "-resize", f"{max_dim}x{max_dim}>", cached_png]
                 res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3.0)
                 if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
+                    _THUMB_MEM_CACHE[cache_key] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
 
         # SVG: Falls sips/magick scheitern, chafa/direkt probieren
         if ext == ".svg":
+            _THUMB_MEM_CACHE[cache_key] = path
             return path
 
-        return path if os.path.exists(path) else None
+        ret = path if os.path.exists(path) else None
+        if ret:
+            _THUMB_MEM_CACHE[cache_key] = ret
+        return ret
 
     # 3. Videodatei
     elif ext in VIDEO_EXTENSIONS:
         cached_png = os.path.join(cache_dir, f"vid_{cache_key}.png")
         if os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
+            _THUMB_MEM_CACHE[cache_key] = cached_png
             return cached_png
 
         ffmpeg = shutil.which("ffmpeg")
@@ -300,6 +391,7 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800) -> Optional[str]:
                 ]
                 res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3.0)
                 if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
+                    _THUMB_MEM_CACHE[cache_key] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
@@ -312,10 +404,12 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800) -> Optional[str]:
                 gen_file = os.path.join(cache_dir, f"{os.path.basename(path)}.png")
                 if res.returncode == 0 and os.path.exists(gen_file):
                     os.replace(gen_file, cached_png)
+                    _THUMB_MEM_CACHE[cache_key] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
 
+    _THUMB_MEM_CACHE[cache_key] = ""
     return None
 
 
@@ -452,3 +546,104 @@ def make_python_halfblock_lines(image_path: str, cols: int, rows: int) -> List[s
         except OSError:
             pass
         return []
+
+
+class PreviewWorker:
+    """Hintergrund-Arbeiter für nicht-blockierende Vorschauerzeugung und Vorab-Pufferung.
+
+    Garantiert vollkommen verzögerungsfreie TUI-Navigation:
+    - Der Hauptthread wird niemals durch rechenintensive Konvertierungen blockiert.
+    - Bei schnellem Blättern werden veraltete Einzelanfragen sofort verdrängt.
+    - Nachbardateien werden in Leerlaufphasen vorausschauend vorab im Hintergrund gerendert.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._wake_event = threading.Event()
+        self._stop_event = threading.Event()
+        self._active_path: Optional[str] = None
+        self._prefetch_list: List[str] = []
+        self._ready_set: Set[str] = set()
+        self._thread = threading.Thread(target=self._run, daemon=True, name="EasyDateien-PreviewWorker")
+        self._thread.start()
+
+    def request(self, path: str, prefetch: Optional[List[str]] = None):
+        """Reicht eine Vorschau-Anfrage ein. Verdrängt veraltete Einzelaufträge sofort."""
+        if not path or not is_previewable_media(path):
+            return
+        with self._lock:
+            self._active_path = path
+            self._prefetch_list = [p for p in (prefetch or []) if p and p != path and is_previewable_media(p)]
+        self._wake_event.set()
+
+    def poll_ready(self, current_path: str) -> bool:
+        """Prüft, ob für current_path im Hintergrund ein Thumbnail fertiggestellt wurde."""
+        with self._lock:
+            if current_path in self._ready_set:
+                self._ready_set.discard(current_path)
+                return True
+            return False
+
+    def clear(self):
+        """Verwirft anstehende Vorab-Aufträge (z.B. bei Verzeichniswechsel)."""
+        with self._lock:
+            self._active_path = None
+            self._prefetch_list.clear()
+
+    def stop(self):
+        self._stop_event.set()
+        self._wake_event.set()
+
+    def _run(self):
+        while not self._stop_event.is_set():
+            self._wake_event.wait(timeout=0.1)
+            self._wake_event.clear()
+            if self._stop_event.is_set():
+                break
+
+            target = None
+            prefetch = []
+            with self._lock:
+                target = self._active_path
+                prefetch = list(self._prefetch_list)
+
+            if target:
+                # Nur generieren, wenn nicht bereits im Speicher oder auf Festplatte
+                if not get_cached_thumbnail(target):
+                    thumb = generate_preview_thumbnail(target)
+                    with self._lock:
+                        if thumb:
+                            self._ready_set.add(target)
+                        else:
+                            # Auch bei Fehlschlag Benachrichtigung senden, damit Platzhalter umschaltet
+                            self._ready_set.add(target)
+                with self._lock:
+                    if self._active_path == target:
+                        self._active_path = None
+
+            # Vorab-Pufferung für Nachbardateien in Leerlaufphasen
+            for pf in prefetch:
+                with self._lock:
+                    if self._active_path is not None or self._stop_event.is_set():
+                        break
+                if not get_cached_thumbnail(pf):
+                    generate_preview_thumbnail(pf)
+
+
+GLOBAL_PREVIEW_WORKER = PreviewWorker()
+
+
+def request_preview(path: str, prefetch: Optional[List[str]] = None):
+    """Reicht eine Vorschau-Anfrage an den globalen Hintergrund-Arbeiter weiter."""
+    GLOBAL_PREVIEW_WORKER.request(path, prefetch=prefetch)
+
+
+def poll_preview_ready(current_path: str) -> bool:
+    """Prüft, ob die Vorschau für den aktuellen Pfad im Hintergrund fertig ist."""
+    return GLOBAL_PREVIEW_WORKER.poll_ready(current_path)
+
+
+def clear_preview_queue():
+    """Löscht wartende Vorab-Aufträge des Hintergrund-Arbeiters."""
+    GLOBAL_PREVIEW_WORKER.clear()
+

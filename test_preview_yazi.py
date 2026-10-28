@@ -186,6 +186,62 @@ class TestPreviewYazi(unittest.TestCase):
                 app.build_screen(80, 24)
                 self.assertIsNone(app._kitty_preview)
 
+    def test_get_cached_thumbnail_and_async_worker(self):
+        """Prüft, dass get_cached_thumbnail nicht blockiert und der Worker im Hintergrund rendert."""
+        import time
+        # Frischer Pfad
+        pdf_name = "test_async_doc.pdf"
+        pdf_path = os.path.join(self.base, pdf_name)
+        with open(pdf_path, "wb") as f:
+            f.write(self.mini_pdf)
+
+        # Vorab darf kein Thumbnail existieren (weder Disk noch Mem)
+        cache_key = ep.get_file_cache_key(pdf_path)
+        disk_cache = os.path.join(ep.get_media_cache_dir(), f"pdf_{cache_key}.png")
+        if os.path.exists(disk_cache):
+            os.remove(disk_cache)
+        ep._THUMB_MEM_CACHE.pop(cache_key, None)
+
+        # 1. get_cached_thumbnail muss sofort None liefern (0ms Verzögerung)
+        t0 = time.time()
+        self.assertIsNone(ep.get_cached_thumbnail(pdf_path))
+        t_check = time.time() - t0
+        self.assertLess(t_check, 0.05)
+
+        # 2. Worker anfordern
+        ep.request_preview(pdf_path)
+
+        # 3. Warten bis Worker fertig ist
+        for _ in range(30):
+            if ep.poll_preview_ready(pdf_path):
+                break
+            time.sleep(0.05)
+
+        # 4. Nun muss get_cached_thumbnail sofort den Pfad liefern
+        cached = ep.get_cached_thumbnail(pdf_path)
+        if cached:  # Falls sips/Poppler verfügbar
+            self.assertTrue(os.path.exists(cached))
+
+    def test_rapid_scrolling_nonblocking(self):
+        """Schnelles Durchblättern vieler PDF-Dateien blockiert den Hauptthread zu keinem Zeitpunkt."""
+        import time
+        for i in range(10):
+            p = os.path.join(self.base, f"blatter_{i}.pdf")
+            with open(p, "wb") as f:
+                f.write(self.mini_pdf)
+
+        app = ed.EasyDateienApp(self.base)
+        pdf_indices = [idx for idx, it in enumerate(app.items) if it.name.startswith("blatter_")]
+
+        t0 = time.time()
+        for idx in pdf_indices:
+            app.selected_idx = idx
+            app.build_screen(80, 24)
+        duration = time.time() - t0
+
+        # 10 PDF-Bildschirme müssen in unter 0.1 Sekunden gerendert sein (<10ms pro Frame)
+        self.assertLess(duration, 0.1)
+
 
 if __name__ == "__main__":
     unittest.main()

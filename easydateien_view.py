@@ -15,8 +15,9 @@ from easydateien_ui import (
     str_width, truncate_name, truncate_to_width, key_display,
 )
 from easydateien_preview import (
-    is_previewable_media, supports_kitty_graphics, generate_preview_thumbnail,
-    get_image_pixel_size, compute_fit_dimensions, get_terminal_font_ratio,
+    is_previewable_media, supports_kitty_graphics, get_cached_thumbnail,
+    request_preview, get_image_pixel_size, compute_fit_dimensions,
+    get_terminal_font_ratio,
 )
 
 import os
@@ -205,13 +206,12 @@ class EasyDateienView:
         self._kitty_preview = None
         if (eff_cols == 3 and cur_item and not is_cur_dir and not self.active_dialog
                 and self.config.get("preview_media", True)
-                and is_previewable_media(cur_item.path)
-                and supports_kitty_graphics()):
+                and is_previewable_media(cur_item.path)):
             card_h = 5 + (1 if cur_item.is_symlink else 0)
             needed_p = max(1, fm_rows - (card_h + 1)) if fm_rows >= 10 else 0
             if needed_p > 0:
-                thumb = generate_preview_thumbnail(cur_item.path)
-                if thumb:
+                thumb = get_cached_thumbnail(cur_item.path)
+                if thumb and supports_kitty_graphics():
                     max_cols = max(1, w_right - 2)
                     max_rows = needed_p
                     dims = get_image_pixel_size(thumb)
@@ -225,6 +225,17 @@ class EasyDateienView:
                     col_offset = max(0, (max_cols - fit_cols) // 2)
                     term_preview_col = w_left + w_mid + 5 + col_offset
                     self._kitty_preview = (thumb, fit_cols, fit_rows, term_preview_row, term_preview_col)
+                else:
+                    self._kitty_preview = None
+
+                # Vorausschauendes Vorab-Laden für Nachbardateien anstoßen
+                prefetch = []
+                if self.items:
+                    for off in (1, 2, -1):
+                        cand_idx = self.selected_idx + off
+                        if 0 <= cand_idx < len(self.items) and not self.items[cand_idx].is_dir:
+                            prefetch.append(self.items[cand_idx].path)
+                request_preview(cur_item.path, prefetch=prefetch)
 
         self.last_layout = {
             "header_lines": header_lines_count, "avail_rows": fm_rows, "eff_cols": eff_cols,
