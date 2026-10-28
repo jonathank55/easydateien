@@ -1,8 +1,8 @@
 class Easydateien < Formula
   desc "Deutschsprachiger Terminal-Dateimanager für macOS mit integrierter Konsole"
   homepage "https://github.com/jonathank55/easydateien"
-  url "https://github.com/jonathank55/easydateien/archive/refs/tags/v1.5.2.tar.gz"
-  sha256 "f98e31ed53d0b745591cf826150c263704663dc29fc71d12923ae41b829f2320"
+  url "https://github.com/jonathank55/easydateien/archive/refs/tags/v1.5.3.tar.gz"
+  sha256 "a37443fe68533d507bd38409a3d016b4e0b7a64376ab80c15be223ab1939d072"
   license "MIT"
 
   depends_on "python@3.12"
