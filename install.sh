@@ -57,8 +57,9 @@ else
             exit 1
         fi
     done
-    # Clipboard-Quelle (optional; wird vom Programm sonst bei Bedarf kompiliert)
+    # Native macOS-Module (Clipboard & PDFKit)
     curl -fsSL --connect-timeout 10 --retry 2 "$RAW_BASE/easydateien_clip.m" -o "$SRC_DIR/easydateien_clip.m" || rm -f "$SRC_DIR/easydateien_clip.m"
+    curl -fsSL --connect-timeout 10 --retry 2 "$RAW_BASE/easydateien_pdf.m" -o "$SRC_DIR/easydateien_pdf.m" || rm -f "$SRC_DIR/easydateien_pdf.m"
     trap 'rm -rf "$CLEANUP_DIR"' EXIT
 fi
 
@@ -83,7 +84,7 @@ mkdir -p "$CONFIG_DIR"
 
 echo "Verlinke Programmdateien nach $CONFIG_DIR..."
 # Selbstheilung: Tote Symlinks und Altreste aus frueheren Installationen entfernen
-for DATEI in easydateien easydateien_ui.py easydateien_actions.py easydateien_view.py easydateien_common.py easydateien_preview.py easydateien_symlink.py easydateien_konfigurator.py config.example.json; do
+for DATEI in easydateien easydateien_ui.py easydateien_actions.py easydateien_view.py easydateien_common.py easydateien_preview.py easydateien_symlink.py easydateien_konfigurator.py easydateien_clip.m easydateien_pdf.m config.example.json; do
     ZIEL="$CONFIG_DIR/$DATEI"
     if [ -L "$ZIEL" ] && [ ! -e "$ZIEL" ]; then
         rm -f "$ZIEL"
@@ -99,6 +100,8 @@ if [ "$SRC_DIR" != "$CONFIG_DIR" ]; then
     ln -sf "$SRC_DIR/easydateien_preview.py" "$CONFIG_DIR/easydateien_preview.py"
     ln -sf "$SRC_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_symlink.py"
     ln -sf "$SRC_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
+    [ -f "$SRC_DIR/easydateien_clip.m" ] && ln -sf "$SRC_DIR/easydateien_clip.m" "$CONFIG_DIR/easydateien_clip.m"
+    [ -f "$SRC_DIR/easydateien_pdf.m" ] && ln -sf "$SRC_DIR/easydateien_pdf.m" "$CONFIG_DIR/easydateien_pdf.m"
 fi
 chmod +x "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_konfigurator.py"
 
@@ -106,7 +109,7 @@ chmod +x "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_konfigurator.py"
 # geladen, das nach Abschluss gelöscht wird. Damit die Verweise in $CONFIG_DIR
 # gültig bleiben, werden sie in diesem Fall fest kopiert statt nur verlinkt.
 if [ -n "$CLEANUP_DIR" ]; then
-    rm -f "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_preview.py" "$CONFIG_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_konfigurator.py"
+    rm -f "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_view.py" "$CONFIG_DIR/easydateien_common.py" "$CONFIG_DIR/easydateien_preview.py" "$CONFIG_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_clip.m" "$CONFIG_DIR/easydateien_pdf.m"
     cp "$SRC_DIR/easydateien" "$CONFIG_DIR/easydateien"
     cp "$SRC_DIR/easydateien_ui.py" "$CONFIG_DIR/easydateien_ui.py"
     cp "$SRC_DIR/easydateien_actions.py" "$CONFIG_DIR/easydateien_actions.py"
@@ -115,6 +118,8 @@ if [ -n "$CLEANUP_DIR" ]; then
     cp "$SRC_DIR/easydateien_preview.py" "$CONFIG_DIR/easydateien_preview.py"
     cp "$SRC_DIR/easydateien_symlink.py" "$CONFIG_DIR/easydateien_symlink.py"
     cp "$SRC_DIR/easydateien_konfigurator.py" "$CONFIG_DIR/easydateien_konfigurator.py"
+    [ -f "$SRC_DIR/easydateien_clip.m" ] && cp "$SRC_DIR/easydateien_clip.m" "$CONFIG_DIR/easydateien_clip.m"
+    [ -f "$SRC_DIR/easydateien_pdf.m" ] && cp "$SRC_DIR/easydateien_pdf.m" "$CONFIG_DIR/easydateien_pdf.m"
     chmod +x "$CONFIG_DIR/easydateien" "$CONFIG_DIR/easydateien_konfigurator.py"
     trap - EXIT
     rm -rf "$CLEANUP_DIR"
@@ -127,6 +132,16 @@ if command -v clang >/dev/null 2>&1 && [ -f "$SRC_DIR/easydateien_clip.m" ]; the
     else
         echo "Hinweis: Clipboard-Modul nicht kompilierbar (nicht macOS?); EasyDateien nutzt den AppleScript-Fallback." >&2
         rm -f "$CONFIG_DIR/easydateien_clip"
+    fi
+fi
+
+if command -v clang >/dev/null 2>&1 && [ -f "$SRC_DIR/easydateien_pdf.m" ]; then
+    echo "Kompiliere natives macOS-PDF-Modul..."
+    if clang -O3 -framework Foundation -framework PDFKit -framework CoreGraphics -framework ImageIO "$SRC_DIR/easydateien_pdf.m" -o "$CONFIG_DIR/easydateien_pdf" 2>/dev/null; then
+        chmod +x "$CONFIG_DIR/easydateien_pdf"
+    else
+        echo "Hinweis: PDF-Modul nicht kompilierbar; EasyDateien nutzt pdftoppm/sips Fallback." >&2
+        rm -f "$CONFIG_DIR/easydateien_pdf"
     fi
 fi
 

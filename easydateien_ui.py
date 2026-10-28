@@ -742,6 +742,23 @@ def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
 # damit ein Fensternresize das Warten sofort beendet (statt den vollen
 # Timeout abzuwarten) und die Hauptschleife sofort neu zeichnet.
 RESIZE_PIPE = os.pipe()
+WAKE_PIPE = os.pipe()
+
+
+def notify_ui_wakeup():
+    """Weckt die TUI-Hauptschleife ohne Verzögerung (0ms Latenz) aus read_key auf."""
+    try:
+        os.write(WAKE_PIPE[1], b"w")
+    except OSError:
+        pass
+
+
+def _verwerfe_wake_events():
+    try:
+        while select.select([WAKE_PIPE[0]], [], [], 0)[0]:
+            os.read(WAKE_PIPE[0], 64)
+    except OSError:
+        pass
 
 
 def _bei_sigwinch(signum, frame):
@@ -770,11 +787,15 @@ def _verwerfe_resize_events():
 def read_key(fd: int, timeout: float = 0.05) -> str:
     """Liest Tastatur- und Maus-Events zuverlässig über SGR und ANSI-Sequenzen."""
     try:
-        r, _, _ = select.select([fd, RESIZE_PIPE[0]], [], [], timeout)
+        r, _, _ = select.select([fd, RESIZE_PIPE[0], WAKE_PIPE[0]], [], [], timeout)
         if RESIZE_PIPE[0] in r:
             _verwerfe_resize_events()
             # Resize ist kein Tastaturzeichen: sofort zurück (leer), die
             # Hauptschleife prüft daraufhin die Terminalgröße neu.
+            if fd not in r:
+                return ""
+        if WAKE_PIPE[0] in r:
+            _verwerfe_wake_events()
             if fd not in r:
                 return ""
         if fd not in r:

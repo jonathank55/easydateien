@@ -72,6 +72,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self.last_visited_dir: Optional[str] = None
         self.preview_scroll_offset: int = 0
         self.preview_scroll_item: Optional[str] = None
+        self.pdf_page: int = 1
         self.marked_dir: Optional[str] = None
         self.items: List[FileEntry] = []
         self.selected_idx: int = 0
@@ -183,7 +184,8 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         if not self.items or self.selected_idx >= len(self.items):
             return False
         cur = self.items[self.selected_idx].path
-        if poll_preview_ready(cur):
+        cur_page = getattr(self, "pdf_page", 1) if cur.lower().endswith(".pdf") else 1
+        if poll_preview_ready(cur, cur_page):
             self.cached_file_preview_path = None
             self.cached_file_preview_lines = []
             return True
@@ -251,27 +253,28 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                 if curr_size != last_size:
                     last_size = curr_size
                     get_terminal_font_ratio(force_refresh=True)
+                    self._last_kitty_kp = None
                     needs_redraw = True
 
                 if needs_redraw:
                     lines = self.build_screen(term_cols, term_rows)
                     out_buf = []
-                    # Kitty Graphics löschen, wenn zuvor gezeichnet oder jetzt aktiv
-                    if supports_kitty_graphics() and (getattr(self, "_kitty_last_shown", False) or getattr(self, "_kitty_preview", None)):
-                        out_buf.append(KITTY_CLEAR_VISIBLE)
-                        self._kitty_last_shown = False
-
                     out_buf.append(f"\033[1;{term_rows}r")
                     for r_idx, l in enumerate(lines[:term_rows]):
                         out_buf.append(f"\033[{r_idx+1};1H\033[2K{l}")
 
                     kp = getattr(self, "_kitty_preview", None)
-                    if kp and not self.active_dialog and supports_kitty_graphics():
-                        png_path, pw, ph, prow, pcol = kp
-                        seq = self.get_kitty_image_sequence(png_path, pw, ph, prow, pcol)
-                        if seq:
-                            out_buf.append(seq)
-                            self._kitty_last_shown = True
+                    last_kp = getattr(self, "_last_kitty_kp", None)
+                    if supports_kitty_graphics():
+                        if kp != last_kp:
+                            if last_kp is not None:
+                                out_buf.append(KITTY_CLEAR_VISIBLE)
+                            if kp and not self.active_dialog:
+                                png_path, pw, ph, prow, pcol = kp
+                                seq = self.get_kitty_image_sequence(png_path, pw, ph, prow, pcol)
+                                if seq:
+                                    out_buf.append(seq)
+                            self._last_kitty_kp = kp
                         if not (self.show_console and self.console_focused):
                             out_buf.append(f"\033[{term_rows};1H\033[?25l")
 
@@ -845,7 +848,7 @@ def main():
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
-    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.5.1", help="Programmversion anzeigen")
+    parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.5.2", help="Programmversion anzeigen")
     parser.add_argument("--cwd-file", dest="cwd_file", default=None, help="Pfad zur Datei, in die das Arbeitsverzeichnis geschrieben wird")
     parser.add_argument("--init", dest="init_shell", nargs="?", const="zsh", default=None, help="Shell-Integrationscode ausgeben (zsh, bash, fish)")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")

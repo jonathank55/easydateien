@@ -17,6 +17,8 @@ import struct
 import fcntl
 import termios
 import threading
+import re
+import glob
 from typing import Dict, List, Optional, Set, Tuple
 
 IMAGE_EXTENSIONS = {
@@ -37,8 +39,95 @@ _MEDIA_CACHE_DIR = os.path.expanduser("~/.cache/easydateien/previews")
 # Schnelle In-Memory-Caches für verzögerungsfreie TUI-Aktualisierung
 _CACHE_KEY_MEM: Dict[Tuple[str, int, int], str] = {}
 _THUMB_MEM_CACHE: Dict[str, Optional[str]] = {}
+_FAST_PATH_PAGE_CACHE: Dict[Tuple[str, int], str] = {}
 _IMAGE_SIZE_MEM: Dict[str, Optional[Tuple[int, int]]] = {}
 _FONT_RATIO_CACHE: Optional[float] = None
+_PDF_PAGE_COUNT_MEM: Dict[str, int] = {}
+
+
+def _trigger_ui_wakeup():
+    """Weckt die TUI-Hauptschleife ohne Verzögerung auf."""
+    try:
+        from easydateien_ui import notify_ui_wakeup
+        notify_ui_wakeup()
+    except Exception:
+        pass
+
+PDF_HELPER_PATH = os.path.join(os.path.expanduser("~/.config/easydateien"), "easydateien_pdf")
+
+
+def ensure_pdf_helper() -> Optional[str]:
+    """Stellt sicher, dass das native macOS PDF-Hilfswerkzeug kompiliert und bereit ist."""
+    if sys.platform != "darwin":
+        return None
+    if os.path.exists(PDF_HELPER_PATH) and os.access(PDF_HELPER_PATH, os.X_OK):
+        return PDF_HELPER_PATH
+    src_m = os.path.join(os.path.dirname(__file__), "easydateien_pdf.m")
+    if not os.path.exists(src_m):
+        return None
+    clang = shutil.which("clang")
+    if not clang:
+        return None
+    try:
+        os.makedirs(os.path.dirname(PDF_HELPER_PATH), exist_ok=True)
+        res = subprocess.run([
+            clang, "-O3",
+            "-framework", "Foundation", "-framework", "PDFKit", "-framework", "CoreGraphics", "-framework", "ImageIO",
+            src_m, "-o", PDF_HELPER_PATH
+        ], capture_output=True, timeout=5.0)
+        if res.returncode == 0 and os.path.exists(PDF_HELPER_PATH):
+            os.chmod(PDF_HELPER_PATH, 0o755)
+            return PDF_HELPER_PATH
+    except Exception:
+        pass
+    return None
+
+
+def get_pdf_page_count(path: str) -> int:
+    """Ermittelt die Gesamtseitenanzahl eines PDF-Dokuments (vollständig nicht blockierend)."""
+    if not path or not os.path.isfile(path):
+        return 1
+    cache_key = get_file_cache_key(path)
+    if cache_key in _PDF_PAGE_COUNT_MEM:
+        return _PDF_PAGE_COUNT_MEM[cache_key]
+
+    # Schnelle, unterbrechungsfreie Binärprüfung (Mikrosekunden, blockiert niemals den Hauptthread)
+    try:
+        with open(path, "rb") as f:
+            head = f.read(512 * 1024)
+            m = re.search(rb"/Type\s*/Pages\b[^>]*?/Count\s+(\d+)", head, re.DOTALL)
+            if not m:
+                m = re.search(rb"/Count\s+(\d+)[^>]*?/Type\s*/Pages\b", head, re.DOTALL)
+            if m:
+                count = int(m.group(1))
+                if count > 0:
+                    _PDF_PAGE_COUNT_MEM[cache_key] = count
+                    return count
+
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            if size > 512 * 1024:
+                seek_pos = max(0, size - 256 * 1024)
+                f.seek(seek_pos)
+                tail = f.read()
+                m = re.search(rb"/Type\s*/Pages\b[^>]*?/Count\s+(\d+)", tail, re.DOTALL)
+                if not m:
+                    m = re.search(rb"/Count\s+(\d+)[^>]*?/Type\s*/Pages\b", tail, re.DOTALL)
+                if m:
+                    count = int(m.group(1))
+                    if count > 0:
+                        _PDF_PAGE_COUNT_MEM[cache_key] = count
+                        return count
+
+            pages = len(re.findall(rb"/Type\s*/Page\b", head))
+            if pages > 0:
+                _PDF_PAGE_COUNT_MEM[cache_key] = pages
+                return pages
+    except Exception:
+        pass
+
+    _PDF_PAGE_COUNT_MEM[cache_key] = 1
+    return 1
 
 
 def get_media_cache_dir() -> str:
@@ -195,7 +284,7 @@ def get_file_cache_key(path: str) -> str:
         return hashlib.sha256(path.encode("utf-8")).hexdigest()[:16]
 
 
-def get_cached_thumbnail(path: str) -> Optional[str]:
+def get_cached_thumbnail(path: str, page: int = 1) -> Optional[str]:
     """Prüft rein im Speicher und auf der Festplatte, ob ein gültiges Vorschaubild vorliegt.
 
     Blockiert niemals den Hauptthread und führt keine Konvertierungsbefehle aus.
@@ -203,10 +292,19 @@ def get_cached_thumbnail(path: str) -> Optional[str]:
     if not path or not is_previewable_media(path):
         return None
 
+    fast = _FAST_PATH_PAGE_CACHE.get((path, page))
+    if fast is not None:
+        if fast and os.path.exists(fast):
+            return fast
+        elif fast == "":
+            return None
+
     cache_key = get_file_cache_key(path)
-    if cache_key in _THUMB_MEM_CACHE:
-        cached = _THUMB_MEM_CACHE[cache_key]
+    mem_key = f"{cache_key}_p{page}"
+    if mem_key in _THUMB_MEM_CACHE:
+        cached = _THUMB_MEM_CACHE[mem_key]
         if cached and os.path.exists(cached):
+            _FAST_PATH_PAGE_CACHE[(path, page)] = cached
             return cached
         elif cached == "":
             return None
@@ -217,7 +315,8 @@ def get_cached_thumbnail(path: str) -> Optional[str]:
     if ext in (".png", ".jpg", ".jpeg", ".webp"):
         try:
             if os.path.getsize(path) <= 2 * 1024 * 1024:
-                _THUMB_MEM_CACHE[cache_key] = path
+                _THUMB_MEM_CACHE[mem_key] = path
+                _FAST_PATH_PAGE_CACHE[(path, page)] = path
                 return path
         except OSError:
             pass
@@ -225,7 +324,13 @@ def get_cached_thumbnail(path: str) -> Optional[str]:
     # Prüfen, ob die Datei bereits im lokalen Vorschauordner liegt
     cache_dir = get_media_cache_dir()
     if ext in PDF_EXTENSIONS:
-        target = os.path.join(cache_dir, f"pdf_{cache_key}.png")
+        target = os.path.join(cache_dir, f"pdf_{cache_key}_p{page}.png")
+        if not os.path.exists(target) and page == 1:
+            legacy = os.path.join(cache_dir, f"pdf_{cache_key}.png")
+            if os.path.exists(legacy) and os.path.getsize(legacy) > 0:
+                _THUMB_MEM_CACHE[mem_key] = legacy
+                _FAST_PATH_PAGE_CACHE[(path, page)] = legacy
+                return legacy
     elif ext in VIDEO_EXTENSIONS:
         target = os.path.join(cache_dir, f"vid_{cache_key}.png")
     else:
@@ -233,7 +338,8 @@ def get_cached_thumbnail(path: str) -> Optional[str]:
 
     try:
         if os.path.exists(target) and os.path.getsize(target) > 0:
-            _THUMB_MEM_CACHE[cache_key] = target
+            _THUMB_MEM_CACHE[mem_key] = target
+            _FAST_PATH_PAGE_CACHE[(path, page)] = target
             return target
     except OSError:
         pass
@@ -241,11 +347,11 @@ def get_cached_thumbnail(path: str) -> Optional[str]:
     return None
 
 
-def generate_preview_thumbnail(path: str, max_dim: int = 800) -> Optional[str]:
+def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> Optional[str]:
     """Erzeugt ein optimiertes PNG-Vorschaubild im Cache und gibt dessen Pfad zurück.
 
     Verwendet deterministische Fallback-Ketten:
-    - PDF: sips (macOS nativ & schnell) -> pdftoppm (Poppler) -> magick -> qlmanage
+    - PDF: easydateien_pdf (nativ) -> pdftoppm (Poppler) -> sips (Seite 1) -> qlmanage
     - Bild: Direktnutzung bei Standardformaten <= 2 MB, sonst sips -> magick
     - Video: ffmpeg Frame 1 -> qlmanage
     """
@@ -255,72 +361,104 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800) -> Optional[str]:
     ext = os.path.splitext(path)[1].lower()
     cache_dir = get_media_cache_dir()
     cache_key = get_file_cache_key(path)
+    mem_key = f"{cache_key}_p{page}"
 
     # 1. PDF-Dokument
     if ext in PDF_EXTENSIONS:
-        cached_png = os.path.join(cache_dir, f"pdf_{cache_key}.png")
+        cached_png = os.path.join(cache_dir, f"pdf_{cache_key}_p{page}.png")
         if os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
-            _THUMB_MEM_CACHE[cache_key] = cached_png
+            _THUMB_MEM_CACHE[mem_key] = cached_png
+            _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
             return cached_png
+        if page == 1:
+            legacy = os.path.join(cache_dir, f"pdf_{cache_key}.png")
+            if os.path.exists(legacy) and os.path.getsize(legacy) > 0:
+                _THUMB_MEM_CACHE[mem_key] = legacy
+                _FAST_PATH_PAGE_CACHE[(path, page)] = legacy
+                return legacy
 
-        # A) sips (macOS nativ vorinstalliert & extrem schnell in einem Einzelschritt)
-        sips = shutil.which("sips")
-        if sips:
+        # A) Nativer PDF-Helfer (macOS - schnell via CoreGraphics & ImageIO mit Batch-Vorabladen)
+        helper = ensure_pdf_helper()
+        if helper:
+            cmd = [helper, path, str(page), cached_png, str(max_dim)]
+            extra_pages = []
+            total_pages = get_pdf_page_count(path)
+            if total_pages > 1:
+                for cand in (page + 1, page - 1, page + 2):
+                    if 1 <= cand <= total_pages and cand != page:
+                        cand_target = os.path.join(cache_dir, f"pdf_{cache_key}_p{cand}.png")
+                        if not os.path.exists(cand_target):
+                            extra_pages.append((cand, cand_target))
+            for cand_p, cand_t in extra_pages:
+                cmd.extend([str(cand_p), cand_t])
+
             try:
-                cmd = [sips, "-s", "format", "png", "-Z", str(max_dim), path, "--out", cached_png]
-                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3.0)
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=3.0)
                 if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
-                    _THUMB_MEM_CACHE[cache_key] = cached_png
+                    val = (res.stdout or "").strip()
+                    if val.isdigit() and int(val) > 0:
+                        _PDF_PAGE_COUNT_MEM[cache_key] = int(val)
+                    _THUMB_MEM_CACHE[mem_key] = cached_png
+                    _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
+                    for cand_p, cand_t in extra_pages:
+                        if os.path.exists(cand_t) and os.path.getsize(cand_t) > 0:
+                            _THUMB_MEM_CACHE[f"{cache_key}_p{cand_p}"] = cand_t
+                            _FAST_PATH_PAGE_CACHE[(path, cand_p)] = cand_t
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
 
-        # B) pdftoppm (Poppler - scharf und portabel)
+        # B) pdftoppm (Poppler - seitengenau & portabel)
         pdftoppm = shutil.which("pdftoppm")
         if pdftoppm:
-            prefix = os.path.join(cache_dir, f"tmp_pdf_{cache_key}")
+            prefix = os.path.join(cache_dir, f"tmp_pdf_{cache_key}_p{page}")
             cmd = [
-                pdftoppm, "-png", "-f", "1", "-l", "1",
+                pdftoppm, "-png", "-f", str(page), "-l", str(page),
                 "-scale-to-x", str(max_dim), "-scale-to-y", "-1",
                 path, prefix
             ]
             try:
                 res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4.0)
-                gen_file = f"{prefix}-1.png"
-                if res.returncode == 0 and os.path.exists(gen_file):
-                    os.replace(gen_file, cached_png)
-                    _THUMB_MEM_CACHE[cache_key] = cached_png
+                matches = glob.glob(f"{prefix}*.png")
+                if res.returncode == 0 and matches and os.path.exists(matches[0]):
+                    os.replace(matches[0], cached_png)
+                    for extra in matches[1:]:
+                        try: os.remove(extra)
+                        except OSError: pass
+                    _THUMB_MEM_CACHE[mem_key] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
 
-        # C) magick (ImageMagick)
-        magick = shutil.which("magick")
-        if magick:
-            try:
-                cmd = [magick, "-density", "150", f"{path}[0]", "-resize", f"{max_dim}x{max_dim}>", cached_png]
-                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4.0)
-                if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
-                    _THUMB_MEM_CACHE[cache_key] = cached_png
-                    return cached_png
-            except (subprocess.TimeoutExpired, OSError):
-                pass
+        # C) sips (macOS nativ vorinstalliert - nur für Seite 1)
+        if page == 1:
+            sips = shutil.which("sips")
+            if sips:
+                try:
+                    cmd = [sips, "-s", "format", "png", "-Z", str(max_dim), path, "--out", cached_png]
+                    res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3.0)
+                    if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
+                        _THUMB_MEM_CACHE[mem_key] = cached_png
+                        return cached_png
+                except (subprocess.TimeoutExpired, OSError):
+                    pass
 
-        # D) qlmanage (macOS QuickLook)
-        qlmanage = shutil.which("qlmanage")
-        if qlmanage:
-            try:
-                cmd = [qlmanage, "-t", "-s", str(max_dim), "-o", cache_dir, path]
-                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4.0)
-                gen_file = os.path.join(cache_dir, f"{os.path.basename(path)}.png")
-                if res.returncode == 0 and os.path.exists(gen_file):
-                    os.replace(gen_file, cached_png)
-                    _THUMB_MEM_CACHE[cache_key] = cached_png
-                    return cached_png
-            except (subprocess.TimeoutExpired, OSError):
-                pass
+        # D) qlmanage (macOS QuickLook - nur für Seite 1)
+        if page == 1:
+            qlmanage = shutil.which("qlmanage")
+            if qlmanage:
+                try:
+                    cmd = [qlmanage, "-t", "-s", str(max_dim), "-o", cache_dir, path]
+                    res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4.0)
+                    gen_file = os.path.join(cache_dir, f"{os.path.basename(path)}.png")
+                    if res.returncode == 0 and os.path.exists(gen_file):
+                        os.replace(gen_file, cached_png)
+                        _THUMB_MEM_CACHE[mem_key] = cached_png
+                        return cached_png
+                except (subprocess.TimeoutExpired, OSError):
+                    pass
 
-        _THUMB_MEM_CACHE[cache_key] = ""
+        _THUMB_MEM_CACHE[mem_key] = ""
         return None
 
     # 2. Bilddatei
@@ -554,32 +692,46 @@ class PreviewWorker:
     Garantiert vollkommen verzögerungsfreie TUI-Navigation:
     - Der Hauptthread wird niemals durch rechenintensive Konvertierungen blockiert.
     - Bei schnellem Blättern werden veraltete Einzelanfragen sofort verdrängt.
-    - Nachbardateien werden in Leerlaufphasen vorausschauend vorab im Hintergrund gerendert.
+    - Nachbardateien und PDF-Folgeseiten werden in Leerlaufphasen vorausschauend vorab gerendert.
     """
 
     def __init__(self):
         self._lock = threading.Lock()
         self._wake_event = threading.Event()
         self._stop_event = threading.Event()
-        self._active_path: Optional[str] = None
-        self._prefetch_list: List[str] = []
-        self._ready_set: Set[str] = set()
+        self._active_target: Optional[Tuple[str, int]] = None
+        self._prefetch_list: List[Tuple[str, int]] = []
+        self._ready_set: Set[Tuple[str, int]] = set()
         self._thread = threading.Thread(target=self._run, daemon=True, name="EasyDateien-PreviewWorker")
         self._thread.start()
 
-    def request(self, path: str, prefetch: Optional[List[str]] = None):
+    def request(self, path: str, page: int = 1, prefetch_pages: Optional[List[int]] = None, prefetch_paths: Optional[List[str]] = None):
         """Reicht eine Vorschau-Anfrage ein. Verdrängt veraltete Einzelaufträge sofort."""
         if not path or not is_previewable_media(path):
             return
         with self._lock:
-            self._active_path = path
-            self._prefetch_list = [p for p in (prefetch or []) if p and p != path and is_previewable_media(p)]
+            self._active_target = (path, page)
+            pf_list: List[Tuple[str, int]] = []
+            if prefetch_pages:
+                for p in prefetch_pages:
+                    if p > 0 and (path, p) != (path, page):
+                        pf_list.append((path, p))
+            if prefetch_paths:
+                for pp in prefetch_paths:
+                    if pp and pp != path and is_previewable_media(pp):
+                        pf_list.append((pp, 1))
+            self._prefetch_list = pf_list
         self._wake_event.set()
 
-    def poll_ready(self, current_path: str) -> bool:
-        """Prüft, ob für current_path im Hintergrund ein Thumbnail fertiggestellt wurde."""
+    def poll_ready(self, current_path: str, current_page: int = 1) -> bool:
+        """Prüft, ob für (current_path, current_page) im Hintergrund ein Thumbnail fertiggestellt wurde."""
         with self._lock:
-            if current_path in self._ready_set:
+            target = (current_path, current_page)
+            if target in self._ready_set:
+                self._ready_set.discard(target)
+                return True
+            # Abwärtskompatibilität: 1-Tupel ebenfalls abfangen
+            if current_path in self._ready_set and current_page == 1:
                 self._ready_set.discard(current_path)
                 return True
             return False
@@ -587,7 +739,7 @@ class PreviewWorker:
     def clear(self):
         """Verwirft anstehende Vorab-Aufträge (z.B. bei Verzeichniswechsel)."""
         with self._lock:
-            self._active_path = None
+            self._active_target = None
             self._prefetch_list.clear()
 
     def stop(self):
@@ -604,43 +756,45 @@ class PreviewWorker:
             target = None
             prefetch = []
             with self._lock:
-                target = self._active_path
+                target = self._active_target
                 prefetch = list(self._prefetch_list)
 
             if target:
+                t_path, t_page = target
                 # Nur generieren, wenn nicht bereits im Speicher oder auf Festplatte
-                if not get_cached_thumbnail(target):
-                    thumb = generate_preview_thumbnail(target)
+                if not get_cached_thumbnail(t_path, page=t_page):
+                    thumb = generate_preview_thumbnail(t_path, page=t_page)
                     with self._lock:
-                        if thumb:
-                            self._ready_set.add(target)
-                        else:
-                            # Auch bei Fehlschlag Benachrichtigung senden, damit Platzhalter umschaltet
-                            self._ready_set.add(target)
+                        self._ready_set.add(target)
+                    _trigger_ui_wakeup()
                 with self._lock:
-                    if self._active_path == target:
-                        self._active_path = None
+                    if self._active_target == target:
+                        self._active_target = None
 
-            # Vorab-Pufferung für Nachbardateien in Leerlaufphasen
-            for pf in prefetch:
+            # Vorab-Pufferung für PDF-Folgeseiten & Nachbardateien in Leerlaufphasen
+            for pf_path, pf_page in prefetch:
                 with self._lock:
-                    if self._active_path is not None or self._stop_event.is_set():
+                    if self._active_target is not None or self._stop_event.is_set():
                         break
-                if not get_cached_thumbnail(pf):
-                    generate_preview_thumbnail(pf)
+                if not get_cached_thumbnail(pf_path, page=pf_page):
+                    pf_thumb = generate_preview_thumbnail(pf_path, page=pf_page)
+                    if pf_thumb:
+                        with self._lock:
+                            self._ready_set.add((pf_path, pf_page))
+                        _trigger_ui_wakeup()
 
 
 GLOBAL_PREVIEW_WORKER = PreviewWorker()
 
 
-def request_preview(path: str, prefetch: Optional[List[str]] = None):
+def request_preview(path: str, page: int = 1, prefetch_pages: Optional[List[int]] = None, prefetch_paths: Optional[List[str]] = None):
     """Reicht eine Vorschau-Anfrage an den globalen Hintergrund-Arbeiter weiter."""
-    GLOBAL_PREVIEW_WORKER.request(path, prefetch=prefetch)
+    GLOBAL_PREVIEW_WORKER.request(path, page=page, prefetch_pages=prefetch_pages, prefetch_paths=prefetch_paths)
 
 
-def poll_preview_ready(current_path: str) -> bool:
-    """Prüft, ob die Vorschau für den aktuellen Pfad im Hintergrund fertig ist."""
-    return GLOBAL_PREVIEW_WORKER.poll_ready(current_path)
+def poll_preview_ready(current_path: str, current_page: int = 1) -> bool:
+    """Prüft, ob die Vorschau für den aktuellen Pfad und Seite im Hintergrund fertig ist."""
+    return GLOBAL_PREVIEW_WORKER.poll_ready(current_path, current_page)
 
 
 def clear_preview_queue():

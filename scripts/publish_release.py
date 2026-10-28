@@ -38,6 +38,7 @@ FORMULA_TEMPLATE = """class Easydateien < Formula
                     "easydateien_clip.m",
                     "easydateien_common.py",
                     "easydateien_konfigurator.py",
+                    "easydateien_pdf.m",
                     "easydateien_preview.py",
                     "easydateien_symlink.py",
                     "easydateien_ui.py",

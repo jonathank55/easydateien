@@ -17,7 +17,7 @@ from easydateien_ui import (
 from easydateien_preview import (
     is_previewable_media, supports_kitty_graphics, get_cached_thumbnail,
     request_preview, get_image_pixel_size, compute_fit_dimensions,
-    get_terminal_font_ratio,
+    get_terminal_font_ratio, get_pdf_page_count,
 )
 
 import os
@@ -184,11 +184,16 @@ class EasyDateienView:
         if self.preview_scroll_item != cur_preview_path:
             self.preview_scroll_offset = 0
             self.preview_scroll_item = cur_preview_path
+            self.pdf_page = 1
+
+        is_pdf = bool(cur_item and not is_cur_dir and cur_item.path.lower().endswith(".pdf"))
+        total_pdf_pages = get_pdf_page_count(cur_item.path) if is_pdf else 0
+        has_pdf_pages = is_pdf and total_pdf_pages >= 1
+        card_h = 5 + (1 if (cur_item and cur_item.is_symlink) else 0) + (1 if has_pdf_pages else 0)
 
         preview_lines = []
         preview_wrap_width = None
         if eff_cols == 3 and cur_item and not is_cur_dir:
-            card_h = 5 + (1 if cur_item.is_symlink else 0)
             needed_p = max(1, fm_rows - (card_h + 1)) if fm_rows >= 10 else 0
             # Umbruch in der exakten Zellinnenbreite (w_right - 2): dann
             # passt jede umgebrochene Zeile ohne zweiten Schnitt, und es
@@ -207,10 +212,10 @@ class EasyDateienView:
         if (eff_cols == 3 and cur_item and not is_cur_dir and not self.active_dialog
                 and self.config.get("preview_media", True)
                 and is_previewable_media(cur_item.path)):
-            card_h = 5 + (1 if cur_item.is_symlink else 0)
             needed_p = max(1, fm_rows - (card_h + 1)) if fm_rows >= 10 else 0
             if needed_p > 0:
-                thumb = get_cached_thumbnail(cur_item.path)
+                cur_pdf_page = getattr(self, "pdf_page", 1) if is_pdf else 1
+                thumb = get_cached_thumbnail(cur_item.path, page=cur_pdf_page)
                 if thumb and supports_kitty_graphics():
                     max_cols = max(1, w_right - 2)
                     max_rows = needed_p
@@ -228,14 +233,25 @@ class EasyDateienView:
                 else:
                     self._kitty_preview = None
 
-                # Vorausschauendes Vorab-Laden für Nachbardateien anstoßen
-                prefetch = []
-                if self.items:
-                    for off in (1, 2, -1):
-                        cand_idx = self.selected_idx + off
-                        if 0 <= cand_idx < len(self.items) and not self.items[cand_idx].is_dir:
-                            prefetch.append(self.items[cand_idx].path)
-                request_preview(cur_item.path, prefetch=prefetch)
+                req_target = (cur_item.path, cur_pdf_page)
+                if req_target != getattr(self, "_last_requested_target", None) or thumb is None:
+                    self._last_requested_target = req_target
+                    # Vorausschauendes Vorab-Laden für Nachbardateien und Folgeseiten anstoßen
+                    prefetch_paths = []
+                    if self.items:
+                        for off in (1, 2, -1):
+                            cand_idx = self.selected_idx + off
+                            if 0 <= cand_idx < len(self.items) and not self.items[cand_idx].is_dir:
+                                prefetch_paths.append(self.items[cand_idx].path)
+                    prefetch_pages = []
+                    if is_pdf and total_pdf_pages > 1:
+                        if cur_pdf_page + 1 <= total_pdf_pages:
+                            prefetch_pages.append(cur_pdf_page + 1)
+                        if cur_pdf_page - 1 >= 1:
+                            prefetch_pages.append(cur_pdf_page - 1)
+                        if cur_pdf_page + 2 <= total_pdf_pages:
+                            prefetch_pages.append(cur_pdf_page + 2)
+                    request_preview(cur_item.path, page=cur_pdf_page, prefetch_pages=prefetch_pages, prefetch_paths=prefetch_paths)
 
         self.last_layout = {
             "header_lines": header_lines_count, "avail_rows": fm_rows, "eff_cols": eff_cols,
@@ -368,6 +384,9 @@ class EasyDateienView:
                         f"{C_DIM}{'Datum:':<9}{C_RESET}{truncate_to_width(date_str, max(3, w_right - 11))}",
                         f"{C_DIM}{'Rechte:':<9}{C_RESET}{truncate_to_width(mode_str, max(3, w_right - 11))}",
                     ]
+                    if is_pdf and total_pdf_pages >= 1:
+                        cur_pdf_page = getattr(self, "pdf_page", 1)
+                        card.append(f"{C_DIM}{'Seite:':<9}{C_RESET}{cur_pdf_page} / {total_pdf_pages}")
                     if cur_item.is_symlink:
                         card.append(f"{C_DIM}{'Ziel:':<9}{C_RESET}{truncate_to_width(cur_item.symlink_target, max(3, w_right - 11))}")
 

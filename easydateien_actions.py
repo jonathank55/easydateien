@@ -43,6 +43,7 @@ from easydateien_preview import (
     generate_preview_thumbnail, make_chafa_preview_lines,
     KITTY_CLEAR_VISIBLE, KITTY_PURGE_ALL, get_image_pixel_size,
     compute_fit_dimensions, get_terminal_font_ratio, clear_preview_queue,
+    get_pdf_page_count, request_preview,
 )
 
 
@@ -258,6 +259,7 @@ class EasyDateienActions:
         self.view_start = 0
         self.preview_scroll_offset = 0
         self.preview_scroll_item = None
+        self.pdf_page = 1
         if self.filter_query:
             self.filter_query = ""
         self.refresh_items()
@@ -1120,8 +1122,15 @@ class EasyDateienActions:
             file_stamp: Optional[Tuple[int, int]] = (st.st_mtime_ns, st.st_size)
         except OSError:
             file_stamp = None
+        is_pdf = path.lower().endswith(".pdf")
+        cur_pdf_page = getattr(self, "pdf_page", 1) if is_pdf else 1
         is_media = cfg.get("preview_media", True) and is_previewable_media(path)
-        cache_key = (sort_key, file_stamp, (wrap_width, max_lines) if (is_media and not supports_kitty_graphics()) else None)
+        cache_key = (
+            sort_key,
+            file_stamp,
+            cur_pdf_page if is_pdf else None,
+            (wrap_width, max_lines) if (is_media and not supports_kitty_graphics()) else None,
+        )
         if (self.cached_file_preview_path != path or self.cached_file_preview_key != cache_key
                 or not self.cached_file_preview_lines):
             lines = []
@@ -1154,7 +1163,7 @@ class EasyDateienActions:
                             else:
                                 lines.append(f" {fe.name} ({format_size(fe.size)})")
                 elif is_media:
-                    thumb = get_cached_thumbnail(path)
+                    thumb = get_cached_thumbnail(path, page=cur_pdf_page)
                     if thumb:
                         if supports_kitty_graphics():
                             # Kitty-Grafikmodus: Terminal rendert Pixelbild direkt in den Bereich
@@ -1690,8 +1699,11 @@ class EasyDateienActions:
                 fm_rows = avail_total
             avail = max(10, term_cols - 4)
             w_right = max(10, int(avail * 0.33))
+        is_pdf = bool(cur_item and not getattr(cur_item, "is_dir", False) and cur_item.path.lower().endswith(".pdf"))
+        total_pdf_pages = get_pdf_page_count(cur_item.path) if is_pdf else 0
+        has_pdf_pages = is_pdf and total_pdf_pages >= 1
         is_sym = bool(cur_item and getattr(cur_item, "is_symlink", False))
-        card_h = 5 + (1 if is_sym else 0)
+        card_h = 5 + (1 if is_sym else 0) + (1 if has_pdf_pages else 0)
         if fm_rows < 10:
             sichtbar = 0
         else:
@@ -1701,7 +1713,8 @@ class EasyDateienActions:
 
     def _scroll_preview(self, richtung: int) -> bool:
         """Scrollt die Datei-Vorschau um eine Stufe (richtung: -1 hoch, +1 runter).
-        Gibt True zurück, wenn gescrollt wurde (am Anschlag ohne Bewegung: False,
+        Bei mehrseitigen PDF-Dokumenten blättert es seitenweise um.
+        Gibt True zurück, wenn gescrollt/geblättert wurde (am Anschlag ohne Bewegung: False,
         damit PG_UP/DOWN dann das gewohnte Listen-Verhalten behalten)."""
         if not self.items or not (0 <= self.selected_idx < len(self.items)):
             return False
@@ -1711,6 +1724,30 @@ class EasyDateienActions:
         if self.preview_scroll_item != cur.path:
             self.preview_scroll_item = cur.path
             self.preview_scroll_offset = 0
+            self.pdf_page = 1
+
+        is_pdf = cur.path.lower().endswith(".pdf")
+        if is_pdf:
+            total_pages = get_pdf_page_count(cur.path)
+            if total_pages > 1:
+                cur_page = getattr(self, "pdf_page", 1)
+                delta = 1 if richtung > 0 else (-1 if richtung < 0 else 0)
+                neu_page = max(1, min(total_pages, cur_page + delta))
+                if neu_page == cur_page:
+                    return False
+                self.pdf_page = neu_page
+                self.cached_file_preview_path = None
+                self.cached_file_preview_lines = []
+                prefetch_pages = []
+                if neu_page + 1 <= total_pages:
+                    prefetch_pages.append(neu_page + 1)
+                if neu_page - 1 >= 1:
+                    prefetch_pages.append(neu_page - 1)
+                request_preview(cur.path, page=neu_page, prefetch_pages=prefetch_pages)
+                return True
+            else:
+                return False
+
         sichtbar, preview_wrap_width = self._preview_geometrie(cur)
         if sichtbar <= 0:
             return False

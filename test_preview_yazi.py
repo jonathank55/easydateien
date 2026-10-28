@@ -55,6 +55,22 @@ class TestPreviewYazi(unittest.TestCase):
         with open(self.pdf_path, "wb") as f:
             f.write(self.mini_pdf)
 
+        # Echtes minimales 3-Seiten PDF erstellen
+        self.multi_pdf = (
+            b"%PDF-1.4\n"
+            b"1 0 obj <</Type /Catalog /Pages 2 0 R>> endobj\n"
+            b"2 0 obj <</Type /Pages /Kids [3 0 R 5 0 R 6 0 R] /Count 3>> endobj\n"
+            b"3 0 obj <</Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R>> endobj\n"
+            b"4 0 obj <</Length 20>> stream\n0 0 100 100 re f\nendstream endobj\n"
+            b"5 0 obj <</Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R>> endobj\n"
+            b"6 0 obj <</Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R>> endobj\n"
+            b"xref\n0 7\n0000000000 65535 f \n0000000009 00000 n \n0000000056 00000 n \n0000000125 00000 n \n0000000215 00000 n \n0000000285 00000 n \n0000000375 00000 n \n"
+            b"trailer <</Size 7 /Root 1 0 R>>\nstartxref\n470\n%%EOF\n"
+        )
+        self.multi_pdf_path = os.path.join(self.base, "multiseite.pdf")
+        with open(self.multi_pdf_path, "wb") as f:
+            f.write(self.multi_pdf)
+
     def tearDown(self):
         try:
             os.chdir(self.orig_cwd)
@@ -241,6 +257,85 @@ class TestPreviewYazi(unittest.TestCase):
 
         # 10 PDF-Bildschirme müssen in unter 0.1 Sekunden gerendert sein (<10ms pro Frame)
         self.assertLess(duration, 0.1)
+
+    def test_multipage_pdf_page_count(self):
+        """Ermittelt die korrekte Seitenanzahl für 1-seitige und mehrseitige PDFs."""
+        self.assertEqual(ep.get_pdf_page_count(self.pdf_path), 1)
+        self.assertEqual(ep.get_pdf_page_count(self.multi_pdf_path), 3)
+
+    def test_multipage_pdf_scrolling(self):
+        """Blättern mit _scroll_preview schaltet Seiten vor und zurück mit Begrenzungsanschlag."""
+        app = ed.EasyDateienApp(self.base)
+        idx_multi = [i for i, it in enumerate(app.items) if it.name == "multiseite.pdf"][0]
+        app.selected_idx = idx_multi
+        app.build_screen(80, 24)
+
+        self.assertEqual(getattr(app, "pdf_page", 1), 1)
+
+        # Seite 1 -> 2 vorblättern
+        gescrollt = app._scroll_preview(1)
+        self.assertTrue(gescrollt)
+        self.assertEqual(app.pdf_page, 2)
+
+        # Seite 2 -> 3 vorblättern
+        gescrollt = app._scroll_preview(1)
+        self.assertTrue(gescrollt)
+        self.assertEqual(app.pdf_page, 3)
+
+        # Anschlag am Ende: darf nicht über Seite 3 hinausgehen
+        gescrollt = app._scroll_preview(1)
+        self.assertFalse(gescrollt)
+        self.assertEqual(app.pdf_page, 3)
+
+        # Seite 3 -> 2 zurückblättern
+        gescrollt = app._scroll_preview(-1)
+        self.assertTrue(gescrollt)
+        self.assertEqual(app.pdf_page, 2)
+
+        # Seite 2 -> 1 zurückblättern
+        gescrollt = app._scroll_preview(-1)
+        self.assertTrue(gescrollt)
+        self.assertEqual(app.pdf_page, 1)
+
+        # Anschlag am Anfang: darf nicht unter Seite 1 gehen
+        gescrollt = app._scroll_preview(-1)
+        self.assertFalse(gescrollt)
+        self.assertEqual(app.pdf_page, 1)
+
+    def test_multipage_pdf_details_card(self):
+        """Die Detail-Box zeigt für mehrseitige PDFs die Seitenzahl an."""
+        app = ed.EasyDateienApp(self.base)
+        idx_multi = [i for i, it in enumerate(app.items) if it.name == "multiseite.pdf"][0]
+        app.selected_idx = idx_multi
+
+        # Seite 1 rendern
+        lines = app.build_screen(80, 24)
+        full_text = "\n".join(lines)
+        self.assertIn("Seite:", full_text)
+        self.assertIn("1 / 3", full_text)
+
+        # Auf Seite 2 blättern und neu rendern
+        app._scroll_preview(1)
+        lines = app.build_screen(80, 24)
+        full_text = "\n".join(lines)
+        self.assertIn("Seite:", full_text)
+        self.assertIn("2 / 3", full_text)
+
+    def test_multipage_pdf_page_reset_on_navigation(self):
+        """Beim Wechsel auf eine andere Datei wird die Seitenzahl auf 1 zurückgesetzt."""
+        app = ed.EasyDateienApp(self.base)
+        idx_multi = [i for i, it in enumerate(app.items) if it.name == "multiseite.pdf"][0]
+        idx_txt = [i for i, it in enumerate(app.items) if it.name == "dokument.txt"][0]
+
+        app.selected_idx = idx_multi
+        app.build_screen(80, 24)
+        app._scroll_preview(1)
+        self.assertEqual(app.pdf_page, 2)
+
+        # Zu anderer Datei wechseln
+        app.selected_idx = idx_txt
+        app.build_screen(80, 24)
+        self.assertEqual(app.pdf_page, 1)
 
 
 if __name__ == "__main__":
