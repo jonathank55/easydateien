@@ -234,7 +234,7 @@ class EasyDateienView:
                     self._kitty_preview = None
 
                 req_target = (cur_item.path, cur_pdf_page)
-                if req_target != getattr(self, "_last_requested_target", None) or thumb is None:
+                if req_target != getattr(self, "_last_requested_target", None):
                     self._last_requested_target = req_target
                     # Vorausschauendes Vorab-Laden für Nachbardateien und Folgeseiten anstoßen
                     prefetch_paths = []

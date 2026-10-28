@@ -3,6 +3,8 @@
 
 import os
 import sys
+import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -102,11 +104,35 @@ class TestPreviewYazi(unittest.TestCase):
             self.assertEqual(thumb, thumb2)
 
     def test_make_kitty_sequence(self):
-        """Erzeugt konforme Kitty Graphics Protocol Escape-Sequenzen."""
+        """Erzeugt konforme Kitty Graphics Protocol Escape-Sequenzen mit C=1 (kein Cursor-Vorschub)."""
         seq = ep.make_kitty_image_sequence(self.png_path, cols=20, rows=10, row_pos=5, col_pos=40)
         self.assertTrue(seq.startswith("\033[5;40H"))
-        self.assertIn("\033_Ga=T,f=100,t=d,c=20,r=10,q=2", seq)
+        self.assertIn("a=T", seq)
+        self.assertIn("C=1", seq)
+        self.assertIn("c=20", seq)
+        self.assertIn("r=10", seq)
         self.assertTrue(seq.endswith("\033\\"))
+
+    def test_kitty_clear_visible_has_delete_all(self):
+        """KITTY_CLEAR_VISIBLE und KITTY_PURGE_ALL nutzen q=2,a=d,d=A gegen Geisterbilder."""
+        self.assertIn("a=d", ep.KITTY_CLEAR_VISIBLE)
+        self.assertIn("d=A", ep.KITTY_CLEAR_VISIBLE)
+        self.assertIn("a=d", ep.KITTY_PURGE_ALL)
+        self.assertIn("d=A", ep.KITTY_PURGE_ALL)
+
+    def test_jpeg_always_converted_to_png(self):
+        """JPEG-Dateien unter 2MB werden in PNG konvertiert und nicht als rohes JPEG ausgeliefert."""
+        # Test-JPEG anlegen
+        jpg_path = os.path.join(self.base, "test_foto.jpg")
+        # 1x1 JPEG minimal
+        sips = shutil.which("sips")
+        if sips:
+            subprocess.run([sips, "-s", "format", "jpeg", self.png_path, "--out", jpg_path],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if os.path.exists(jpg_path):
+                thumb = ep.generate_preview_thumbnail(jpg_path)
+                self.assertIsNotNone(thumb)
+                self.assertTrue(thumb.endswith(".png"))
 
     def test_details_box_preserved_for_pdf_and_image(self):
         """Details (Typ, Größe, Datum, Rechte) bleiben vollständig erhalten."""

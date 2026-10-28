@@ -44,7 +44,7 @@ class Easydateien < Formula
     assert_predicate libexec/"easydateien", :executable?
     assert_path_exists libexec/"easydateien_common.py"
     assert_path_exists libexec/"easydateien_preview.py"
-    assert_match "EasyDateien 1.5.2", shell_output("#{bin}/easydateien -v")
+    assert_match "EasyDateien 1.5.3", shell_output("#{bin}/easydateien -v")
     assert_match "easydateien()", shell_output("#{bin}/easydateien --init zsh")
   end
 end

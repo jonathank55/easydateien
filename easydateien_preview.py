@@ -31,8 +31,8 @@ PDF_EXTENSIONS = {".pdf"}
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"}
 
-KITTY_CLEAR_VISIBLE = "\033_Ga=d\033\\"
-KITTY_PURGE_ALL = "\033_Ga=d,d=A\033\\"
+KITTY_CLEAR_VISIBLE = "\033_Gq=2,a=d,d=A\033\\"
+KITTY_PURGE_ALL = "\033_Gq=2,a=d,d=A\033\\"
 
 _MEDIA_CACHE_DIR = os.path.expanduser("~/.cache/easydateien/previews")
 
@@ -311,10 +311,10 @@ def get_cached_thumbnail(path: str, page: int = 1) -> Optional[str]:
 
     ext = os.path.splitext(path)[1].lower()
 
-    # Lokale Web-Bildformate bis 2 MB können direkt ohne Konvertierung angezeigt werden
-    if ext in (".png", ".jpg", ".jpeg", ".webp"):
+    # Nur echte, kompakte PNG-Dateien bis 500 KB können direkt ohne Konvertierung angezeigt werden
+    if ext == ".png":
         try:
-            if os.path.getsize(path) <= 2 * 1024 * 1024:
+            if os.path.getsize(path) <= 500 * 1024:
                 _THUMB_MEM_CACHE[mem_key] = path
                 _FAST_PATH_PAGE_CACHE[(path, page)] = path
                 return path
@@ -468,14 +468,16 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> 
         except OSError:
             fsize = 0
 
-        # Standard-Webformate mit moderater Größe können direkt übertragen werden
-        if ext in (".png", ".jpg", ".jpeg", ".webp") and fsize <= 2 * 1024 * 1024:
-            _THUMB_MEM_CACHE[cache_key] = path
+        # Nur echte, kompakte PNG-Dateien bis 500 KB können direkt übertragen werden
+        if ext == ".png" and fsize <= 500 * 1024:
+            _THUMB_MEM_CACHE[mem_key] = path
+            _FAST_PATH_PAGE_CACHE[(path, page)] = path
             return path
 
         cached_png = os.path.join(cache_dir, f"img_{cache_key}.png")
         if os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
-            _THUMB_MEM_CACHE[cache_key] = cached_png
+            _THUMB_MEM_CACHE[mem_key] = cached_png
+            _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
             return cached_png
 
         # Konvertierung / Skalierung via sips
@@ -485,7 +487,8 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> 
                 cmd = [sips, "-s", "format", "png", "-Z", str(max_dim), path, "--out", cached_png]
                 res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3.0)
                 if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
-                    _THUMB_MEM_CACHE[cache_key] = cached_png
+                    _THUMB_MEM_CACHE[mem_key] = cached_png
+                    _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
@@ -497,26 +500,28 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> 
                 cmd = [magick, path, "-resize", f"{max_dim}x{max_dim}>", cached_png]
                 res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3.0)
                 if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
-                    _THUMB_MEM_CACHE[cache_key] = cached_png
+                    _THUMB_MEM_CACHE[mem_key] = cached_png
+                    _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
 
         # SVG: Falls sips/magick scheitern, chafa/direkt probieren
         if ext == ".svg":
-            _THUMB_MEM_CACHE[cache_key] = path
+            _THUMB_MEM_CACHE[mem_key] = path
+            _FAST_PATH_PAGE_CACHE[(path, page)] = path
             return path
 
-        ret = path if os.path.exists(path) else None
-        if ret:
-            _THUMB_MEM_CACHE[cache_key] = ret
-        return ret
+        _THUMB_MEM_CACHE[mem_key] = ""
+        _FAST_PATH_PAGE_CACHE[(path, page)] = ""
+        return None
 
     # 3. Videodatei
     elif ext in VIDEO_EXTENSIONS:
         cached_png = os.path.join(cache_dir, f"vid_{cache_key}.png")
         if os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
-            _THUMB_MEM_CACHE[cache_key] = cached_png
+            _THUMB_MEM_CACHE[mem_key] = cached_png
+            _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
             return cached_png
 
         ffmpeg = shutil.which("ffmpeg")
@@ -529,7 +534,8 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> 
                 ]
                 res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3.0)
                 if res.returncode == 0 and os.path.exists(cached_png) and os.path.getsize(cached_png) > 0:
-                    _THUMB_MEM_CACHE[cache_key] = cached_png
+                    _THUMB_MEM_CACHE[mem_key] = cached_png
+                    _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
@@ -542,12 +548,14 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> 
                 gen_file = os.path.join(cache_dir, f"{os.path.basename(path)}.png")
                 if res.returncode == 0 and os.path.exists(gen_file):
                     os.replace(gen_file, cached_png)
-                    _THUMB_MEM_CACHE[cache_key] = cached_png
+                    _THUMB_MEM_CACHE[mem_key] = cached_png
+                    _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
 
-    _THUMB_MEM_CACHE[cache_key] = ""
+    _THUMB_MEM_CACHE[mem_key] = ""
+    _FAST_PATH_PAGE_CACHE[(path, page)] = ""
     return None
 
 
@@ -574,9 +582,9 @@ def make_kitty_image_sequence(png_path: str, cols: int, rows: int, row_pos: int,
     for idx, chunk in enumerate(chunks):
         m = 1 if idx < len(chunks) - 1 else 0
         if idx == 0:
-            hdr = f"a=T,f={fmt},t=d,c={cols},r={rows},q=2,m={m}"
+            hdr = f"q=2,a=T,C=1,f={fmt},t=d,c={cols},r={rows},m={m}"
         else:
-            hdr = f"m={m}"
+            hdr = f"q=2,m={m}"
         parts.append(f"\033_G{hdr};{chunk}\033\\")
 
     return "".join(parts)
