@@ -1,72 +1,64 @@
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
+#import <ImageIO/ImageIO.h>
 
-@interface ImageCache : NSObject
-@property (atomic, strong) NSMutableDictionary<NSString *, NSImage *> *cache;
-+ (instancetype)sharedCache;
-- (NSImage *)cachedImageForPath:(NSString *)path;
-- (void)cacheImage:(NSImage *)image forPath:(NSString *)path;
-@end
+// Maximale Kantenlänge der als Bilddaten in die Zwischenablage gelegten Vorschau.
+// Die Quelldatei wird dabei nie verändert — nur die eingebettete PNG-/TIFF-Kopie
+// wird auf diese Größe begrenzt (wie im Finder üblich). Damit lassen sich auch
+// große HEIC-/RAW-Aufnahmen schnell und speicherarm kopieren, statt die Pixel in
+// voller Auflösung zu laden und doppelt (PNG + TIFF) zu encodieren.
+static const NSInteger kMaxClipboardPixelSize = 2048;
 
-@implementation ImageCache
-+ (instancetype)sharedCache {
-    static ImageCache *shared = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        shared = [[self alloc] init];
-        shared.cache = [NSMutableDictionary dictionary];
-    });
-    return shared;
-}
-
-- (NSImage *)cachedImageForPath:(NSString *)path {
-    return [self.cache objectForKey:path];
-}
-
-- (void)cacheImage:(NSImage *)image forPath:(NSString *)path {
-    if (image && path) {
-        [self.cache setObject:image forKey:path];
+// Erkennt gängige Bilddateitypen, für die eine eingebettete Bildvorschau beigelegt wird.
+static BOOL easeIsImagePath(NSString *path) {
+    NSString *ext = [[path pathExtension] lowercaseString];
+    if ([ext isEqualToString:@"png"] || [ext isEqualToString:@"jpg"] ||
+        [ext isEqualToString:@"jpeg"] || [ext isEqualToString:@"gif"] ||
+        [ext isEqualToString:@"tiff"] || [ext isEqualToString:@"tif"] ||
+        [ext isEqualToString:@"webp"] || [ext isEqualToString:@"heic"] ||
+        [ext isEqualToString:@"heif"] || [ext isEqualToString:@"bmp"] ||
+        [ext isEqualToString:@"avif"] || [ext isEqualToString:@"raw"]) {
+        return YES;
     }
+    return NO;
 }
-@end
+
+// Dekodiert ein Bild speicherschonend für die Zwischenablage. Bei Bildern, deren
+// längste Kante kMaxClipboardPixelSize übersteigt, erzeugt ImageIO direkt ein
+// herunterskaliertes Thumbnail — die volle Pixelgröße wird nie ausdekodiert.
+// Der Aufrufer muss das Ergebnis mit CGImageRelease freigeben (NULL bei Fehler).
+static CGImageRef easeScaledImageForPath(NSString *path) {
+    if (!path || ![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+        return NULL;
+    }
+    NSURL *url = [NSURL fileURLWithPath:path];
+    CGImageSourceRef source = CGImageSourceCreateWithURL((__bridge CFURLRef)url, NULL);
+    if (!source) {
+        return NULL;
+    }
+    NSDictionary *options = @{
+        (id)kCGImageSourceCreateThumbnailFromImageAlways : @YES,
+        (id)kCGImageSourceCreateThumbnailWithTransform : @YES,
+        (id)kCGImageSourceThumbnailMaxPixelSize : @(kMaxClipboardPixelSize),
+    };
+    CGImageRef image = CGImageSourceCreateThumbnailAtIndex(source, 0, (__bridge CFDictionaryRef)options);
+    CFRelease(source);
+    return image;
+}
 
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         if (argc < 2) return 1;
         NSString *action = [NSString stringWithUTF8String:argv[1]];
         NSPasteboard *pb = [NSPasteboard generalPasteboard];
-        ImageCache *imageCache = [ImageCache sharedCache];
 
         if ([action isEqualToString:@"set"] && argc > 2) {
             [pb clearContents];
 
             NSMutableArray<NSString *> *paths = [NSMutableArray array];
-            NSImage *firstImage = nil;
-            BOOL hasImage = NO;
-
             for (int i = 2; i < argc; i++) {
                 NSString *p = [NSString stringWithUTF8String:argv[i]];
                 [paths addObject:p];
-
-                if (!hasImage && (argc == 3)) {
-                    NSString *ext = [[p pathExtension] lowercaseString];
-                    if ([ext isEqualToString:@"png"] || [ext isEqualToString:@"jpg"] ||
-                        [ext isEqualToString:@"jpeg"] || [ext isEqualToString:@"gif"] ||
-                        [ext isEqualToString:@"tiff"] || [ext isEqualToString:@"tif"] ||
-                        [ext isEqualToString:@"webp"] || [ext isEqualToString:@"heic"] ||
-                        [ext isEqualToString:@"bmp"]) {
-                        firstImage = [imageCache cachedImageForPath:p];
-                        if (!firstImage) {
-                            if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
-                                firstImage = [[NSImage alloc] initWithContentsOfFile:p];
-                                if (firstImage) {
-                                    [imageCache cacheImage:firstImage forPath:p];
-                                }
-                            }
-                        }
-                        hasImage = (firstImage != nil);
-                    }
-                }
             }
 
             NSMutableArray<NSPasteboardType> *types = [NSMutableArray arrayWithObjects:
@@ -78,28 +70,34 @@ int main(int argc, const char * argv[]) {
 
             NSData *pngData = nil;
             NSData *tiffData = nil;
-            if (hasImage && firstImage) {
-                NSRect r = NSMakeRect(0, 0, firstImage.size.width, firstImage.size.height);
-                CGImageRef cgRef = [firstImage CGImageForProposedRect:&r context:nil hints:nil];
+            // Bilddaten werden nur bei genau einer ausgewählten Bilddatei beigelegt
+            // (gleiche Regel wie zuvor, damit Mehrfachauswahlen unverändert bleiben).
+            if ([paths count] == 1 && easeIsImagePath(paths[0])) {
+                CGImageRef cgRef = easeScaledImageForPath(paths[0]);
                 if (cgRef) {
                     NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:cgRef];
                     pngData = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
                     tiffData = [rep representationUsingType:NSBitmapImageFileTypeTIFF properties:@{}];
                     if (pngData) [types addObject:NSPasteboardTypePNG];
                     if (tiffData) [types addObject:NSPasteboardTypeTIFF];
+                    CGImageRelease(cgRef);
                 }
             }
 
             [pb declareTypes:types owner:nil];
             [pb setPropertyList:paths forType:(NSPasteboardType)@"NSFilenamesPboardType"];
 
-            NSURL *firstUrl = [NSURL fileURLWithPath:paths[0]];
-            if (firstUrl) {
-                [pb setString:[firstUrl absoluteString] forType:NSPasteboardTypeFileURL];
+            if ([paths count] > 0) {
+                NSURL *firstUrl = [NSURL fileURLWithPath:paths[0]];
+                if (firstUrl) {
+                    [pb setString:[firstUrl absoluteString] forType:NSPasteboardTypeFileURL];
+                }
             }
 
-            NSString *allPaths = [paths componentsJoinedByString:@"\n"];
-            [pb setString:allPaths forType:NSPasteboardTypeString];
+            if ([paths count] > 0) {
+                NSString *allPaths = [paths componentsJoinedByString:@"\n"];
+                [pb setString:allPaths forType:NSPasteboardTypeString];
+            }
 
             if (pngData) {
                 [pb setData:pngData forType:NSPasteboardTypePNG];

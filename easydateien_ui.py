@@ -449,6 +449,41 @@ def ensure_clip_helper() -> Optional[str]:
     os.makedirs(os.path.dirname(CLIP_HELPER_PATH), exist_ok=True)
     c_code = """#import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
+#import <ImageIO/ImageIO.h>
+
+static const NSInteger kMaxClipboardPixelSize = 2048;
+
+static BOOL easeIsImagePath(NSString *path) {
+    NSString *ext = [[path pathExtension] lowercaseString];
+    if ([ext isEqualToString:@"png"] || [ext isEqualToString:@"jpg"] ||
+        [ext isEqualToString:@"jpeg"] || [ext isEqualToString:@"gif"] ||
+        [ext isEqualToString:@"tiff"] || [ext isEqualToString:@"tif"] ||
+        [ext isEqualToString:@"webp"] || [ext isEqualToString:@"heic"] ||
+        [ext isEqualToString:@"heif"] || [ext isEqualToString:@"bmp"] ||
+        [ext isEqualToString:@"avif"] || [ext isEqualToString:@"raw"]) {
+        return YES;
+    }
+    return NO;
+}
+
+static CGImageRef easeScaledImageForPath(NSString *path) {
+    if (!path || ![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+        return NULL;
+    }
+    NSURL *url = [NSURL fileURLWithPath:path];
+    CGImageSourceRef source = CGImageSourceCreateWithURL((__bridge CFURLRef)url, NULL);
+    if (!source) {
+        return NULL;
+    }
+    NSDictionary *options = @{
+        (id)kCGImageSourceCreateThumbnailFromImageAlways : @YES,
+        (id)kCGImageSourceCreateThumbnailWithTransform : @YES,
+        (id)kCGImageSourceThumbnailMaxPixelSize : @(kMaxClipboardPixelSize),
+    };
+    CGImageRef image = CGImageSourceCreateThumbnailAtIndex(source, 0, (__bridge CFDictionaryRef)options);
+    CFRelease(source);
+    return image;
+}
 
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
@@ -459,26 +494,9 @@ int main(int argc, const char * argv[]) {
         if ([action isEqualToString:@"set"] && argc > 2) {
             [pb clearContents];
             NSMutableArray<NSString *> *paths = [NSMutableArray array];
-            NSImage *firstImage = nil;
-            BOOL hasImage = NO;
-
             for (int i = 2; i < argc; i++) {
                 NSString *p = [NSString stringWithUTF8String:argv[i]];
                 [paths addObject:p];
-                if (!hasImage && (argc == 3)) {
-                    NSString *ext = [[p pathExtension] lowercaseString];
-                    if ([ext isEqualToString:@"png"] || [ext isEqualToString:@"jpg"] ||
-                        [ext isEqualToString:@"jpeg"] || [ext isEqualToString:@"gif"] ||
-                        [ext isEqualToString:@"tiff"] || [ext isEqualToString:@"tif"] ||
-                        [ext isEqualToString:@"webp"] || [ext isEqualToString:@"heic"] ||
-                        [ext isEqualToString:@"bmp"]) {
-                        NSImage *img = [[NSImage alloc] initWithContentsOfFile:p];
-                        if (img) {
-                            hasImage = YES;
-                            firstImage = img;
-                        }
-                    }
-                }
             }
 
             NSMutableArray<NSPasteboardType> *types = [NSMutableArray arrayWithObjects:
@@ -490,28 +508,32 @@ int main(int argc, const char * argv[]) {
 
             NSData *pngData = nil;
             NSData *tiffData = nil;
-            if (hasImage && firstImage) {
-                NSRect r = NSMakeRect(0, 0, firstImage.size.width, firstImage.size.height);
-                CGImageRef cgRef = [firstImage CGImageForProposedRect:&r context:nil hints:nil];
+            if ([paths count] == 1 && easeIsImagePath(paths[0])) {
+                CGImageRef cgRef = easeScaledImageForPath(paths[0]);
                 if (cgRef) {
                     NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:cgRef];
                     pngData = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
                     tiffData = [rep representationUsingType:NSBitmapImageFileTypeTIFF properties:@{}];
                     if (pngData) [types addObject:NSPasteboardTypePNG];
                     if (tiffData) [types addObject:NSPasteboardTypeTIFF];
+                    CGImageRelease(cgRef);
                 }
             }
 
             [pb declareTypes:types owner:nil];
             [pb setPropertyList:paths forType:(NSPasteboardType)@"NSFilenamesPboardType"];
 
-            NSURL *firstUrl = [NSURL fileURLWithPath:paths[0]];
-            if (firstUrl) {
-                [pb setString:[firstUrl absoluteString] forType:NSPasteboardTypeFileURL];
+            if ([paths count] > 0) {
+                NSURL *firstUrl = [NSURL fileURLWithPath:paths[0]];
+                if (firstUrl) {
+                    [pb setString:[firstUrl absoluteString] forType:NSPasteboardTypeFileURL];
+                }
             }
 
-            NSString *allPaths = [paths componentsJoinedByString:@"\\n"];
-            [pb setString:allPaths forType:NSPasteboardTypeString];
+            if ([paths count] > 0) {
+                NSString *allPaths = [paths componentsJoinedByString:@"\\n"];
+                [pb setString:allPaths forType:NSPasteboardTypeString];
+            }
 
             if (pngData) {
                 [pb setData:pngData forType:NSPasteboardTypePNG];
@@ -551,7 +573,7 @@ int main(int argc, const char * argv[]) {
     try:
         with open(tmp_m, "w", encoding="utf-8") as f:
             f.write(c_code)
-        res = subprocess.run(["clang", "-O3", "-framework", "AppKit", "-framework", "Foundation", tmp_m, "-o", CLIP_HELPER_PATH], capture_output=True)
+        res = subprocess.run(["clang", "-O3", "-framework", "AppKit", "-framework", "Foundation", "-framework", "ImageIO", tmp_m, "-o", CLIP_HELPER_PATH], capture_output=True)
         if res.returncode == 0:
             return CLIP_HELPER_PATH
     except Exception:
@@ -568,7 +590,7 @@ def sync_to_macos_clipboard(paths: List[str]):
     helper = ensure_clip_helper()
     if helper:
         try:
-            res = subprocess.run([helper, "set"] + abs_paths, capture_output=True, timeout=2.0)
+            res = subprocess.run([helper, "set"] + abs_paths, capture_output=True, timeout=4.0)
             if res.returncode == 0:
                 return
         except Exception:
@@ -586,7 +608,7 @@ def get_macos_clipboard_files() -> List[str]:
     helper = ensure_clip_helper()
     if helper:
         try:
-            out = subprocess.check_output([helper, "get"], text=True, timeout=2.0)
+            out = subprocess.check_output([helper, "get"], text=True, timeout=4.0)
             lines = [l.strip() for l in out.splitlines() if l.strip() and os.path.exists(l.strip())]
             if lines:
                 return lines

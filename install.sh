@@ -127,7 +127,7 @@ fi
 
 if command -v clang >/dev/null 2>&1 && [ -f "$SRC_DIR/easydateien_clip.m" ]; then
     echo "Kompiliere natives macOS-Clipboard-Modul..."
-    if clang -O3 -framework AppKit -framework Foundation "$SRC_DIR/easydateien_clip.m" -o "$CONFIG_DIR/easydateien_clip" 2>/dev/null; then
+    if clang -O3 -framework AppKit -framework Foundation -framework ImageIO "$SRC_DIR/easydateien_clip.m" -o "$CONFIG_DIR/easydateien_clip" 2>/dev/null; then
         chmod +x "$CONFIG_DIR/easydateien_clip"
     else
         echo "Hinweis: Clipboard-Modul nicht kompilierbar (nicht macOS?); EasyDateien nutzt den AppleScript-Fallback." >&2
