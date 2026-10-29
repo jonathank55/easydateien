@@ -15,6 +15,7 @@ import termios
 import tty
 import select
 import signal
+import threading
 import zipfile
 import re
 import argparse
@@ -580,11 +581,52 @@ int main(int argc, const char * argv[]) {
         pass
     return None
 
-def sync_to_macos_clipboard(paths: List[str]):
-    """Synchronisiert Dateipfade nativ in die macOS-Zwischenablage für Finder (Cmd+V) und Texteditoren."""
-    if not paths:
-        return
-    abs_paths = [os.path.abspath(p) for p in paths if os.path.exists(p)]
+# ---------------------------------------------------------------------------
+# Zwischenablage-Worker: Alle Schreibaufträge laufen in einem Hintergrund-
+# Daemon-Thread ab, damit die TUI unter keinen Umständen auf ein Hilfsprogramm
+# (Helper-Binary, pbcopy, osascript) wartet. Große Bilddaten (z. B. 48-MP-RAW
+# oder große PNG) brauchen auch nach der Skalierung im Helper einige hundert
+# Millisekunden; eine parallele Ausführung hielte das Interface sonst an.
+# ---------------------------------------------------------------------------
+_CLIP_QUEUE: List[Tuple[str, object]] = []
+_CLIP_QUEUE_LOCK = threading.Lock()
+_CLIP_QUEUE_EVENT = threading.Event()
+_clip_worker_started = False
+
+
+def _clipboard_worker():
+    """Arbeitet Zwischenablage-Aufträge der Reihe nach ab (FIFO)."""
+    while True:
+        _CLIP_QUEUE_EVENT.wait()
+        _CLIP_QUEUE_EVENT.clear()
+        item = None
+        with _CLIP_QUEUE_LOCK:
+            if _CLIP_QUEUE:
+                item = _CLIP_QUEUE.pop(0)
+        if item is None:
+            continue
+        kind, payload = item
+        try:
+            if kind == "paths":
+                _sync_paths_now(payload)
+            elif kind == "text":
+                _copy_text_now(payload)
+        except Exception:
+            pass
+
+
+def _enqueue_clipboard(kind: str, payload: object):
+    global _clip_worker_started
+    if not _clip_worker_started:
+        _clip_worker_started = True
+        threading.Thread(target=_clipboard_worker, daemon=True, name="EasyDateien-Clipboard").start()
+    with _CLIP_QUEUE_LOCK:
+        _CLIP_QUEUE.append((kind, payload))
+    _CLIP_QUEUE_EVENT.set()
+
+
+def _sync_paths_now(abs_paths: List[str]):
+    """Setzt die macOS-Zwischenablage für die übergebenen (absoluten) Pfade."""
     if not abs_paths:
         return
     helper = ensure_clip_helper()
@@ -602,6 +644,35 @@ def sync_to_macos_clipboard(paths: List[str]):
         subprocess.run(["osascript", "-e", as_code], capture_output=True, timeout=2.0)
     except Exception:
         pass
+
+
+def _copy_text_now(text: str):
+    """Kopiert reinen Text in das macOS-Clipboard."""
+    if not text:
+        return
+    try:
+        p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+        p.communicate(input=text.encode("utf-8"))
+    except Exception:
+        pass
+
+
+def sync_to_macos_clipboard(paths: List[str]):
+    """Synchronisiert Dateipfade nativ in die macOS-Zwischenablage für Finder (Cmd+V) und Texteditoren.
+
+    Die eigentliche Übertragung läuft asynchron im Hintergrund; die Funktion
+    kehrt sofort zurück, damit die Oberfläche nie auf das Hilfsprogramm wartet.
+    """
+    if not paths:
+        return
+    _enqueue_clipboard("paths", list(paths))
+
+
+def copy_text_to_clipboard(text: str):
+    """Kopiert reinen Text in das macOS-Clipboard (asynchron im Hintergrund)."""
+    if text is None:
+        return
+    _enqueue_clipboard("text", text)
 
 def get_macos_clipboard_files() -> List[str]:
     """Liest echte Dateiobjekte und Pfade aus dem macOS-Pasteboard."""
@@ -622,14 +693,6 @@ def get_macos_clipboard_files() -> List[str]:
     except Exception:
         pass
     return []
-
-def copy_text_to_clipboard(text: str):
-    """Kopiert reinen Text in das macOS-Clipboard."""
-    try:
-        p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
-        p.communicate(input=text.encode("utf-8"))
-    except Exception:
-        pass
 
 def get_file_type_desc(item: FileEntry) -> str:
     """Liefert eine präzise deutsche Typbezeichnung."""
