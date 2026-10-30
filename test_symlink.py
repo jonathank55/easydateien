@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests fuer die Verknuepfungs-Funktion (v) in EasyDateien.
+"""Tests fuer die Verknuepfungsfunktion (v) in EasyDateien.
 
 Ebene 1: Kernfunktion create_symlink/remove_symlink (Modul easydateien_symlink).
 Ebene 2: App-Integration create_symlink_for_selection (Erstellen, Kollision,
@@ -27,7 +27,7 @@ from easydateien_symlink import create_symlink, remove_symlink, SymlinkError  # 
 
 
 class TestSymlinkKern(unittest.TestCase):
-    """Kernfunktion isoliert (Auszug der umfangreichen Entwicklungs-Testsuite)."""
+    """Kernfunktion isoliert (Auszug der umfangreichen Entwicklungstestsuite)."""
 
     def setUp(self):
         self.base = tempfile.mkdtemp(prefix="ed-sl-")

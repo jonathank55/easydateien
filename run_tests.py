@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test-Suite für EasyDateien — Kernfunktionen ohne interaktives Terminal.
+"""Testsuite für EasyDateien — Kernfunktionen ohne interaktives Terminal.
 
 Führt alle Tests aus allen test_*.py-Dateien im selben Verzeichnis aus
 (unittest-Discovery) und beendet sich mit Exit-Code 0 (Erfolg) oder 1 (Misserfolg).

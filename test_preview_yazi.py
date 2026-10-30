@@ -97,14 +97,14 @@ class TestPreviewYazi(unittest.TestCase):
     def test_generate_thumbnail_pdf(self):
         """Erzeugt ein Vorschaubild für ein PDF-Dokument über Poppler/sips."""
         thumb = ep.generate_preview_thumbnail(self.pdf_path)
-        if thumb:  # Kann in Minimal-Umgebungen ohne Poppler/sips übersprungen werden
+        if thumb:  # Kann in Minimalumgebungen ohne Poppler/sips übersprungen werden
             self.assertTrue(os.path.exists(thumb))
             # Zweiter Aufruf muss Cache nutzen
             thumb2 = ep.generate_preview_thumbnail(self.pdf_path)
             self.assertEqual(thumb, thumb2)
 
     def test_make_kitty_sequence(self):
-        """Erzeugt konforme Kitty Graphics Protocol Escape-Sequenzen mit C=1 (kein Cursor-Vorschub)."""
+        """Erzeugt konforme Kitty Graphics Protocol Escape-Sequenzen mit C=1 (kein Cursorvorschub)."""
         seq = ep.make_kitty_image_sequence(self.png_path, cols=20, rows=10, row_pos=5, col_pos=40)
         self.assertTrue(seq.startswith("\033[5;40H"))
         self.assertIn("a=T", seq)
@@ -213,7 +213,7 @@ class TestPreviewYazi(unittest.TestCase):
         self.assertLessEqual(fit_c, 29)
 
     def test_get_image_pixel_size(self):
-        """Liest Pixel-Dimensionen direkt und fehlerfrei aus."""
+        """Liest Pixeldimensionen direkt und fehlerfrei aus."""
         dims = ep.get_image_pixel_size(self.png_path)
         self.assertEqual(dims, (1, 1))
 

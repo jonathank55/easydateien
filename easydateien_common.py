@@ -3,7 +3,7 @@
 EasyDateien Common — Gemeinsame Basis für Dateimanager und Konfigurator.
 
 Dieses Modul ist die Single Source of Truth für alle geteilten Grundlagen:
-Terminal-Konstanten, visuelle Breitenberechnung, Kürzungs- und Pad-Logik,
+Terminalkonstanten, visuelle Breitenberechnung, Kürzungs- und Pad-Logik,
 Tastenbelegungen (Keymap) sowie Laden und Speichern der Konfiguration.
 Sowohl `easydateien` als auch `easydateien_konfigurator.py` importieren
 ausschließlich von hier, damit beide Programme niemals auseinanderlaufen.
@@ -22,7 +22,7 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 # Nutzt ausschließlich SGR-Attribute (Fett, Gedimmt, Kursiv, Invertiert) und die
 # semantischen ANSI-Grundfarben (31–36) des jeweiligen Terminal-Themes — ohne
 # fest verdrahtete RGB-/256-Farbwerte. Passt sich dadurch jedem hellen und
-# dunklen Theme in jeder Terminal-App automatisch an (respektiert NO_COLOR).
+# dunklen Theme in jeder Terminalapp automatisch an (respektiert NO_COLOR).
 _NO_COLOR = bool(os.environ.get("NO_COLOR")) or os.environ.get("TERM") == "dumb"
 
 C_RESET = "" if _NO_COLOR else "\033[0m"
@@ -85,7 +85,7 @@ DEFAULT_CONFIG = {
 
 @functools.lru_cache(maxsize=8192)
 def char_width(c: str) -> int:
-    """Ermittelt die visuelle Terminal-Spaltenbreite eines einzelnen Zeichens."""
+    """Ermittelt die visuelle Terminalspaltenbreite eines einzelnen Zeichens."""
     if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
         return 0
     eaw = unicodedata.east_asian_width(c)
@@ -140,7 +140,7 @@ def truncate_to_width(text: str, max_w: int, ellipsis: str = "…") -> str:
     return f"{res_str}{ellipsis}"
 
 def frame_cell(content: str, cell_w: int, pad: int = 1) -> str:
-    """Standardisiertes Zellen-Rendering: exakt `pad` Leerzeichen Abstand
+    """Standardisiertes Zellenrendering: exakt `pad` Leerzeichen Abstand
     zum linken und rechten Rand, Inhalt auf cell_w - 2*pad begrenzt.
     ANSI-Codes im Inhalt bleiben erhalten; die Geometrie bleibt immer exakt."""
     if cell_w <= 0:
@@ -150,7 +150,7 @@ def frame_cell(content: str, cell_w: int, pad: int = 1) -> str:
 
 
 def cell_inner_width(cell_w: int, pad: int = 1) -> int:
-    """Verfuegbare Inhaltbreite einer Zelle nach Abzug der Rand-Abstaende."""
+    """Verfuegbare Inhaltbreite einer Zelle nach Abzug der Randabstaende."""
     return max(0, cell_w - 2 * pad)
 
 
@@ -208,7 +208,7 @@ def distribute_options(items, avail_w: int) -> str:
     return "".join(parts)
 
 def fit_hints(items, avail_w: int, ellipsis: bool = True) -> str:
-    """Passt Hilfe-Einträge maximal dynamisch in die Breite.
+    """Passt Hilfeeinträge maximal dynamisch in die Breite.
 
     items: Liste aus str oder (voll, kurz, mini)-Tupeln in Prioritätsreihenfolge.
     Reihenfolge der Strategien: alle Einträge in Volltext → kurz → mini; reicht der Platz
@@ -266,7 +266,7 @@ KEY_BINDINGS = [
     ("Dateioperationen", "new", "Neu", ("n",), "Neue Datei oder Ordner (mit / am Ende)"),
     ("Dateioperationen", "rename", "Umbenennen", ("r",), "Element umbenennen"),
     ("Dateioperationen", "trash", "Löschen", ("DELETE", "BACKSPACE"), "In den Papierkorb verschieben"),
-    ("Dateioperationen", "copy", "Kopieren", ("c",), "Kopier-Menü öffnen (Auswahl, Pfad, Name, Ordnerpfad)"),
+    ("Dateioperationen", "copy", "Kopieren", ("c",), "Kopiermenü öffnen (Auswahl, Pfad, Name, Ordnerpfad)"),
     ("Dateioperationen", "symlink", "Verknüpfung", ("v",), "Verknüpfung auf Auswahl/Eintrag erstellen"),
     ("Dateioperationen", "cut", "Ausschneiden", ("x",), "Auswahl ausschneiden"),
     ("Dateioperationen", "paste", "Einfügen", ("p",), "In aktuellen Ordner einfügen"),
@@ -312,7 +312,7 @@ def format_keys(tokens) -> str:
 
 
 def key_display(cfg_or_keymap, action: str, default: str = "") -> str:
-    """Liefert das Anzeige-Label der Taste einer Aktion aus der keymap
+    """Liefert das Anzeigelabel der Taste einer Aktion aus der keymap
     (Single Source of Truth des Konfigurators) — mit deutschem Label.
     cfg kann eine Config (dict) oder eine fertige keymap sein; Aktionen mit
     mehreren Tasten zeigen die erste."""
@@ -369,7 +369,7 @@ def get_keybindings_from_config(cfg: dict) -> list:
     if custom_bindings is None:
         return KEY_BINDINGS
     # Gespeicherte Belegungen: Tasten bleiben individuell, aber Abschnitt,
-    # Anzeigename und Beschreibung werden stets vom aktuellen Code-Stand
+    # Anzeigename und Beschreibung werden stets vom aktuellen Codestand
     # aufgefrischt (sonst würden alte Beschreibungstexte im Hilfemenü
     # eingefroren). Nicht mehr existierende Aktionen fallen weg.
     defaults_by_action = {b[1]: b for b in KEY_BINDINGS}

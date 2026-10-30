@@ -1,4 +1,4 @@
-"""Tests fuer die asynchrone ZIP-Erstellung (Hintergrund-Thread + Polling).
+"""Tests fuer die asynchrone ZIP-Erstellung (Hintergrundthread + Polling).
 
 Die App darf waehrend einer laufenden ZIP-Erstellung nicht blockieren:
 start_zip_creation() kehrt sofort zurueck, poll_zip_creation() meldet den

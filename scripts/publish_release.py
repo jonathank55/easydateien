@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Automatisches Veröffentlichungs-Skript für EasyDateien.
+Automatisches Veröffentlichungsskript für EasyDateien.
 - Liest die Version aus 'easydateien'
 - Führt Tests aus
 - Inkrementiert bei Bedarf die Version (Patch)
@@ -24,7 +24,7 @@ MAIN_FILE = os.path.join(REPO_ROOT, "easydateien")
 TEST_RUNNER = os.path.join(REPO_ROOT, "run_tests.py")
 
 FORMULA_TEMPLATE = """class Easydateien < Formula
-  desc "Deutschsprachiger Terminal-Dateimanager für macOS mit integrierter Konsole"
+  desc "Deutschsprachiger Terminaldateimanager für macOS mit integrierter Konsole"
   homepage "https://github.com/jonathank55/easydateien"
   url "https://github.com/jonathank55/easydateien/archive/refs/tags/v__VERSION__.tar.gz"
   sha256 "__SHA256__"
@@ -152,7 +152,7 @@ def update_homebrew_tap(version, sha256_hash, is_ci=False):
         with open(formula_path, "w", encoding="utf-8") as f:
             f.write(rendered)
 
-        # Auch lokale Formel im Haupt-Repository synchron halten
+        # Auch lokale Formel im Hauptrepository synchron halten
         local_formula = os.path.join(REPO_ROOT, "easydateien.rb")
         with open(local_formula, "w", encoding="utf-8") as f:
             f.write(rendered)
@@ -171,7 +171,7 @@ def update_homebrew_tap(version, sha256_hash, is_ci=False):
 
 def main():
     is_ci = "--ci" in sys.argv
-    print(f"=== EasyDateien Veröffentlichungs-Prozess (CI: {is_ci}) ===")
+    print(f"=== EasyDateien Veröffentlichungsprozess (CI: {is_ci}) ===")
 
     # 1. Tests ausführen
     print("-> Führe Testsuite aus...")
@@ -199,7 +199,7 @@ def main():
             print("-> Alles aktuell!")
             return
         else:
-            print(f"-> Tag {tag_name} existiert bereits für einen älteren Commit. Erhöhe Patch-Version...")
+            print(f"-> Tag {tag_name} existiert bereits für einen älteren Commit. Erhöhe Patchversion...")
             current_version = bump_patch_version(current_version)
             tag_name = f"v{current_version}"
             run('git commit -am "chore: Inkrementiere Version auf ' + current_version + ' [skip ci]"')
@@ -207,12 +207,12 @@ def main():
 
     # 4. Tag erstellen und pushen
     print(f"-> Erstelle Git-Tag {tag_name}...")
-    run(f'git tag -a "{tag_name}" -m "Release {tag_name} - Deutschsprachiger Terminal-Dateimanager"')
+    run(f'git tag -a "{tag_name}" -m "Release {tag_name} - Deutschsprachiger Terminaldateimanager"')
     run(f'git push origin "{tag_name}"')
 
     # 5. GitHub Release erstellen
     print(f"-> Erstelle GitHub-Release {tag_name}...")
-    release_notes = f"Offizielles Release von EasyDateien {tag_name}. Minimalistischer, deutschsprachiger Terminal-Dateimanager für macOS."
+    release_notes = f"Offizielles Release von EasyDateien {tag_name}. Minimalistischer, deutschsprachiger Terminaldateimanager für macOS."
     run(f'gh release create "{tag_name}" --title "EasyDateien {tag_name}" --notes "{release_notes}"', check=False)
 
     # 6. SHA256 berechnen

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""EasyDateien — UI-Basis: Konstanten, Tastatur-/Terminal-Helfer und reine Rendering-Funktionen.
+"""EasyDateien — UI-Basis: Konstanten, Tastatur-/Terminalhelfer und reine Renderingfunktionen.
 
 Entstanden durch mechanischen Modul-Split aus easydateien; die Logik ist unveraendert.
 """
@@ -67,7 +67,7 @@ from easydateien_common import (
 
 #!/usr/bin/env python3
 """
-EasyDateien — Minimalistischer, hocheffizienter Terminal-Dateimanager für macOS.
+EasyDateien — Minimalistischer, hocheffizienter Terminaldateimanager für macOS.
 Single-Source-of-Truth & optimi-Norm konform.
 """
 
@@ -117,7 +117,7 @@ class FileEntry:
                 except OSError:
                     pass
                 try:
-                    tst = os.stat(path)  # folgt dem Link: Ziel-Typ und -Größe
+                    tst = os.stat(path)  # folgt dem Link: Zieltyp und -Größe
                     self.is_dir = stat.S_ISDIR(tst.st_mode)
                     self.size = tst.st_size
                     self.is_exec = bool(tst.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)) and not self.is_dir
@@ -305,7 +305,7 @@ def wrap_line_to_width(text: str, max_w: int) -> List[str]:
     return res if res else [""]
 
 def get_shell_environment() -> Tuple[str, Dict[str, str]]:
-    """Ermittelt die Benutzer-Shell und stellt einen vollständigen macOS-Umgebungs- und PATH-Satz bereit."""
+    """Ermittelt die Benutzershell und stellt einen vollständigen macOS-Umgebungs- und PATH-Satz bereit."""
     user_shell = os.environ.get("SHELL", "/bin/zsh")
     if not os.path.exists(user_shell):
         user_shell = "/bin/zsh" if os.path.exists("/bin/zsh") else "/bin/bash"
@@ -331,7 +331,7 @@ def get_shell_environment() -> Tuple[str, Dict[str, str]]:
         if sp not in path_parts and os.path.exists(sp):
             path_parts.append(sp)
     env["PATH"] = ":".join(path_parts)
-    # Geerbte Terminalgroessen-Variablen entfernen: shutil.get_terminal_size()
+    # Geerbte Terminalgroessenvariablen entfernen: shutil.get_terminal_size()
     # wertet COLUMNS/LINES vor dem ioctl aus; vererbte Werte vom aeusseren
     # Terminal wuerden die Panelbreite ueberschreiben (kuenstliche Mindest-
     # breite, falscher Umbruch). Ohne diese Variablen liest jedes Programm die
@@ -415,7 +415,7 @@ def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tupl
     return res, box_w
 
 def format_size(size_bytes: int) -> str:
-    """Formatiert Byte-Größen nach standardisierten Einheiten."""
+    """Formatiert Bytegrößen nach standardisierten Einheiten."""
     if size_bytes < 1024:
         return f"{size_bytes} B"
     val = float(size_bytes)
@@ -595,7 +595,7 @@ _clip_worker_started = False
 
 
 def _clipboard_worker():
-    """Arbeitet Zwischenablage-Aufträge der Reihe nach ab (FIFO)."""
+    """Arbeitet Zwischenablageaufträge der Reihe nach ab (FIFO)."""
     while True:
         _CLIP_QUEUE_EVENT.wait()
         _CLIP_QUEUE_EVENT.clear()

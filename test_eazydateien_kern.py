@@ -73,7 +73,7 @@ class TestKeyBindings(unittest.TestCase):
             self.fail(f"Build_keymap scheitert an bereinigten Belegungen: {e}")
 
     def test_entfernen_loescht(self):
-        # Entfernen (DELETE) muss auf Löschen (trash) gelegt sein (Standard-Belegung)
+        # Entfernen (DELETE) muss auf Löschen (trash) gelegt sein (Standardbelegung)
         keymap = common.build_keymap(None)
         self.assertEqual(keymap.get("DELETE"), "trash",
                          "DELETE ist nicht auf Löschen gelegt — Entfernen würde nichts auslösen")
@@ -448,7 +448,7 @@ class TestAppKern(unittest.TestCase):
             steps += 1
             self.assertLess(steps, 1000)
 
-        self.assertGreater(steps, 25, "Umbruch-Zeilen wurden beim Scrollen nicht berücksichtigt")
+        self.assertGreater(steps, 25, "Umbruchzeilen wurden beim Scrollen nicht berücksichtigt")
         screen = self.app.build_screen(80, 24)
         joined = "\n".join(common.ANSI_ESCAPE_RE.sub("", l) for l in screen)
         self.assertIn("ENDE-25", joined, "Letzte Zeile der Datei wird am unteren Anschlag nicht angezeigt")
@@ -515,7 +515,7 @@ class TestAppKern(unittest.TestCase):
         self.app.build_screen(90, 24)
         idx_vorher = self.app.selected_idx
 
-        # Mausrad rechts (in der Vorschau-Spalte x=80, y=10) scrollt Vorschau, nicht Dateiliste
+        # Mausrad rechts (in der Vorschauspalte x=80, y=10) scrollt Vorschau, nicht Dateiliste
         self.app.handle_mouse_wheel("down", x=80, y=10)
         self.assertEqual(self.app.selected_idx, idx_vorher)
         self.assertEqual(self.app.preview_scroll_offset, 1)

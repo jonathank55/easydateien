@@ -32,7 +32,7 @@ jobs:
           done
           exit $failed
 
-      - name: Test-Suite ausführen
+      - name: Testsuite ausführen
         run: python3 run_tests.py
 
   installationsmatrix:

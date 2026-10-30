@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Umfassende Konsolen-Tests: maximale Zuverlässigkeit und native Darstellung.
+"""Umfassende Konsolentests: maximale Zuverlässigkeit und native Darstellung.
 
 Zwei Ebenen:
-1. Unit-Ebene: Ausgabe-Verarbeitung, Umbruch, Scrollen, Puffer, interne Befehle
+1. Unit-Ebene: Ausgabeverarbeitung, Umbruch, Scrollen, Puffer, interne Befehle
    (cd/clear/exit), Verzeichnis-Sync, Tab-Expansion, PTY-Breite.
 2. PTY-Echtestebene: die echte App in einem Pseudo-Terminal mit echter
    Tastatur — Konsole öffnen, Befehle tippen, Strg+C, Fokuswechsel, Beenden.
@@ -47,7 +47,7 @@ def make_base(names=(), dirs=()):
 
 
 class TestKonsoleUnit(unittest.TestCase):
-    """Ebene 1: Ausgabe-Verarbeitung und Konsolenverhalten ohne Terminal."""
+    """Ebene 1: Ausgabeverarbeitung und Konsolenverhalten ohne Terminal."""
 
     def setUp(self):
         self.orig_cwd = os.getcwd()

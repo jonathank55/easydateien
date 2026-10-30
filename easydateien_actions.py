@@ -69,12 +69,12 @@ class EasyDateienActions:
             elif force:
                 # Sicherheitsnetz (z. B. beim Programmende): auch ohne
                 # gesetztes Flag die Modi bedingungslos zuruecksetzen,
-                # damit das normale Terminal keinen Maus-Muell empfängt.
+                # damit das normale Terminal keinen Mausmuell empfängt.
                 sys.stdout.write("\033[?1006l\033[?1000l")
                 sys.stdout.flush()
 
     def sync_mouse_state(self):
-        """Synchronisiert das Terminal-Maus-Tracking mit dem aktuellen Konfigurationsstatus."""
+        """Synchronisiert das Terminalmaus-Tracking mit dem aktuellen Konfigurationsstatus."""
         should_enable = bool(self.config.get("mouse_support", True)) and not (self.show_console and self.console_focused)
         self.set_mouse_tracking(should_enable)
 
@@ -183,7 +183,7 @@ class EasyDateienActions:
     def poll_changes(self) -> bool:
         """Prüft kostengünstig auf Änderungen im Dateisystem; True bedeutet: Bildschirm neu zeichnen.
 
-        Ordner-Stempel werden bei jedem Aufruf geprüft (ein stat-Aufruf je sichtbarem Ordner). Zusätzlich
+        Ordnerstempel werden bei jedem Aufruf geprüft (ein stat-Aufruf je sichtbarem Ordner). Zusätzlich
         werden die sichtbaren Ordner in adaptiven Abständen komplett neu eingelesen, damit auch Größen- und
         Zeitänderungen einzelner Dateien (z. B. laufende Downloads) sofort erscheinen.
         """
@@ -286,7 +286,7 @@ class EasyDateienActions:
         return False
 
     def reveal_filename(self, name: str) -> bool:
-        """Wie select_filename, hebt aber Filter und Versteckt-Ausblendung auf, falls sie den Eintrag verbergen."""
+        """Wie select_filename, hebt aber Filter und Verstecktausblendung auf, falls sie den Eintrag verbergen."""
         if self.select_filename(name):
             return True
         if self.filter_query:
@@ -339,7 +339,7 @@ class EasyDateienActions:
         try:
             editor_bin = shlex.split(template)[0]
         except (ValueError, IndexError):
-            self.set_status(f"Ungültiger Editor-Befehl: {template}", "error")
+            self.set_status(f"Ungültiger Editorbefehl: {template}", "error")
             return
         if not shutil.which(editor_bin, path=env.get("PATH")):
             self.set_status(f"Editor „{editor_bin}“ nicht gefunden (Einstellung: m)", "error")
@@ -405,7 +405,7 @@ class EasyDateienActions:
             self.set_status(f"Auswahl: {len(self.selected_paths)}")
             return
         elif self.clipboard_paths:
-            # Zeiger-Datei zur Vormerkung hinzufügen statt die Vormerkung zu ersetzen
+            # Zeigerdatei zur Vormerkung hinzufügen statt die Vormerkung zu ersetzen
             targets = list(self.clipboard_paths)
             if cur_p not in targets:
                 targets.append(cur_p)
@@ -418,9 +418,9 @@ class EasyDateienActions:
 
     def copy_selection(self):
         """Kopiert wie im macOS-Finder: Die Zwischenablage wird immer
-        komplett durch die aktuelle Auswahl (oder den Zeiger-Eintrag) ersetzt
+        komplett durch die aktuelle Auswahl (oder den Zeigereintrag) ersetzt
         — kein Ansammeln, kein Toggle, kein '+'-Marker. Die Zwischenablage
-        bleibt bis zur nächsten Kopier-/Ausschneiden-Aktion bestehen."""
+        bleibt bis zur nächsten Kopier-/Ausschneidenaktion bestehen."""
         if not self.items:
             return
         self.touch_last_used_dir()
@@ -598,7 +598,7 @@ class EasyDateienActions:
     def start_paste(self, sources: List[str], allow_replace: bool = False):
         """Startet das Einfügen im Hintergrund; die App bleibt bedienbar.
 
-        Liefert True, wenn ein Hintergrund-Job gestartet wurde. UI-Updates
+        Liefert True, wenn ein Hintergrundjob gestartet wurde. UI-Updates
         (Fertigmeldung, Undo, Zwischenablage leeren) erfolgen in poll_paste().
         """
         if getattr(self, "_paste_thread", None) is not None and self._paste_thread.is_alive():
@@ -634,7 +634,7 @@ class EasyDateienActions:
         return True
 
     def poll_paste(self) -> bool:
-        """Prueft den Paste-Hintergrund-Job; True = Bildschirm neu zeichnen."""
+        """Prueft den Paste-Hintergrundjob; True = Bildschirm neu zeichnen."""
         thread = getattr(self, "_paste_thread", None)
         if thread is None:
             return False
@@ -763,7 +763,7 @@ class EasyDateienActions:
 
     @staticmethod
     def _zip_build_archive(dest: str, valid_targets, progress: Optional[dict] = None) -> int:
-        """Schreibt das ZIP-Archiv (laeuft im Hintergrund-Thread). Liefert die Zahl uebersprungener Dateien."""
+        """Schreibt das ZIP-Archiv (laeuft im Hintergrundthread). Liefert die Zahl uebersprungener Dateien."""
         skipped = 0
         with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
             for target in valid_targets:
@@ -796,7 +796,7 @@ class EasyDateienActions:
     def start_zip_creation(self):
         """Startet die ZIP-Erstellung im Hintergrund; die App bleibt bedienbar.
 
-        Liefert True, wenn ein Hintergrund-Job gestartet wurde. Schreibt bei
+        Liefert True, wenn ein Hintergrundjob gestartet wurde. Schreibt bei
         Fehlern (z. B. bereits laufende Erstellung) eine Statusmeldung und
         liefert False. UI-Updates (Fertigmeldung, Undo, Auswahl) erfolgen
         erst in poll_zip_creation() im Hauptthread.
@@ -866,7 +866,7 @@ class EasyDateienActions:
         return True
 
     def poll_zip_creation(self) -> bool:
-        """Prueft den Hintergrund-Job; True = Bildschirm neu zeichnen.
+        """Prueft den Hintergrundjob; True = Bildschirm neu zeichnen.
 
         Muss regelmaessig aus dem Hauptthread aufgerufen werden (z. B. in der
         Poll-Schleife der Hauptschleife). Aktualisiert die Fortschrittsanzeige
@@ -913,7 +913,7 @@ class EasyDateienActions:
         return True
 
     def create_zip_archive(self):
-        """Synchroner Pfad (z. B. fuer Tests): startet den Hintergrund-Job und wartet auf Abschluss."""
+        """Synchroner Pfad (z. B. fuer Tests): startet den Hintergrundjob und wartet auf Abschluss."""
         if not self.start_zip_creation():
             return None
         self._zip_thread.join()
@@ -1015,7 +1015,7 @@ class EasyDateienActions:
 
             elif action.action_type == "create":
                 p = action.data.get("path")
-                # Bei Ordner-Erstellung mit verschobenen Elementen: erst die
+                # Bei Ordnererstellung mit verschobenen Elementen: erst die
                 # Elemente an ihren Ursprung zurücklegen, dann Ordner entfernen.
                 for old_src, new_dst in (action.data.get("moved_records") or []):
                     try:
@@ -1114,7 +1114,7 @@ class EasyDateienActions:
 
     def load_file_preview_lines(self, path: str, max_lines: int, wrap_width: Optional[int] = None) -> List[str]:
         cfg = self.config
-        # Sortierparameter gehören zum Cache-Schlüssel, damit die Vorschau derselben Anordnung wie die Dateispalten folgt
+        # Sortierparameter gehören zum Cacheschlüssel, damit die Vorschau derselben Anordnung wie die Dateispalten folgt
         sort_key = (path, cfg.get("sort_by", "mtime"), cfg.get("sort_reverse", True), cfg.get("sort_dir_first", True))
         # Änderungstempel der Datei: bei Inhaltsänderung (z. B. externer Editor) wird die Vorschau neu geladen
         try:
@@ -1156,7 +1156,7 @@ class EasyDateienActions:
                             sort_reverse=cfg.get("sort_reverse", True),
                             sort_dir_first=cfg.get("sort_dir_first", True),
                         )
-                        lines.append(f"Archiv-Inhalt ({len(infos)} Dateien):")
+                        lines.append(f"Archivinhalt ({len(infos)} Dateien):")
                         for fe in zip_entries[:10000]:
                             if fe.is_dir:
                                 lines.append(f" {fe.name}")
@@ -1185,8 +1185,8 @@ class EasyDateienActions:
                         ext_desc = "PDF" if path.lower().endswith(".pdf") else "Bild"
                         lines = [f" [Lade {ext_desc}-Vorschau...]"]
                 else:
-                    # Dateigroesse pruefen: Riesen-Dateien (Modelle, Videos)
-                    # brauchen keinen vollstaendigen Vorschau-Cache; sie
+                    # Dateigroesse pruefen: Riesendateien (Modelle, Videos)
+                    # brauchen keinen vollstaendigen Vorschaucache; sie
                     # werden nur bis zum Budget gelesen (Scrollen deckt das
                     # Lesenswerte ab, ohne die App beim Blättern zu blocken).
                     try:
@@ -1210,7 +1210,7 @@ class EasyDateienActions:
                             clean_line = line.rstrip("\r\n").replace("\t", "    ")
                             clean_line = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_line)
                             if "\x00" in line or (len(clean_line) == 0 and len(line.strip()) > 0 and file_size > 1024 * 1024):
-                                # Binaär-Inhalt in einer Grossdatei: Vorschau
+                                # Binaärinhalt in einer Grossdatei: Vorschau
                                 # abbrechen statt Muell anzeigen bzw. zu lesen.
                                 lines = ["[Binärdatei oder nicht lesbar]"] if not lines else lines
                                 break
@@ -1227,8 +1227,8 @@ class EasyDateienActions:
 
         lines = self.cached_file_preview_lines
 
-        # Umbruch nach dem Cache anwenden, damit auch Cache-Treffer und Breitenänderungen (Resize) umbrechen.
-        # Inkrementeller Umbruch-Cache: bricht alle benötigten Zeilen exakt um (ohne vorzeitigen
+        # Umbruch nach dem Cache anwenden, damit auch Cachetreffer und Breitenänderungen (Resize) umbrechen.
+        # Inkrementeller Umbruchcache: bricht alle benötigten Zeilen exakt um (ohne vorzeitigen
         # 3x-Zeilenschnitt) und hält bereits umgebrochene Zeilen für verzögerungsfreies Scrollen bereit.
         if self.preview_wrap and wrap_width and wrap_width > 0 and not is_media:
             wrap_key = (path, cache_key, wrap_width)
@@ -1309,7 +1309,7 @@ class EasyDateienActions:
     )
 
     def _append_console_output(self, text: str) -> None:
-        """Fuegt Ausgabe der Konsole hinzu: filtert Shell-Stoerzeilen, entfernt
+        """Fuegt Ausgabe der Konsole hinzu: filtert Shellstoerzeilen, entfernt
         ANSI- und Steuerzeichen und begrenzt den Puffer."""
         for l in text.splitlines():
             l_lower = l.lower()
@@ -1344,11 +1344,11 @@ class EasyDateienActions:
 
     def _run_console_streaming(self, cmd: str, user_shell: str, env, fd: Optional[int]) -> None:
         """Führt einen nicht-interaktiven Befehl in einem echten Pseudo-Terminal
-        aus. Verhaelt sich wie ein Standard-Terminal: Ausgabe streamt live ins
+        aus. Verhaelt sich wie ein Standardterminal: Ausgabe streamt live ins
         Panel, Strg+C erreicht den Befehl selbst (erst SIGINT, dann SIGKILL),
         es gibt kein hartes Zeitlimit."""
         master_fd, slave_fd = os.openpty()
-        # Dem PTY die Breite des Konsolen-Panels mitteilen: Programme wie ls
+        # Dem PTY die Breite des Konsolenpanels mitteilen: Programme wie ls
         # formatieren ihre Spalten dann passend zum Panel (wie in einem echten
         # Terminal, dessen Breite dem Fenster entspricht).
         try:
@@ -1503,9 +1503,9 @@ class EasyDateienActions:
         is_git_interactive = cmd.startswith("git ") and any(sub in cmd for sub in ["log", "diff", "commit", "add -p", "add -i", "rebase", "branch", "show", "stash", "blame"])
         is_standalone_stdin_tool = (first_prog in ("cat", "grep", "egrep", "fgrep", "sed", "awk", "head", "tail", "cut", "sort", "uniq", "wc")) and (len(tokens) <= 2 and not any(ch in cmd for ch in ("<", ">", "|", "/", ".")))
 
-        # rm/ln/chmod & Co. mit Bestaetigungs-Potenzial (override-Prompts bei
+        # rm/ln/chmod & Co. mit Bestaetigungspotenzial (override-Prompts bei
         # root-Besitz, -i/-I Flags): als interaktiv behandeln, damit die volle
-        # Terminal-Uebergabe mit nativer Eingabe genutzt wird.
+        # Terminaluebergabe mit nativer Eingabe genutzt wird.
         is_confirm_tool = (first_prog in ("rm", "cp", "mv", "ln", "chmod", "chown", "unlink")
                            and any(flag in cmd for flag in (" -i", " -I", "-i ", "-I ")))
         is_interactive = (first_prog in interactive_tools) or has_interactive_pipe or is_git_interactive or is_standalone_stdin_tool or is_confirm_tool
@@ -1525,7 +1525,7 @@ class EasyDateienActions:
             except Exception as e:
                 self.console_output_lines.append(f"Fehler: {e}")
             finally:
-                # Terminal-Zustand stoisch wiederherstellen: Jeder Schritt
+                # Terminalzustand stoisch wiederherstellen: Jeder Schritt
                 # einzeln abgesichert — ein Fehler darf die App nie abstuerzen
                 # lassen (termios.error, wenn die Shell das Terminal in einem
                 # ungueltigen Zustand hinterlassen hat).
@@ -1565,7 +1565,7 @@ class EasyDateienActions:
         self.set_status("Konsole geöffnet" if self.show_console else "Konsole geschlossen")
 
     def _schnellstart_eintraege(self) -> list:
-        """Liefert die Schnellstart-Einträge aus der Konfiguration."""
+        """Liefert die Schnellstarteinträge aus der Konfiguration."""
         eintraege = self.config.get("schnellstart_eintraege")
         if not isinstance(eintraege, list) or not eintraege:
             from easydateien_common import DEFAULT_CONFIG
@@ -1589,7 +1589,7 @@ class EasyDateienActions:
         return liste
 
     def _schnellstart_execute(self, eintrag):
-        """Führt einen Schnellstart-Befehl aus: GUI-Befehle (open -a/osascript)
+        """Führt einen Schnellstartbefehl aus: GUI-Befehle (open -a/osascript)
         entkoppelt starten; CLI-Befehle in der integrierten Konsole ausführen."""
         titel = eintrag.get("titel", "")
         befehl = eintrag.get("befehl", "")
@@ -1622,7 +1622,7 @@ class EasyDateienActions:
         liste = self._schnellstart_liste()
         if not liste:
             self.active_dialog = None
-            self.set_status("Keine Schnellstart-Einträge konfiguriert (m zum Anpassen)", "warning")
+            self.set_status("Keine Schnellstarteinträge konfiguriert (m zum Anpassen)", "warning")
             return True
         anzahl = len(liste)
         if key in ("UP", "k"):
@@ -1712,10 +1712,10 @@ class EasyDateienActions:
         return sichtbar, preview_wrap_width
 
     def _scroll_preview(self, richtung: int) -> bool:
-        """Scrollt die Datei-Vorschau um eine Stufe (richtung: -1 hoch, +1 runter).
+        """Scrollt die Dateivorschau um eine Stufe (richtung: -1 hoch, +1 runter).
         Bei mehrseitigen PDF-Dokumenten blättert es seitenweise um.
         Gibt True zurück, wenn gescrollt/geblättert wurde (am Anschlag ohne Bewegung: False,
-        damit PG_UP/DOWN dann das gewohnte Listen-Verhalten behalten)."""
+        damit PG_UP/DOWN dann das gewohnte Listenverhalten behalten)."""
         if not self.items or not (0 <= self.selected_idx < len(self.items)):
             return False
         cur = self.items[self.selected_idx]
@@ -1869,7 +1869,7 @@ class EasyDateienActions:
                 self.console_scroll_offset = max(0, self.console_scroll_offset - 2)
             return True
         else:
-            # Mauszeiger über der rechten Spalte (Datei-Vorschau): Vorschau
+            # Mauszeiger über der rechten Spalte (Dateivorschau): Vorschau
             # scrollen, exakt wie mit BildAuf/BildAb. Sonst: Cursor bewegen.
             if x is not None and y is not None and self._preview_aktiv() and layout.get("eff_cols") == 3:
                 col_x = x - 1
@@ -2138,8 +2138,8 @@ class EasyDateienActions:
                 # Auf case-insensitiven Dateisystemen (macOS) ist der neue Name
                 # scheinbar "vorhanden", obwohl es dieselbe Datei ist (z. B. nur
                 # Gross/Kleinschreibung geaendert). os.path.samefile prüft die
-                # Datei-Identitaet (Inode) statt des Pfadtexts und erkennt auch
-                # reine Case-Renames. Ersetzungs-Dialog nur bei einer ANDEREN Datei.
+                # Dateiidentitaet (Inode) statt des Pfadtexts und erkennt auch
+                # reine Case-Renames. Ersetzungsdialog nur bei einer ANDEREN Datei.
                 same_file = os.path.exists(new_path) and os.path.samefile(new_path, target_it.path)
                 if os.path.exists(new_path) and not same_file:
                     # Vorhandenen Eintrag ersetzen? (gleiche Bestätigung wie beim Einfügen)
@@ -2173,7 +2173,7 @@ class EasyDateienActions:
                     if is_dir_target:
                         os.makedirs(target_p, exist_ok=True)
                         # Regel: Sind aktuell Dateien markiert (nur '*', ohne aktive
-                        # Kopieren/Ausschneiden-Vormerkung), wandern diese nach dem
+                        # Kopieren/Ausschneidenvormerkung), wandern diese nach dem
                         # Erstellen in den neuen Ordner. Nur bei Ordnern ('/' am Ende).
                         move_sel = list(self.selected_paths) if self.selected_paths and not (self.clipboard_mode or self.clipboard_paths) else []
                         if move_sel:
@@ -2220,7 +2220,7 @@ class EasyDateienActions:
                 return True
             elif mode == "goto_path":
                 if not val:
-                    self.set_status("Pfad-Navigation abgebrochen")
+                    self.set_status("Pfadnavigation abgebrochen")
                     return True
                 target = os.path.expanduser(val)
                 if not os.path.isabs(target):

@@ -30,8 +30,8 @@ class EasyDateienView:
 
 
     def build_screen(self, term_cols: int, term_rows: int) -> List[str]:
-        """Baut den vollständigen Terminal-Bildschirm pixelgenau und flickerfrei auf."""
-        # Visuelles Kopier-Feedback: Fuer ~1 Sekunde nach dem Kopieren zeigen
+        """Baut den vollständigen Terminalbildschirm pixelgenau und flickerfrei auf."""
+        # Visuelles Kopierfeedback: Fuer ~1 Sekunde nach dem Kopieren zeigen
         # die kopierten Eintraege '+' (statt '*' oder unmarkiert), danach
         # automatisch zurueck zum vorherigen Zustand.
         _flash_on = getattr(self, "_copy_flash_until", 0.0) and time.monotonic() < self._copy_flash_until
@@ -236,7 +236,7 @@ class EasyDateienView:
                 req_target = (cur_item.path, cur_pdf_page)
                 if req_target != getattr(self, "_last_requested_target", None):
                     self._last_requested_target = req_target
-                    # Vorausschauendes Vorab-Laden für Nachbardateien und Folgeseiten anstoßen
+                    # Vorausschauendes Vorabladen für Nachbardateien und Folgeseiten anstoßen
                     prefetch_paths = []
                     if self.items:
                         for off in (1, 2, -1):
@@ -773,7 +773,7 @@ class EasyDateienView:
 
             all_lines.append(st_line)
 
-        # Modale Vordergrund-Menüs im Yazi-Stil zentriert überlagern
+        # Modale Vordergrundmenüs im Yazi-Stil zentriert überlagern
         if self.active_dialog == "schnellstart":
             ss_liste = self._schnellstart_liste()
             ss_key = next((k for k, a in self.keymap.items() if a == "schnellstart"), "i")
@@ -868,7 +868,7 @@ class EasyDateienView:
                     r_pos = start_y + b_idx
                     if 0 <= r_pos < len(all_lines):
                         # C_RESET am Zeilenanfang: aktives Fett der überlagerten Zeile
-                        # darf nicht in das Hilfe-Menü übernommen werden
+                        # darf nicht in das Hilfemenü übernommen werden
                         all_lines[r_pos] = replace_ansi_range(all_lines[r_pos], start_x, f"{C_RESET}{bl}", box_w, term_cols)
 
         return all_lines[:term_rows]
@@ -879,7 +879,7 @@ class EasyDateienView:
         m_lbl, q_lbl = kd("menu", "m"), kd("quit", "q")
         tab_lbl = kd("console_focus", "Tab")
         # Bei immer eingeblendeter Konsole entfällt [t] Konsole; stattdessen
-        # erscheint [Tab] Fokus (Fokus-Wechsel zur Konsole).
+        # erscheint [Tab] Fokus (Fokuswechsel zur Konsole).
         if self.console_always_visible:
             console_opt = f"[{tab_lbl}] Fokus"
         else:

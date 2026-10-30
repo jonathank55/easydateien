@@ -3,7 +3,7 @@
 
 Ermöglicht native, hochauflösende Vorschauen wie in Yazi:
 1. Kitty Graphics Protocol (Ghostty, Kitty, WezTerm): echte Rastergrafik
-2. Chafa / Halbblock-Fallback: universelle 24-Bit-ANSI-Zeichendarstellung
+2. Chafa / Halbblockfallback: universelle 24-Bit-ANSI-Zeichendarstellung
    für Terminals ohne Grafikprotokoll (z. B. Terminal.app).
 """
 
@@ -131,7 +131,7 @@ def get_pdf_page_count(path: str) -> int:
 
 
 def get_media_cache_dir() -> str:
-    """Liefert den Cache-Ordner für Vorschaubilder und legt ihn bei Bedarf an."""
+    """Liefert den Cacheordner für Vorschaubilder und legt ihn bei Bedarf an."""
     if not os.path.isdir(_MEDIA_CACHE_DIR):
         try:
             os.makedirs(_MEDIA_CACHE_DIR, exist_ok=True)
@@ -170,7 +170,7 @@ def supports_kitty_graphics() -> bool:
 
 
 def get_terminal_font_ratio(force_refresh: bool = False) -> float:
-    """Ermittelt das Breite-zu-Höhe-Verhältnis einer Terminal-Textzelle (mit Zwischenspeicherung)."""
+    """Ermittelt das Breite-zu-Höhe-Verhältnis einer Terminaltextzelle (mit Zwischenspeicherung)."""
     global _FONT_RATIO_CACHE
     if _FONT_RATIO_CACHE is not None and not force_refresh:
         return _FONT_RATIO_CACHE
@@ -193,7 +193,7 @@ def get_terminal_font_ratio(force_refresh: bool = False) -> float:
 
 
 def _read_image_pixel_size_raw(path: str) -> Optional[Tuple[int, int]]:
-    """Liest die tatsächlichen Pixel-Dimensionen (Breite, Höhe) direkt aus Dateiheadern."""
+    """Liest die tatsächlichen Pixeldimensionen (Breite, Höhe) direkt aus Dateiheadern."""
     if not path or not os.path.isfile(path):
         return None
     try:
@@ -233,7 +233,7 @@ def _read_image_pixel_size_raw(path: str) -> Optional[Tuple[int, int]]:
 
 
 def get_image_pixel_size(path: str) -> Optional[Tuple[int, int]]:
-    """Liefert Pixel-Dimensionen mit speicherresidenter Pufferung für maximale Geschwindigkeit."""
+    """Liefert Pixeldimensionen mit speicherresidenter Pufferung für maximale Geschwindigkeit."""
     if not path:
         return None
     if path in _IMAGE_SIZE_MEM:
@@ -247,11 +247,11 @@ def get_image_pixel_size(path: str) -> Optional[Tuple[int, int]]:
 
 
 def compute_fit_dimensions(img_w: int, img_h: int, max_cols: int, max_rows: int, font_ratio: float = 0.5) -> Tuple[int, int]:
-    """Berechnet Zell-Dimensionen unter strikter Beibehaltung des nativen Seitenverhältnisses."""
+    """Berechnet Zelldimensionen unter strikter Beibehaltung des nativen Seitenverhältnisses."""
     if img_w <= 0 or img_h <= 0 or max_cols <= 0 or max_rows <= 0:
         return (max(1, max_cols), max(1, max_rows))
 
-    # Visuelles Seitenverhältnis in Textzellen-Einheiten
+    # Visuelles Seitenverhältnis in Textzelleneinheiten
     cell_aspect = (img_w / img_h) / font_ratio
     box_aspect = max_cols / max_rows
 
@@ -350,7 +350,7 @@ def get_cached_thumbnail(path: str, page: int = 1) -> Optional[str]:
 def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> Optional[str]:
     """Erzeugt ein optimiertes PNG-Vorschaubild im Cache und gibt dessen Pfad zurück.
 
-    Verwendet deterministische Fallback-Ketten:
+    Verwendet deterministische Fallbackketten:
     - PDF: easydateien_pdf (nativ) -> pdftoppm (Poppler) -> sips (Seite 1) -> qlmanage
     - Bild: Direktnutzung bei Standardformaten <= 2 MB, sonst sips -> magick
     - Video: ffmpeg Frame 1 -> qlmanage
@@ -377,7 +377,7 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> 
                 _FAST_PATH_PAGE_CACHE[(path, page)] = legacy
                 return legacy
 
-        # A) Nativer PDF-Helfer (macOS - schnell via CoreGraphics & ImageIO mit Batch-Vorabladen)
+        # A) Nativer PDF-Helfer (macOS - schnell via CoreGraphics & ImageIO mit Batchvorabladen)
         helper = ensure_pdf_helper()
         if helper:
             cmd = [helper, path, str(page), cached_png, str(max_dim)]
@@ -670,7 +670,7 @@ def make_python_halfblock_lines(image_path: str, cols: int, rows: int) -> List[s
                 row_rgb.append((r, g, b))
             pixels.append(row_rgb)
 
-        # Halbblock-Zeilen konstruieren (je 2 vertikale Pixel pro Textzelle: oben FG, unten BG)
+        # Halbblockzeilen konstruieren (je 2 vertikale Pixel pro Textzelle: oben FG, unten BG)
         lines = []
         for r_idx in range(rows):
             top_y = r_idx * 2
@@ -695,7 +695,7 @@ def make_python_halfblock_lines(image_path: str, cols: int, rows: int) -> List[s
 
 
 class PreviewWorker:
-    """Hintergrund-Arbeiter für nicht-blockierende Vorschauerzeugung und Vorab-Pufferung.
+    """Hintergrundarbeiter für nicht-blockierende Vorschauerzeugung und Vorabpufferung.
 
     Garantiert vollkommen verzögerungsfreie TUI-Navigation:
     - Der Hauptthread wird niemals durch rechenintensive Konvertierungen blockiert.
@@ -714,7 +714,7 @@ class PreviewWorker:
         self._thread.start()
 
     def request(self, path: str, page: int = 1, prefetch_pages: Optional[List[int]] = None, prefetch_paths: Optional[List[str]] = None):
-        """Reicht eine Vorschau-Anfrage ein. Verdrängt veraltete Einzelaufträge sofort."""
+        """Reicht eine Vorschauanfrage ein. Verdrängt veraltete Einzelaufträge sofort."""
         if not path or not is_previewable_media(path):
             return
         with self._lock:
@@ -745,7 +745,7 @@ class PreviewWorker:
             return False
 
     def clear(self):
-        """Verwirft anstehende Vorab-Aufträge (z.B. bei Verzeichniswechsel)."""
+        """Verwirft anstehende Vorabaufträge (z.B. bei Verzeichniswechsel)."""
         with self._lock:
             self._active_target = None
             self._prefetch_list.clear()
@@ -779,7 +779,7 @@ class PreviewWorker:
                     if self._active_target == target:
                         self._active_target = None
 
-            # Vorab-Pufferung für PDF-Folgeseiten & Nachbardateien in Leerlaufphasen
+            # Vorabpufferung für PDF-Folgeseiten & Nachbardateien in Leerlaufphasen
             for pf_path, pf_page in prefetch:
                 with self._lock:
                     if self._active_target is not None or self._stop_event.is_set():
@@ -796,7 +796,7 @@ GLOBAL_PREVIEW_WORKER = PreviewWorker()
 
 
 def request_preview(path: str, page: int = 1, prefetch_pages: Optional[List[int]] = None, prefetch_paths: Optional[List[str]] = None):
-    """Reicht eine Vorschau-Anfrage an den globalen Hintergrund-Arbeiter weiter."""
+    """Reicht eine Vorschauanfrage an den globalen Hintergrundarbeiter weiter."""
     GLOBAL_PREVIEW_WORKER.request(path, page=page, prefetch_pages=prefetch_pages, prefetch_paths=prefetch_paths)
 
 
@@ -806,6 +806,6 @@ def poll_preview_ready(current_path: str, current_page: int = 1) -> bool:
 
 
 def clear_preview_queue():
-    """Löscht wartende Vorab-Aufträge des Hintergrund-Arbeiters."""
+    """Löscht wartende Vorabaufträge des Hintergrundarbeiters."""
     GLOBAL_PREVIEW_WORKER.clear()
 

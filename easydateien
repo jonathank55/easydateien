@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""EasyDateien — Minimalistischer, hocheffizienter Terminal-Dateimanager für macOS.
+"""EasyDateien — Minimalistischer, hocheffizienter Terminaldateimanager für macOS.
 
 Einstiegspunkt: komponiert EasyDateienApp aus Kern, Action- und View-Mixin.
 Entstanden durch mechanischen Modul-Split; die Logik ist unveraendert.
@@ -77,7 +77,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self.items: List[FileEntry] = []
         self.selected_idx: int = 0
         self.view_start: int = 0
-        # Merkt sich pro Verzeichnis die letzte Zeigerposition (nur Pfeiltasten-Navigation links/rechts)
+        # Merkt sich pro Verzeichnis die letzte Zeigerposition (nur Pfeiltastennavigation links/rechts)
         self.dir_cursor_memory: Dict[str, int] = {}
         self.selected_paths: Set[str] = set()
         self.clipboard_paths: List[str] = []
@@ -128,12 +128,12 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self.console_scroll_offset: int = 0
         self.last_cmd_interactive: bool = False
         self._mouse_tracking_active: bool = False
-        # Terminal-Sicherung: exakter termios-Zustand vor TUI-Start (None = TUI
+        # Terminalsicherung: exakter termios-Zustand vor TUI-Start (None = TUI
         # war nie aktiv). main() stellt daraus den Ausgangszustand wieder her.
         self._saved_termios = None
         self._tui_active: bool = False
 
-        # Verzeichnis-Cache: Pfad -> (mtime_ns des Ordners, Version, Einträge)
+        # Verzeichniscache: Pfad -> (mtime_ns des Ordners, Version, Einträge)
         self._raw_cache: Dict[str, Tuple[int, int, List[FileEntry]]] = {}
         self._raw_version: int = 0
         self._arranged_cache: Dict[Tuple, List[FileEntry]] = {}
@@ -285,7 +285,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
 
                 key = read_key(fd, timeout=0.05)
                 if not key:
-                    # Kein Tastendruck: Dateisystem-Aenderungen (z. B. Downloads,
+                    # Kein Tastendruck: Dateisystemaenderungen (z. B. Downloads,
                     # rm im Hintergrund, externe Programme) sofort erkennen und
                     # die Anzeige aktuell halten, ohne auf eine Taste zu warten.
                     if self.poll_changes():
@@ -301,7 +301,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     # Medienvorschau im Hintergrund: Sobald Konvertierung fertig ist, neu zeichnen.
                     if self.poll_preview():
                         needs_redraw = True
-                    # Kopier-Feedback: Nach Ablauf der ~1 Sekunde das '+'
+                    # Kopierfeedback: Nach Ablauf der ~1 Sekunde das '+'
                     # automatisch entfernen (ein einmaliger Redraw genuegt).
                     if getattr(self, "_copy_flash_until", 0.0) and time.monotonic() >= self._copy_flash_until:
                         self._copy_flash_until = 0.0
@@ -422,7 +422,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                                 needs_redraw = True
                         except Exception:
                             pass
-                    elif key == "\x0c":  # Ctrl+L (Terminal-Ausgabe leeren)
+                    elif key == "\x0c":  # Ctrl+L (Terminalausgabe leeren)
                         self.console_output_lines.clear()
                         self.console_scroll_offset = 0
                         needs_redraw = True
@@ -673,7 +673,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         needs_redraw = True
                     continue
                 elif action == "zip":
-                    # Asynchron: laeuft in einem Hintergrund-Thread, die App
+                    # Asynchron: laeuft in einem Hintergrundthread, die App
                     # bleibt voll bedienbar; poll_zip_creation() schliesst ab.
                     if self.start_zip_creation():
                         needs_redraw = True
@@ -767,7 +767,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
             # Stoisch: jeder Schritt einzeln abgesichert — ein Fehler darf
             # weder die Wiederherstellung verhindern noch die App crashen.
             try:
-                # Laufende Hintergrund-Jobs (ZIP, Einfuegen) kurz abwarten,
+                # Laufende Hintergrundjobs (ZIP, Einfuegen) kurz abwarten,
                 # damit beim Beenden keine halbfertige Datei zurueckbleibt.
                 for job_attr in ("_zip_thread", "_paste_thread"):
                     job_thread = getattr(self, job_attr, None)
@@ -844,14 +844,14 @@ def main():
     parser = argparse.ArgumentParser(
         prog="easydateien",
         formatter_class=lambda prog: SingleLineHelpFormatter(prog, max_help_position=16, width=220),
-        description="Minimalistischer, hocheffizienter Terminal-Dateimanager für macOS.",
+        description="Minimalistischer, hocheffizienter Terminaldateimanager für macOS.",
         add_help=False
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
     parser.add_argument("-c", "--config", action="store_true", help="Konfigurationsmenü öffnen")
     parser.add_argument("-v", "--version", action="version", version="EasyDateien 1.5.5", help="Programmversion anzeigen")
     parser.add_argument("--cwd-file", dest="cwd_file", default=None, help="Pfad zur Datei, in die das Arbeitsverzeichnis geschrieben wird")
-    parser.add_argument("--init", dest="init_shell", nargs="?", const="zsh", default=None, help="Shell-Integrationscode ausgeben (zsh, bash, fish)")
+    parser.add_argument("--init", dest="init_shell", nargs="?", const="zsh", default=None, help="Shellintegrationscode ausgeben (zsh, bash, fish)")
     parser.add_argument("pfad", nargs="?", default=None, help="Startverzeichnis")
     args = parser.parse_args()
 
@@ -873,7 +873,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        # Garantierter Terminal-Reset — auch bei unerwarteten Ausnahmen:
+        # Garantierter Terminalreset — auch bei unerwarteten Ausnahmen:
         # Scroll-Region aufheben, Autowrap zuruecksetzen, Cursor zeigen,
         # Alternativbildschirm verlassen. Jeder Schritt einzeln abgesichert.
         import sys as _sys

@@ -1,4 +1,4 @@
-"""Tests fuer das asynchrone Einfuegen (Hintergrund-Thread + Polling).
+"""Tests fuer das asynchrone Einfuegen (Hintergrundthread + Polling).
 
 Grosse Kopier- und Verschiebevorgaenge duerfen die App nicht blockieren:
 start_paste() kehrt sofort zurueck, poll_paste() meldet den Fortschritt und

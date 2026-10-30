@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regressionstests: vollstaendiger Terminal-Reset nach Programmende.
+"""Regressionstests: vollstaendiger Terminalreset nach Programmende.
 
 Nach dem Beenden (q, Strg+C, Ausnahme) muss das Terminal exakt den Zustand
 wiederhaben, den es vor dem Start hatte:
@@ -9,7 +9,7 @@ wiederhaben, den es vor dem Start hatte:
 2. Die Escape-Sequenzen zum Reset (Alternate Screen verlassen, Cursor zeigen,
    Autowrap an, Scroll-Region aufheben, Maus-Tracking aus) muessen auf
    stdout ausgegeben werden.
-3. Auch bei einer Ausnahme in run() darf kein Halbfabrikat-Zustand
+3. Auch bei einer Ausnahme in run() darf kein Halbfabrikatzustand
    zurueckbleiben.
 
 Ebene 2 (PTY-Echtest) startet die echte App in einem Pseudo-Terminal,
@@ -58,7 +58,7 @@ def make_base(names=(), dirs=()):
 
 
 class TestMainFinallyReset(unittest.TestCase):
-    """Ebene 1: main() stellt den Terminal-Zustand per finally wieder her —
+    """Ebene 1: main() stellt den Terminalzustand per finally wieder her —
     ohne termios zu veraendern (kein setcbreak nach der Wiederherstellung)."""
 
     def _run_main_capture(self, run_side_effect=None):
@@ -184,7 +184,7 @@ class TestMainFinallyReset(unittest.TestCase):
             _, status = os.waitpid(pid, 0)
             after = termios.tcgetattr(master)
             self.assertEqual(reference, after,
-                             "Terminal-Zustand nach main()-finally nicht identisch")
+                             "Terminalzustand nach main()-finally nicht identisch")
             os.close(master)
         except (OSError, AttributeError):
             self.skipTest("PTY/fork nicht verfuegbar")
@@ -296,7 +296,7 @@ class TestTerminalResetEchtest(unittest.TestCase):
                     break
             out += self._pump(fd, 0.5)
             for label, seq in RESET_SEQUENCES.items():
-                self.assertIn(seq, out, f"Reset-Sequenz fehlt in End-Ausgabe: {label}")
+                self.assertIn(seq, out, f"Reset-Sequenz fehlt in Endausgabe: {label}")
         finally:
             try:
                 os.kill(pid, 9)

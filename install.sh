@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# EasyDateien — Minimalistischer Terminal-Dateimanager für macOS
+# EasyDateien — Minimalistischer Terminaldateimanager für macOS
 # Installationsskript
 #
 # Zwei Installationswege:
@@ -145,7 +145,7 @@ if command -v clang >/dev/null 2>&1 && [ -f "$SRC_DIR/easydateien_pdf.m" ]; then
     fi
 fi
 
-# 3. Standard-Konfiguration initialisieren oder HEILEN: Eine korrupte
+# 3. Standardkonfiguration initialisieren oder HEILEN: Eine korrupte
 # config.json (z. B. halbfertig durch abgebrochene Installation) wird
 # durch gueltige Standardwerte ersetzt, eine gueltige bleibt unberuehrt.
 CONFIG_KAPUTT=0
@@ -158,7 +158,7 @@ if [ ! -f "$CONFIG_DIR/config.json" ] || [ "$CONFIG_KAPUTT" -ne 0 ]; then
     if [ "$CONFIG_KAPUTT" -ne 0 ]; then
         echo "Korrupte Konfiguration erkannt — stelle Standardwerte wieder her ..."
     else
-        echo "Erstelle Standard-Konfiguration in $CONFIG_DIR/config.json..."
+        echo "Erstelle Standardkonfiguration in $CONFIG_DIR/config.json..."
     fi
     if command -v python3 >/dev/null 2>&1; then
         if ! python3 -c "
@@ -210,10 +210,10 @@ for TARGET_BIN in "$HOME/.local/bin" "$HOME/bin"; do
     fi
 done
 
-# 5. Shell-Integration für automatischen Verzeichniswechsel beim Beenden
-INTEGRATION_MARKER="# EasyDateien Shell-Integration"
+# 5. Shellintegration für automatischen Verzeichniswechsel beim Beenden
+INTEGRATION_MARKER="# EasyDateien Shellintegration"
 INTEGRATION_CODE='
-# EasyDateien Shell-Integration (automatischer Verzeichniswechsel beim Beenden)
+# EasyDateien Shellintegration (automatischer Verzeichniswechsel beim Beenden)
 easydateien() {
     local cwd_file
     cwd_file="$(mktemp -t "easydateien-cwd.XXXXXX" 2>/dev/null || mktemp "${TMPDIR:-/tmp}/easydateien-cwd.XXXXXX")"
@@ -236,12 +236,12 @@ for RC_FILE in "$HOME/.zshrc" "$HOME/.bashrc"; do
     if [ -f "$RC_FILE" ]; then
         if ! grep -q "$INTEGRATION_MARKER" "$RC_FILE"; then
             echo "$INTEGRATION_CODE" >> "$RC_FILE"
-            echo "Shell-Integration zu $RC_FILE hinzugefügt."
+            echo "Shellintegration zu $RC_FILE hinzugefügt."
         fi
     fi
 done
 
-# ---------------------------------------------------------------- Selbst-Verifikation
+# ---------------------------------------------------------------- Selbstverifikation
 # Prueft, dass die Installation vollstaendig und lauffaehig ist. Schlaegt etwas
 # fehl, bricht das Skript LAUT ab, statt einen halbfertigen Zustand zu melden.
 VERIFY_FILES=("easydateien" "easydateien_ui.py" "easydateien_actions.py" "easydateien_view.py" "easydateien_common.py" "easydateien_symlink.py" "easydateien_konfigurator.py")

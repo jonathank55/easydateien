@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-EasyDateien Konfigurator — Interaktive Konfigurations-Engine für EasyDateien.
+EasyDateien Konfigurator — Interaktive Konfigurationsengine für EasyDateien.
 Single-Source-of-Truth & optimi-Norm konform.
 
 Alle geteilten Grundlagen (Breitenlogik, Kürzung, Tastenbelegungen,
@@ -55,12 +55,12 @@ MAIN_MENU_ITEMS = [
     ("mouse", "Mausunterstützung", "ein"),
     ("hidden", "Versteckte Dateien anzeigen", "aus"),
     ("console_always_visible", "Konsole immer eingeblendet", "aus"),
-    ("preview_wrap", "Vorschau-Umbruch", "ein"),
-    ("preview_media", "Medien-Vorschau (Bilder/PDF)", "ein"),
+    ("preview_wrap", "Vorschauumbruch", "ein"),
+    ("preview_media", "Medienvorschau (Bilder/PDF)", "ein"),
     ("sort", "Datei- und Ordneranordnung", "öffnen"),
     ("editor", "Editor", "nano"),
     ("keybindings", "Tastenbelegungen", "öffnen"),
-    ("schnellstart", "Schnellstart-Einträge", "öffnen"),
+    ("schnellstart", "Schnellstarteinträge", "öffnen"),
     ("reset", "Auf Standardwerte zurücksetzen", "standard"),
 ]
 
@@ -264,7 +264,7 @@ def _bindings_valid(bindings: list) -> bool:
 
 def heal_bindings(bindings: list) -> list:
     """Löst Doppelbelegungen deterministisch auf und garantiert ein
-    konfliktfreies Ergebnis: Verlierer-Aktionen fallen auf ihren Standard
+    konfliktfreies Ergebnis: Verliereraktionen fallen auf ihren Standard
     zurück; ist der selbst belegt, auf den nächsten freien Standard.
     Letzte Absicherung sind die garantiert konfliktfreien KEY_BINDINGS."""
     if _bindings_valid(bindings):
@@ -292,7 +292,7 @@ def heal_bindings(bindings: list) -> list:
 
 
 def cur_default_keys(action: str) -> list:
-    """Liefert die Standard-Tasten einer Aktion (Fallback, wenn eine Aktion
+    """Liefert die Standartasten einer Aktion (Fallback, wenn eine Aktion
     durch Übernehmen ihrer letzten Taste leer würde)."""
     for _s, a, _d, keys, _desc in KEY_BINDINGS:
         if a == action:
@@ -314,9 +314,9 @@ def edit_keybindings_menu(fd: int):
     def save_editable_bindings() -> bool:
         # Speichert nur, wenn die Belegungen konfliktfrei sind; ein Konflikt
         # würde sonst den Start des Dateimanagers verhindern. Sollte trotz
-        # der automatischen Übernahme-Logik ein Konflikt bestehen (z. B. aus
+        # der automatischen Übernahmelogik ein Konflikt bestehen (z. B. aus
         # einer historisch kaputten Config), wird er hier selbstheilend
-        # aufgelöst: Doppel-Tasten fallen auf den Standard der Aktion zurück.
+        # aufgelöst: Doppeltasten fallen auf den Standard der Aktion zurück.
         editable_bindings[:] = heal_bindings(editable_bindings)
         json_bindings = []
         for section, action, disp, keys, desc in editable_bindings:
@@ -590,11 +590,11 @@ def _schnellstart_default_eintraege():
 
 
 def _lies_text(fd: int, prompt: str, vorgabe: str = "") -> str:
-    """Liest eine Textzeile im Konfigurator-Stil (einfaches cbreak-Lesen)."""
+    """Liest eine Textzeile im Konfiguratorstil (einfaches cbreak-Lesen)."""
     render_box("EINGABE", prompt, [], 0, [f"[ESC] Abbrechen"])
     row = vorgabe
     # Erste Eingabe ersetzt die Vorgabe ( intuitive Bearbeitung: einfach
-    # los-tippen ueberschreibt; nur ENTER ohne Eingabe uebernimmt die Vorgabe).
+    # lostippen ueberschreibt; nur ENTER ohne Eingabe uebernimmt die Vorgabe).
     ersetzt = not vorgabe
     while True:
         k = _warte_auf_taste(fd)
@@ -628,7 +628,7 @@ def _bearbeite_liste(fd, titel: str, liste: list, allow_untermenu: bool = True) 
     """Intuitiver Editor fuer eine Eintragsliste (Haupt- oder Untermenü).
 
     Gibt zurück: (veraendert, liste) oder None bei ESC/Abbruch.
-    Enter auf Eintrag: bearbeiten (Untermenü-Eintrag öffnet dessen Liste).
+    Enter auf Eintrag: bearbeiten (Untermenüeintrag öffnet dessen Liste).
     'add' legt neue Einträge an; 'addmenu' (nur Hauptebene) ein Untermenü."""
     idx = 0
     veraendert = False
@@ -702,7 +702,7 @@ def _bearbeite_liste(fd, titel: str, liste: list, allow_untermenu: bool = True) 
                 liste.append({"titel": titel_neu.strip(), "befehl": befehl_neu.strip() if befehl_neu else ""})
                 veraendert = True
             elif aktion == "addmenu":
-                titel_neu = _lies_text(fd, "Untermenü-Bezeichnung eingeben")
+                titel_neu = _lies_text(fd, "Untermenübezeichnung eingeben")
                 if not titel_neu or not titel_neu.strip():
                     continue
                 liste.append({"titel": titel_neu.strip(), "untermenu": []})
@@ -744,7 +744,7 @@ def _bearbeite_liste(fd, titel: str, liste: list, allow_untermenu: bool = True) 
 
 
 def edit_schnellstart_menu(fd: int):
-    """Einfacher, intuitiver Editor für die Schnellstart-Einträge:
+    """Einfacher, intuitiver Editor für die Schnellstarteinträge:
     Ansehen, Hinzufügen (Titel + Befehl), Löschen, Auf Standard setzen.
     Untermenüs werden mit [Eingabe] direkt bearbeitet (rekursiv)."""
     cfg = load_config()
@@ -761,9 +761,9 @@ def edit_schnellstart_menu(fd: int):
         rows.append(("add", "Neuen Eintrag hinzufügen", "[neu]"))
         rows.append(("addmenu", "Neues Untermenü hinzufügen", "[menü]"))
         rows.append(("del", "Eintrag löschen", "[löschen]"))
-        rows.append(("reset", "Auf Standard-Einträge zurücksetzen", "[standard]"))
+        rows.append(("reset", "Auf Standarteinträge zurücksetzen", "[standard]"))
         start, count = render_box(
-            "SCHNELLSTART-EINTRÄGE",
+            "SCHNELLSTARTEINTRÄGE",
             "Titel und Befehl je Zeile; Untermenüs mit [Eingabe] bearbeiten",
             rows, idx,
             [("[↑↓] Navigieren", "[↑↓] Nav", "[↑↓]"),
@@ -791,9 +791,9 @@ def edit_schnellstart_menu(fd: int):
                 pos = int(aktion) - 1
                 alt = eintraege[pos]
                 if alt.get("untermenu") is not None:
-                    # Untermenü-Eintrag: rekursiv bearbeiten (Einträge darin
+                    # Untermenüeintrag: rekursiv bearbeiten (Einträge darin
                     # hinzufügen/bearbeiten/löschen), Titel bleibt hier über
-                    # die normale Bezeichnungs-Eingabe änderbar.
+                    # die normale Bezeichnungseingabe änderbar.
                     neuer_titel = _lies_text(fd, "Bezeichnung eingeben", alt.get("titel", ""))
                     if neuer_titel is not None and neuer_titel.strip():
                         alt["titel"] = neuer_titel.strip()
@@ -832,7 +832,7 @@ def edit_schnellstart_menu(fd: int):
                 cfg["schnellstart_eintraege"] = eintraege
                 save_config(cfg)
             elif aktion == "addmenu":
-                titel = _lies_text(fd, "Untermenü-Bezeichnung eingeben")
+                titel = _lies_text(fd, "Untermenübezeichnung eingeben")
                 if not titel:
                     continue
                 neu = {"titel": titel, "untermenu": []}

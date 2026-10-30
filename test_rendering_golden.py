@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Goldene Rendering-Tests: frieren das exakte heutige Bildschirmverhalten ein.
+"""Goldene Renderingtests: frieren das exakte heutige Bildschirmverhalten ein.
 
 Jede Refaktorierung (Modul-Split, Dispatch-Umbau, ...) muss diese Hashes
 unveraendert lassen. Aenderungen am Rendering sind damit sofort sichtbar.
