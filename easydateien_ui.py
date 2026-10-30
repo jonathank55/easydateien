@@ -21,6 +21,7 @@ import re
 import argparse
 import stat
 import shlex
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Dict, Set, Optional, Tuple
 
 from easydateien_common import (
@@ -412,16 +413,22 @@ def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tupl
     res = [f"{C_BOLD}{C_INVERT}{pad_to_width(ANSI_ESCAPE_RE.sub('', line), box_w)}{C_RESET}" for line in res]
     return res, box_w
 
+_SIZE_UNITS = (("KB", 0), ("MB", 1), ("GB", 2), ("TB", 2), ("PB", 2), ("EB", 2))
+
 def format_size(size_bytes: int) -> str:
-    """Formatiert Bytegrößen nach standardisierten Einheiten."""
-    if size_bytes < 1024:
+    """Formatiert Bytegrößen wie der Finder: dezimal (1 KB = 1000 B),
+    mit deutschem Dezimalkomma und einheitenabhängiger Genauigkeit."""
+    if size_bytes < 1000:
         return f"{size_bytes} B"
-    val = float(size_bytes)
-    for unit in ["KB", "MB", "GB", "TB", "PB"]:
-        val /= 1024.0
-        if val < 1024.0 or unit == "PB":
-            return f"{val:.1f} {unit}"
-    return f"{val:.1f} PB"
+    wert = Decimal(size_bytes)
+    for index, (einheit, stellen) in enumerate(_SIZE_UNITS):
+        wert /= 1000
+        gerundet = wert.quantize(Decimal(1).scaleb(-stellen), rounding=ROUND_HALF_UP)
+        if gerundet < 1000 or index == len(_SIZE_UNITS) - 1:
+            text = f"{gerundet:.{stellen}f}".replace(".", ",")
+            if "," in text:
+                text = text.rstrip("0").rstrip(",")
+            return f"{text} {einheit}"
 
 def format_mtime(mtime: float, max_w: int = 17) -> str:
     """Formatiert Änderungszeitpunkte lesbar; bei engem Platz

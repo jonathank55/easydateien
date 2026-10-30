@@ -139,6 +139,17 @@ class TestHilfsfunktionen(unittest.TestCase):
         self.assertLess(ed.natural_key("datei2"), ed.natural_key("datei10"))
         self.assertEqual(ed.natural_key("ABC"), ed.natural_key("abc"))
 
+    def test_format_size_wie_finder(self):
+        # Dezimale Einheiten (1 KB = 1000 B) und deutsches Dezimalkomma,
+        # damit die Werte mit dem Finder übereinstimmen.
+        self.assertEqual(ed.format_size(999), "999 B")
+        self.assertEqual(ed.format_size(1000), "1 KB")
+        self.assertEqual(ed.format_size(1500), "2 KB")
+        self.assertEqual(ed.format_size(1234567), "1,2 MB")
+        self.assertEqual(ed.format_size(123456789), "123,5 MB")
+        self.assertEqual(ed.format_size(12187883808), "12,19 GB")
+        self.assertEqual(ed.format_size(1234567890123), "1,23 TB")
+
     def test_listing_signature_erkennt_aenderung(self):
         e1 = ed.FileEntry("/x/a.txt", "a.txt", None)
         e1.size = 1
