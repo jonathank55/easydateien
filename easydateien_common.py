@@ -20,7 +20,7 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
 # Dynamisches, Theme-adaptives Farbschema:
 # Nutzt ausschließlich SGR-Attribute (Fett, Gedimmt, Kursiv, Invertiert) und die
-# semantischen ANSI-Grundfarben (31–36) des jeweiligen Terminal-Themes — ohne
+# semantischen ANSI-Grundfarben (31–37) des jeweiligen Terminal-Themes — ohne
 # fest verdrahtete RGB-/256-Farbwerte. Passt sich dadurch jedem hellen und
 # dunklen Theme in jeder Terminalapp automatisch an (respektiert NO_COLOR).
 _NO_COLOR = bool(os.environ.get("NO_COLOR")) or os.environ.get("TERM") == "dumb"
@@ -29,10 +29,8 @@ C_RESET = "" if _NO_COLOR else "\033[0m"
 C_BOLD = "" if _NO_COLOR else "\033[1m"
 C_DIM = "" if _NO_COLOR else "\033[2m"
 C_ITALIC = "" if _NO_COLOR else "\033[3m"
-C_BLUE = "" if _NO_COLOR else "\033[34m"
-C_BOLD_BLUE = "" if _NO_COLOR else "\033[1;34m"
-C_CYAN = "" if _NO_COLOR else "\033[36m"
-C_BOLD_CYAN = "" if _NO_COLOR else "\033[1;36m"
+C_WHITE = "" if _NO_COLOR else "\033[37m"
+C_BOLD_WHITE = "" if _NO_COLOR else "\033[1;37m"
 C_GREEN = "" if _NO_COLOR else "\033[32m"
 C_BOLD_GREEN = "" if _NO_COLOR else "\033[1;32m"
 C_YELLOW = "" if _NO_COLOR else "\033[33m"

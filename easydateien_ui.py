@@ -37,10 +37,8 @@ from easydateien_common import (
     C_DIM,
     C_ITALIC,
     C_INVERT,
-    C_BLUE,
-    C_BOLD_BLUE,
-    C_CYAN,
-    C_BOLD_CYAN,
+    C_WHITE,
+    C_BOLD_WHITE,
     C_GREEN,
     C_BOLD_GREEN,
     C_YELLOW,
@@ -395,7 +393,7 @@ def replace_ansi_range(base_line: str, start_col: int, replacement: str, repl_wi
     return f"{left_pad}{replacement}{right_pad}"
 
 def build_modal_box(title: str, content_lines: List[str], target_w: int) -> Tuple[List[str], int]:
-    """Baut ein standardisiertes Vordergrund-Modal im Yazi-Stil mit blauem Rahmen."""
+    """Baut ein standardisiertes Vordergrund-Modal im Yazi-Stil mit invertiertem Rahmen."""
     inner_w = max(20, target_w - 4)
     box_w = inner_w + 4
     t_clean = ANSI_ESCAPE_RE.sub("", title)
@@ -791,11 +789,11 @@ def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
     if width <= 0:
         return ""
     if it.is_broken:
-        st_on = C_BOLD_RED if bold else C_RED
+        st_on = C_BOLD if bold else C_DIM
     elif it.is_symlink:
-        st_on = C_BOLD_CYAN if bold else C_CYAN
+        st_on = C_BOLD_WHITE if bold else C_WHITE
     elif it.is_dir:
-        st_on = C_BOLD_BLUE
+        st_on = C_BOLD_WHITE
     elif it.name.startswith("."):
         st_on = C_BOLD if bold else C_DIM
     else:
