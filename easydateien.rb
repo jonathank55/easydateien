@@ -1,8 +1,8 @@
 class Easydateien < Formula
   desc "Deutschsprachiger Terminaldateimanager für macOS mit integrierter Konsole"
   homepage "https://github.com/jonathank55/easydateien"
-  url "https://github.com/jonathank55/easydateien/archive/refs/tags/v1.5.7.tar.gz"
-  sha256 "19f0f13232d7c6bbca89362466a8d58aab4581bd7a0998557229a2d88c4c3c55"
+  url "https://github.com/jonathank55/easydateien/archive/refs/tags/v1.5.8.tar.gz"
+  sha256 "3da7526dd0d75ed37054a00a25c8bf2350129f9c041b3dc6d6ac70228216df93"
   license "MIT"
 
   depends_on "python@3.12"
@@ -44,7 +44,7 @@ class Easydateien < Formula
     assert_predicate libexec/"easydateien", :executable?
     assert_path_exists libexec/"easydateien_common.py"
     assert_path_exists libexec/"easydateien_preview.py"
-    assert_match "EasyDateien 1.5.7", shell_output("#{bin}/easydateien -v")
+    assert_match "EasyDateien 1.5.8", shell_output("#{bin}/easydateien -v")
     assert_match "easydateien()", shell_output("#{bin}/easydateien --init zsh")
   end
 end
