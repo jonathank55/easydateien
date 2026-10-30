@@ -38,8 +38,6 @@ from easydateien_common import (
     C_DIM,
     C_ITALIC,
     C_INVERT,
-    C_WHITE,
-    C_BOLD_WHITE,
     C_GREEN,
     C_BOLD_GREEN,
     C_YELLOW,
@@ -795,16 +793,7 @@ def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
     """
     if width <= 0:
         return ""
-    if it.is_broken:
-        st_on = C_BOLD if bold else C_DIM
-    elif it.is_symlink:
-        st_on = C_BOLD_WHITE if bold else C_WHITE
-    elif it.is_dir:
-        st_on = C_BOLD_WHITE
-    elif it.name.startswith("."):
-        st_on = C_BOLD if bold else C_DIM
-    else:
-        st_on = C_BOLD if bold else ""
+    st_on = C_BOLD if bold else ""
     full_name = safe_text(it.name) + ("/" if it.is_dir else "")
     name_w = str_width(full_name)
 
@@ -817,11 +806,11 @@ def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
         target = safe_text(it.symlink_target)
         if target and name_w + 3 + 4 <= width:
             tgt = truncate_to_width(target, max(3, width - name_w - 3))
-            body = f"{styled(full_name)} {C_DIM}→ {C_ITALIC}{tgt}{C_RESET}"
+            body = f"{styled(full_name)} → {C_ITALIC}{tgt}{C_RESET}"
         elif name_w + 2 <= width:
-            body = f"{styled(full_name)} {C_DIM}→{C_RESET}"
+            body = f"{styled(full_name)} →"
         elif width >= 6:
-            body = f"{styled(truncate_name(it.name, it.is_dir, width - 2))} {C_DIM}→{C_RESET}"
+            body = f"{styled(truncate_name(it.name, it.is_dir, width - 2))} →"
         else:
             body = styled(truncate_name(it.name, it.is_dir, width))
     else:
