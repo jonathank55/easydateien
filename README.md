@@ -26,8 +26,8 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
   - **Zwei-Wege-Verzeichnissynchronisation:** Das Terminal operiert immer im aktuellen Verzeichnis des Dateimanagers. Navigiert man im Dateimanager, folgt das Terminal automatisch. Wechselt man im Terminal mit `cd ..` das Verzeichnis, folgt der Dateimanager sofort!
   - **Automatische Dateilistenaktualisierung:** Sobald im Terminal Befehle wie `touch datei.txt`, `mkdir ordner`, `git checkout` oder `rm bild.png` ausgeführt werden, aktualisiert der Dateimanager die Ansicht unverzüglich. Auch Änderungen von außen (z. B. laufende Downloads) werden selbstständig erkannt.
   - **Voller Terminalkomfort:** Befehlsverlauf (`↑`/`↓`), Zeilennavigation (`Pos1`/`Ende`, `Ctrl+A`/`Ctrl+E`, `Ctrl+W` zum Wortlöschen, `Ctrl+U`/`Ctrl+K` zum Zeilenlöschen mit Zwischenablage, `Ctrl+Y` zum Einfügen, `Ctrl+L` zum Leeren), Bildlauf (`BildAuf`/`BildAb` oder Mausrad) und Schließen per `exit`, `quit` oder `Ctrl+D`.
-  - **Interaktive Vollbildprogramme:** Anwendungen wie `nano`, `vim`, `htop` oder `zsh` (sowie u. a. `ssh`, `less`, `python`, interaktive `git`-Befehle) werden automatisch erkannt, sauber im Vollbild ausgeführt und kehren ohne Bildartefakte zurück.
-  - **Befehlsausführung:** Alle anderen Befehle laufen in der Login-Shell des Benutzers (`$SHELL`) im aktuellen Ordner; ihre Ausgabe streamt live ins Konsolenpanel (es gibt kein hartes Zeitlimit; `Strg+C` beendet laufende Befehle). `cd`, `clear`, `exit` und `quit` werden intern behandelt.
+  - **Ausschließlich nichtinteraktive Befehle:** Die Konsole führt nur Befehle aus, die ohne Bedienung durchlaufen. Interaktive Programme und Vollbildwerkzeuge (z. B. `nano`, `vim`, `htop`, `zsh`, `ssh`, `less`, `python`, interaktive `git`-Befehle, Pager oder Bestätigungsabfragen) werden abgelehnt; statt einer hängenden Oberfläche erscheint in der Konsole `FEHLER: Interaktiver Befehl`.
+  - **Befehlsausführung:** Alle zulässigen Befehle laufen in der Login-Shell des Benutzers (`$SHELL`) im aktuellen Ordner; ihre Ausgabe streamt live ins Konsolenpanel (es gibt kein hartes Zeitlimit; `Strg+C` beendet laufende Befehle). Pager sind deaktiviert, damit auch unbekannte Befehle die Konsole nicht in eine wartende Ansicht ziehen. `cd`, `clear`, `exit` und `quit` werden intern behandelt.
 
 - **Elegantes Kastendesign & vollständige Fensterfüllung:**  
   Präziser Kastenaufbau mit echten abgerundeten Ecken (`╭`, `╮`, `╰`, `╯`) und Spaltentrennlinien (`┬`, `┴`, `│`), der sich nahtlos über die gesamte Terminalbreite und -höhe erstreckt. Durch die Nutzung des Alternate-Screen-Buffers (`\033[?1049h`) und strikte Zeilenbudgetierung ist ein Verrutschen oder Scrollen des Terminalfensters technisch ausgeschlossen.
@@ -313,7 +313,7 @@ Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unver
 | Taste | Aktion |
 | :--- | :--- |
 | **Alle Zeichen** | Direkte Befehlseingabe (alle Dateimanagerkürzel sind isoliert deaktiviert) |
-| `Enter` | Eingegebenen Befehl im aktuellen Verzeichnis ausführen (`cd`, `clear`, `exit` / `quit` werden intern behandelt) |
+| `Enter` | Eingegebenen Befehl im aktuellen Verzeichnis ausführen (`cd`, `clear`, `exit` / `quit` werden intern behandelt; interaktive Befehle werden mit `FEHLER: Interaktiver Befehl` abgelehnt) |
 | `Tab` | Fokus zurück auf Dateimanager wechseln |
 | `ESC` | Fokus der Konsole entziehen (bei `Konsole immer eingeblendet` = Aus: Konsole schließen) |
 | `↑` / `↓` | Befehlsverlauf durchblättern (ohne Verlauf: Ausgabe scrollen) |
@@ -331,7 +331,10 @@ Der Dateimanager ist in klar getrennte Module zerlegt; die Logik ist dabei unver
 | `Ctrl+D` | Zeichen unter dem Cursor löschen; bei leerer Eingabezeile Fokus der Konsole entziehen (bei `Konsole immer eingeblendet` = Aus: Konsole schließen) |
 
 > [!NOTE]
-> `Strg+C` wird von EasyDateien selbst behandelt: In der Konsole wird eine laufende Befehlsausgabe mit `Strg+C` beendet (erst `SIGINT`, dann `SIGKILL` — wie in einem echten Terminal) bzw. die Eingabezeile geleert (`^C`); interaktive Vollbildprogramme (z. B. `vim`) erhalten das Signal direkt. `Strg+C` beendet EasyDateien nicht. Zum Verwerfen einer Eingabezeile dient `Ctrl+U`.
+> `Strg+C` wird von EasyDateien selbst behandelt: In der Konsole wird ein laufender Befehl mit `Strg+C` beendet (erst `SIGINT`, dann `SIGKILL` — wie in einem echten Terminal) bzw. die Eingabezeile geleert (`^C`). `Strg+C` beendet EasyDateien nicht. Zum Verwerfen einer Eingabezeile dient `Ctrl+U`.
+
+> [!NOTE]
+> Die Konsole führt ausschließlich nichtinteraktive Befehle aus. Interaktive Programme (z. B. `vim`, `htop`, `ssh`, `less`, `python`) und Befehle mit Bestätigungsabfragen werden verweigert; in der Konsole erscheint dann `FEHLER: Interaktiver Befehl`.
 
 ---
 

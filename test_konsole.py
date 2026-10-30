@@ -199,6 +199,94 @@ class TestKonsoleUnit(unittest.TestCase):
         except Exception as e:
             self.fail(f"run_console_command mit fd=None warf: {e}")
 
+    def test_osc_und_csi_fragmente_werden_entfernt(self):
+        # zsh sendet beim Start u. a. "\x1b[2 q" (Cursorform) und
+        # "\x1b]7;file://…\x07" (Arbeitsverzeichnis). Beide dürfen nicht
+        # als sichtbarer Text in der Konsole landen.
+        self.app._append_console_output(
+            "\x1b[2 q\x1b]7;file://localhost/Users/jk\x07datei.txt")
+        zeilen = self.out()
+        self.assertEqual(zeilen, ["datei.txt"])
+        joined = "\n".join(zeilen)
+        for rest in ("[2 q", "]7;", "file://", "\x1b", "\x07"):
+            self.assertNotIn(rest, joined)
+        # Zeichensatz-Umschaltung wie ESC(B darf kein "B" hinterlassen.
+        self.app.console_output_lines.clear()
+        self.app._append_console_output("\x1b(Bzweite-zeile")
+        self.assertEqual(self.out(), ["zweite-zeile"])
+
+    def test_ls_a_zeigt_keine_steuersequenzen(self):
+        self.app.run_console_command("ls -a", None, None)
+        joined = "\n".join(self.out())
+        for rest in ("\x1b", "[2 q", "]7;", "file://", "\x07"):
+            self.assertNotIn(rest, joined)
+        self.assertIn("a.txt", joined)
+
+    def test_interaktive_befehle_werden_abgelehnt(self):
+        befehle = [
+            "vim", "nano test.txt", "less README.md", "top", "htop",
+            "ssh example.com", "python3", "cat", "read antwort",
+            "rm -i gibts-nicht", "echo x | less", "git log",
+            "FOO=bar vim", "/usr/bin/vim", "watch ls", "ls && vim",
+            "bash -c 'vim'",
+        ]
+        for befehl in befehle:
+            with self.subTest(befehl=befehl):
+                self.app.console_output_lines.clear()
+                self.app.run_console_command(befehl, None, None)
+                self.assertEqual(
+                    self.out(), ["FEHLER: Interaktiver Befehl"],
+                    f"Interaktiver Befehl wurde nicht verweigert: {befehl}")
+
+    def test_nichtinteraktive_befehle_bleiben_erlaubt(self):
+        for befehl in ("echo hallo", "ls", "printf 'x\\n'", "pwd"):
+            with self.subTest(befehl=befehl):
+                self.app.console_output_lines.clear()
+                self.app.run_console_command(befehl, None, None)
+                joined = "\n".join(self.out())
+                self.assertNotIn("FEHLER: Interaktiver Befehl", joined)
+                self.assertTrue(self.out(), f"Keine Ausgabe für: {befehl}")
+
+    def test_erkennung_interaktiver_befehle(self):
+        from easydateien_actions import ist_interaktiver_befehl
+        interaktiv = (
+            "vim", "nano datei.txt", "less datei.txt", "htop", "ssh host",
+            "python3", "cat", "grep muster", "sort", "read x",
+            "rm -i datei", "echo x | more", "git log", "git commit -m x",
+            "FOO=1 vim", "/usr/local/bin/vim", "watch ls", "bash",
+            "python3 -i skript.py", "ls && vim", "echo x; nano",
+            "true || htop", "bash -c 'vim'", "bash -c 'ls; vim'",
+            "nohup vim", "env FOO=1 vim", "nice -n 10 vim",
+            "xargs vim", "find . -exec vim {} \\;",
+            "(vim)", "if ls; then vim; fi",
+        )
+        for befehl in interaktiv:
+            with self.subTest(befehl=befehl):
+                self.assertTrue(ist_interaktiver_befehl(befehl),
+                                f"Nicht als interaktiv erkannt: {befehl}")
+        nicht_interaktiv = (
+            "ls -a", "echo hallo", "printf 'x\\n'", "pwd", "git status",
+            "cat datei.txt", "grep muster datei.txt", "head -n 5 datei.txt",
+            "mkdir neuer-ordner", "touch neu.txt", "cp a.txt b.txt",
+            "python3 -c \"print(1)\"", "python3 skript.py", "node -e 1",
+            "bash -c 'ls'", "zsh -c 'echo hallo'",
+            "ls | grep a", "cat a.txt | grep x", "echo x && echo y",
+            "command -v vim", "echo 'a | less'", "echo 'a; vim'",
+            "echo hi 2>&1", "find . -name '*.txt'",
+            "for i in 1 2 3 4 5; do echo zeile-$i; done",
+            "if ls; then echo ok; fi",
+        )
+        for befehl in nicht_interaktiv:
+            with self.subTest(befehl=befehl):
+                self.assertFalse(ist_interaktiver_befehl(befehl),
+                                 f"Fälschlich als interaktiv erkannt: {befehl}")
+
+    def test_kein_vollbildprompt_mehr(self):
+        self.app.run_console_command("echo x", None, None)
+        zeilen = self.app.get_console_display_lines(80, 20)
+        self.assertTrue(visible(zeilen[-1]).startswith("$ "))
+        self.assertNotIn("/", visible(zeilen[-1]))
+
 
 class TestKonsoleEchtest(unittest.TestCase):
     """Ebene 2: echte App im Pseudo-Terminal mit echter Tastatur.

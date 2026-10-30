@@ -126,7 +126,6 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self.console_history_idx: int = 0
         self.console_history_draft: str = ""
         self.console_scroll_offset: int = 0
-        self.last_cmd_interactive: bool = False
         self._mouse_tracking_active: bool = False
         # Terminalsicherung: exakter termios-Zustand vor TUI-Start (None = TUI
         # war nie aktiv). main() stellt daraus den Ausgangszustand wieder her.

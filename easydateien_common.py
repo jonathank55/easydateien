@@ -45,7 +45,23 @@ SHOW_CURSOR = "\033[?25h"
 DISABLE_AUTOWRAP = "\033[?7l"
 ENABLE_AUTOWRAP = "\033[?7h"
 
-ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+# Erkennt ANSI-/Terminalsteuersequenzen vollständig: CSI (auch mit
+# Zwischenbytes wie in "\x1b[2 q"), OSC (Fenstertitel, Arbeitsverzeichnis,
+# Hyperlinks), DCS/SOS/PM/APC sowie einzelne Escape-Sequenzen. Ohne diese
+# breite Erkennung blieben bei PTY-Ausgaben Fragmente wie "[2 q" oder
+# "]7;file://…" sichtbar.
+ANSI_ESCAPE_RE = re.compile(
+    r"\x1b\[[0-?]*[ -/]*[@-~]"                    # vollständige CSI-Sequenz
+    r"|\x1b\[[0-?]*[ -/]*"                        # unvollständige CSI-Sequenz
+    r"|\x1b\][^\x07\x1b\n]*(?:\x07|\x1b\\|$)"     # OSC, endet mit BEL oder ST
+    r"|\x1b[PX^_][^\x1b\n]*(?:\x1b\\|$)"          # DCS, SOS, PM, APC
+    r"|\x1b[\x20-\x2f]+[\x30-\x7e]"                # Zeichensatz-Escapes wie ESC(B
+    r"|\x1b[\x20-\x7e]"                           # sonstige Escape-Sequenz
+    r"|\x1b"                                      # verwaistes ESC
+    r"|\x9b[0-?]*[ -/]*[@-~]"                     # C1-CSI
+    r"|\x9b[0-?]*[ -/]*"                          # unvollständige C1-CSI
+    r"|\x9d[^\x07\x1b\n]*(?:\x07|\x1b\\|$)"       # C1-OSC
+)
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 DEFAULT_CONFIG = {
@@ -273,7 +289,7 @@ KEY_BINDINGS = [
     ("Verwaltung", "help", "Hilfe", ("h",), "Diese Hilfe anzeigen"),
     ("Verwaltung", "menu", "Menü", ("m",), "Einstellungen öffnen (u. a. Texteditor)"),
     ("Verwaltung", "cancel", "Abbrechen", ("ESC",), "Konsole schließen, Filter aufheben, Auswahl leeren"),
-    ("Verwaltung", "cancel_cmd", "Abbrechen (Eingabe)", ("CTRL_C",), "Konsoleneingabe leeren, interaktive Befehle beenden"),
+    ("Verwaltung", "cancel_cmd", "Abbrechen (Eingabe)", ("CTRL_C",), "Konsoleneingabe leeren, laufenden Befehl abbrechen"),
     ("Verwaltung", "quit", "Beenden", ("q",), "EasyDateien beenden"),
 ]
 

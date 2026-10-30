@@ -46,6 +46,204 @@ from easydateien_preview import (
     get_pdf_page_count, request_preview,
 )
 
+# Programme, die ohne Bedienung durch den Benutzer nicht sinnvoll laufen:
+# Editoren, Pager, Vollbildwerkzeuge, Fernzugriffe, Datenbank-CLIs,
+# Schleifen mit Tastatureingabe und Werkzeuge mit Bestätigungsabfragen.
+_INTERAKTIVE_PROGRAMME = frozenset({
+    "start", "aider", "goose", "agy", "agy-real", "nano", "vim", "vi", "emacs", "micro",
+    "nvim", "helix", "hx", "kak", "ed", "joe", "ne", "pico", "mcedit",
+    "top", "htop", "btop", "glances", "bottom", "nvtop", "gtop", "ncdu", "watch",
+    "less", "more", "bat", "most", "man", "info", "pydoc",
+    "gh",
+    "ssh", "sftp", "ftp", "telnet", "nc", "netcat",
+    "fzf", "fzy", "peco", "skim", "sk",
+    "tmux", "screen", "zellij", "cmatrix", "lazygit", "lazydocker", "tig",
+    "ranger", "nnn", "lf", "mc", "vifm", "yazi",
+    "mac_control", "settings", "sudo", "su", "passwd", "nmtui",
+    "sqlite3", "psql", "mysql", "redis-cli", "mongosh",
+    "lki", "ki-lokal", "kil",
+    "read", "select", "dialog", "whiptail",
+})
+
+# Werkzeuge, die ohne Dateiargument oder Pipe auf Standardeingabe warten.
+_STDIN_WERKZEUGE = frozenset({
+    "cat", "grep", "egrep", "fgrep", "sed", "awk", "head", "tail", "cut", "sort",
+    "uniq", "wc", "tr", "tee", "paste", "join", "fold", "fmt", "nl", "od", "xxd",
+})
+
+# Skriptsprachen starten nur ohne Argument (bzw. mit -i) eine interaktive
+# Sitzung; "python3 -c …", "node skript.js" und Ähnliches laufen durch.
+_INTERPRETER = frozenset({
+    "python", "python3", "ipython", "node", "ruby", "irb", "php", "lua", "julia",
+})
+
+# Shells sind ohne "-c" interaktiv; "bash -c …" führt einen Befehl aus und
+# kehrt zurück.
+_SHELLS = frozenset({"bash", "zsh", "sh", "fish", "ksh", "csh", "tcsh"})
+
+# Wrapper starten einen anderen Befehl; das eigentliche Programm dahinter
+# muss ebenfalls geprüft werden.
+_WRAPPER = frozenset({
+    "env", "command", "nohup", "nice", "time", "builtin", "exec", "stdbuf",
+    "xargs", "arch", "caffeinate",
+})
+
+
+_SHELL_SCHLUESSELWOERTER_RE = re.compile(
+    r"^(?:(?:then|do|else|elif|if|while|until)\b|!|\{|\()+\s*"
+)
+_SHELL_SCHLUSSKLAMMER_RE = re.compile(r"\s*[)}]+$")
+
+
+def _normalisiere_teil(teil: str) -> str:
+    teil = _SHELL_SCHLUESSELWOERTER_RE.sub("", teil.strip())
+    return _SHELL_SCHLUSSKLAMMER_RE.sub("", teil).strip()
+
+
+def _zerlege(cmd: str, trenner) -> List[str]:
+    """Zerlegt eine Shellzeile an Steueroperatoren, ohne Anführungszeichen
+    oder maskierte Zeichen zu zerschneiden."""
+    teile: List[str] = []
+    buf: List[str] = []
+    quote = None
+    i = 0
+    n = len(cmd)
+    while i < n:
+        ch = cmd[i]
+        if quote:
+            buf.append(ch)
+            if ch == "\\" and quote == '"' and i + 1 < n:
+                buf.append(cmd[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            i += 1
+            continue
+        if ch in ("'", '"'):
+            quote = ch
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == "\\" and i + 1 < n:
+            buf.append(ch)
+            buf.append(cmd[i + 1])
+            i += 2
+            continue
+        if ch == "&" and ((i > 0 and cmd[i - 1] in "<>") or (i + 1 < n and cmd[i + 1] == ">")):
+            # Teil einer Umleitung wie 2>&1 oder &>datei, kein Trenner.
+            buf.append(ch)
+            i += 1
+            continue
+        treffer = next((t for t in trenner if cmd.startswith(t, i)), None)
+        if treffer:
+            teile.append("".join(buf))
+            buf = []
+            i += len(treffer)
+            continue
+        buf.append(ch)
+        i += 1
+    teile.append("".join(buf))
+    return teile
+
+
+def _befehlsteile(cmd: str):
+    """Zerlegt eine Shellzeile an Steueroperatoren in einzelne Befehle."""
+    for teil in _zerlege(cmd, ("&&", "||", ";", "&", "\n")):
+        teil = _normalisiere_teil(teil)
+        if teil:
+            yield teil
+
+
+def _teil_ist_interaktiv(teil: str, stdin_aus_pipe: bool = False) -> bool:
+    try:
+        tokens = shlex.split(teil)
+    except ValueError:
+        tokens = teil.split()
+    if not tokens:
+        return False
+    # Führende Umgebungszuweisungen wie FOO=bar überspringen.
+    idx = 0
+    while idx < len(tokens) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tokens[idx]):
+        idx += 1
+    if idx >= len(tokens):
+        return False
+    prog = os.path.basename(tokens[idx])
+    if prog in _INTERAKTIVE_PROGRAMME:
+        return True
+    if prog in _INTERPRETER:
+        rest = tokens[idx + 1:]
+        if not rest:
+            return True
+        if any(arg in ("-i", "--interactive") for arg in rest):
+            return True
+        if prog == "php" and "-a" in rest:
+            return True
+        return False
+    if prog in _SHELLS:
+        rest = tokens[idx + 1:]
+        if "-c" in rest:
+            # Den auszuführenden Befehl erneut prüfen, damit auch
+            # "bash -c 'vim'" abgelehnt wird.
+            pos = rest.index("-c")
+            inner = rest[pos + 1] if pos + 1 < len(rest) else ""
+            return any(arg == "-i" for arg in rest) or ist_interaktiver_befehl(inner)
+        return True
+    if prog == "command" and any(arg in ("-v", "-V") for arg in tokens[idx + 1:]):
+        # "command -v vim" gibt nur den Pfad aus.
+        return False
+    if prog in _WRAPPER:
+        rest = tokens[idx + 1:]
+        pos = 0
+        while pos < len(rest):
+            arg = rest[pos]
+            if (arg.startswith("-") or arg.isdigit()
+                    or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", arg)):
+                pos += 1
+                continue
+            break
+        return pos < len(rest) and ist_interaktiver_befehl(" ".join(rest[pos:]))
+    if prog == "find":
+        rest = tokens[idx + 1:]
+        for pos, arg in enumerate(rest):
+            if arg in ("-exec", "-execdir", "-ok", "-okdir"):
+                return ist_interaktiver_befehl(" ".join(rest[pos + 1:]))
+        return False
+    # Interaktive git-Unterbefehle (Pager, Editor, Patch-Auswahl).
+    if prog == "git" and any(sub in teil for sub in (
+        "log", "diff", "commit", "add -p", "add -i", "rebase", "branch",
+        "show", "stash", "blame", "mergetool", "difftool", "config -e",
+        "config --edit",
+    )):
+        return True
+    # Werkzeuge ohne Eingabedatei lesen von der Standardeingabe und würden
+    # ohne interaktive Eingabe blockieren. In einer Pipeline erhalten sie
+    # ihre Eingabe dagegen vom vorherigen Befehl.
+    if (not stdin_aus_pipe and prog in _STDIN_WERKZEUGE
+            and len(tokens) - idx <= 2
+            and not any(ch in teil for ch in ("<", ">", "|", "/", "."))):
+        return True
+    # Bestätigungsabfragen bei Dateiwerkzeugen (-i/-I).
+    if prog in ("rm", "cp", "mv", "ln", "chmod", "chown", "unlink") and any(
+        flag in teil for flag in (" -i", " -I", "-i ", "-I ")
+    ):
+        return True
+    return False
+
+
+def ist_interaktiver_befehl(cmd: str) -> bool:
+    """Erkennt Befehle, die eine interaktive Bedienung erfordern.
+
+    Die Konsole führt ausschließlich nichtinteraktive Befehle aus. Die
+    Erkennung ist bewusst konservativ: Lieber ein Befehl wird abgelehnt, als
+    dass die Oberfläche in einem wartenden Programm hängen bleibt."""
+    for teil in _befehlsteile(cmd):
+        for pos, stufe in enumerate(_zerlege(teil, ("|",))):
+            stufe = _normalisiere_teil(stufe)
+            if stufe and _teil_ist_interaktiv(stufe, stdin_aus_pipe=pos > 0):
+                return True
+    return False
+
 
 
 class EasyDateienActions:
@@ -1251,13 +1449,9 @@ class EasyDateienActions:
     def get_console_display_lines(self, width: int, height: int) -> List[str]:
         if height <= 0 or width <= 0:
             return []
-        # Standard: nur "$ " ohne Pfad
+        # Die Konsole führt ausschließlich nichtinteraktive Befehle aus; die
+        # Eingabezeile bleibt deshalb immer schlicht und einzeilig.
         prompt = "$ "
-        # Ausnahme: interaktiver Befehl + Konsole füllt Fenster (große Höhe)
-        if self.last_cmd_interactive and height >= 15:
-            full_prompt = f"{self.get_short_dir(self.current_dir)} $ "
-            if str_width(full_prompt) <= width - 4:
-                prompt = full_prompt
         avail = max(1, width - str_width(prompt))
         inp = self.console_input
         c_pos = self.console_cursor_idx
@@ -1343,10 +1537,11 @@ class EasyDateienActions:
             pass
 
     def _run_console_streaming(self, cmd: str, user_shell: str, env, fd: Optional[int]) -> None:
-        """Führt einen nicht-interaktiven Befehl in einem echten Pseudo-Terminal
-        aus. Verhaelt sich wie ein Standardterminal: Ausgabe streamt live ins
-        Panel, Strg+C erreicht den Befehl selbst (erst SIGINT, dann SIGKILL),
-        es gibt kein hartes Zeitlimit."""
+        """Führt einen nichtinteraktiven Befehl in einem echten Pseudo-Terminal
+        aus. Die Ausgabe streamt live ins Panel; Strg+C beendet den Befehl
+        (erst SIGINT, dann SIGKILL), es gibt kein hartes Zeitlimit. Eingaben
+        werden nicht an den Befehl weitergereicht, da die Konsole keinerlei
+        interaktive Bedienung zulässt."""
         master_fd, slave_fd = os.openpty()
         # Dem PTY die Breite des Konsolenpanels mitteilen: Programme wie ls
         # formatieren ihre Spalten dann passend zum Panel (wie in einem echten
@@ -1366,7 +1561,10 @@ class EasyDateienActions:
             proc = subprocess.Popen(
                 [user_shell, "-i", "-c", cmd],
                 cwd=self.current_dir,
-                stdin=slave_fd,
+                # Keine Eingaben an den Befehl: Die Konsole erlaubt nur
+                # nichtinteraktive Befehle. /dev/null verhindert, dass ein
+                # Befehl auf eine nie kommende Eingabe wartet.
+                stdin=subprocess.DEVNULL,
                 stdout=slave_fd,
                 stderr=slave_fd,
                 env=env,
@@ -1393,16 +1591,8 @@ class EasyDateienActions:
                         in_data = os.read(fd, 32)
                     except OSError:
                         in_data = b""
-                    if in_data and b"\x03" not in in_data:
-                        # Tastatureingaben an den laufenden Befehl durchreichen
-                        # (wie in einem echten Terminal): Programme, die nachfragen
-                        # (rm override-Bestaetigung, ssh Passwort, less Suche,
-                        # Bestaetigungs-Prompts), erhalten die Antwort. Nur
-                        # Strg+C wird hier abgefangen und als Signal gesendet.
-                        try:
-                            os.write(master_fd, in_data)
-                        except OSError:
-                            pass
+                    # Tastatureingaben werden verworfen; nur Strg+C wird als
+                    # Abbruchsignal an den laufenden Befehl gesendet.
                     if b"\x03" in in_data:
                         ctrl_c_count += 1
                         self.console_output_lines.append("^C")
@@ -1483,71 +1673,25 @@ class EasyDateienActions:
             else:
                 self.console_output_lines.append(f"cd: Verzeichnis nicht gefunden: {target}")
             return
-        tokens = cmd.split()
-        first_prog = os.path.basename(tokens[0]) if tokens else ""
-        interactive_tools = {
-            "start", "aider", "goose", "agy", "agy-real", "nano", "vim", "vi", "emacs", "micro",
-            "nvim", "helix", "hx", "kak", "ed", "joe", "ne",
-            "top", "htop", "btop", "glances", "bottom", "nvtop", "gtop",
-            "less", "more", "bat", "most", "man", "info", "pydoc",
-            "python", "python3", "ipython", "node", "ruby", "irb", "php", "lua", "julia", "gh",
-            "bash", "zsh", "sh", "fish", "ksh", "csh", "tcsh",
-            "ssh", "sftp", "telnet", "nc", "netcat",
-            "fzf", "fzy", "peco", "skim", "sk",
-            "tmux", "screen", "zellij", "cmatrix", "lazygit", "lazydocker", "tig",
-            "mac_control", "settings", "sudo", "su", "passwd", "nmtui",
-            "sqlite3", "psql", "mysql", "redis-cli", "mongosh",
-            "lki", "ki-lokal", "kil"
-        }
-        has_interactive_pipe = any(p in cmd for p in ["| less", "| more", "| bat", "| most", "| fzf"])
-        is_git_interactive = cmd.startswith("git ") and any(sub in cmd for sub in ["log", "diff", "commit", "add -p", "add -i", "rebase", "branch", "show", "stash", "blame"])
-        is_standalone_stdin_tool = (first_prog in ("cat", "grep", "egrep", "fgrep", "sed", "awk", "head", "tail", "cut", "sort", "uniq", "wc")) and (len(tokens) <= 2 and not any(ch in cmd for ch in ("<", ">", "|", "/", ".")))
-
-        # rm/ln/chmod & Co. mit Bestaetigungspotenzial (override-Prompts bei
-        # root-Besitz, -i/-I Flags): als interaktiv behandeln, damit die volle
-        # Terminaluebergabe mit nativer Eingabe genutzt wird.
-        is_confirm_tool = (first_prog in ("rm", "cp", "mv", "ln", "chmod", "chown", "unlink")
-                           and any(flag in cmd for flag in (" -i", " -I", "-i ", "-I ")))
-        is_interactive = (first_prog in interactive_tools) or has_interactive_pipe or is_git_interactive or is_standalone_stdin_tool or is_confirm_tool
-        self.last_cmd_interactive = is_interactive
+        if ist_interaktiver_befehl(cmd):
+            # Die Konsole erlaubt ausschließlich nichtinteraktive Befehle.
+            self.console_output_lines.append("FEHLER: Interaktiver Befehl")
+            self.refresh_items(force=True)
+            return
 
         user_shell, env = get_shell_environment()
-
-        if is_interactive and fd is not None and old_settings is not None:
-            self.set_mouse_tracking(False)
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            sys.stdout.write(ENABLE_AUTOWRAP + SHOW_CURSOR + "\033[?1049l")
-            sys.stdout.flush()
-            try:
-                subprocess.run([user_shell, "-i", "-c", cmd], cwd=self.current_dir, env=env)
-            except KeyboardInterrupt:
-                pass
-            except Exception as e:
-                self.console_output_lines.append(f"Fehler: {e}")
-            finally:
-                # Terminalzustand stoisch wiederherstellen: Jeder Schritt
-                # einzeln abgesichert — ein Fehler darf die App nie abstuerzen
-                # lassen (termios.error, wenn die Shell das Terminal in einem
-                # ungueltigen Zustand hinterlassen hat).
-                try:
-                    tty.setcbreak(fd, termios.TCSADRAIN)
-                except Exception:
-                    try:
-                        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-                    except Exception:
-                        pass
-                try:
-                    sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
-                    self.sync_mouse_state()
-                    sys.stdout.write("\033[2J\033[3J\033[H")
-                    sys.stdout.flush()
-                except Exception:
-                    pass
-                try:
-                    self.refresh_items(force=True)
-                except Exception:
-                    pass
-            return
+        # Pager grundsätzlich deaktivieren: Auch bislang unbekannte Befehle
+        # dürfen die Konsole nicht in eine wartende Vollbildansicht ziehen.
+        env = dict(env)
+        env.update({
+            "PAGER": "cat",
+            "GIT_PAGER": "cat",
+            "GH_PAGER": "cat",
+            "SYSTEMD_PAGER": "cat",
+            "MANPAGER": "cat",
+            "BAT_PAGER": "cat",
+            "LESS": "FRX",
+        })
         try:
             self._run_console_streaming(cmd, user_shell, env, fd)
         except KeyboardInterrupt:
@@ -1612,7 +1756,18 @@ class EasyDateienActions:
             self.show_console = True
             self.console_focused = True
             self.console_output_lines.append(f"$ {befehl}")
+            if ist_interaktiver_befehl(befehl):
+                self.console_output_lines.append("FEHLER: Interaktiver Befehl")
+                self.refresh_items(force=True)
+                self.set_status("Interaktiver Befehl abgelehnt", "error")
+                return
             user_shell, env = get_shell_environment()
+            env = dict(env)
+            env.update({
+                "PAGER": "cat", "GIT_PAGER": "cat", "GH_PAGER": "cat",
+                "SYSTEMD_PAGER": "cat", "MANPAGER": "cat", "BAT_PAGER": "cat",
+                "LESS": "FRX",
+            })
             self._run_console_streaming(befehl, user_shell, env, None)
             self.refresh_items(force=True)
             self.set_status(f"Ausgeführt: {titel}", "info")
