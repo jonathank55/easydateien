@@ -21,6 +21,7 @@ from easydateien_ui import (
     signal, stat, str_width, subprocess,
     sync_to_macos_clipboard, sys, termios, time,
     tty, wrap_line_to_width, zipfile,
+    invalidate_trash_cache, is_trash_dir,
 )
 
 import os
@@ -323,6 +324,8 @@ class EasyDateienActions:
         cached = self._raw_cache.get(path)
         if cached and cached[0] == stamp and not fresh:
             return cached[2]
+        if cached and cached[0] == stamp and is_trash_dir(path):
+            return cached[2]
         entries = scan_raw(path)
         self._raw_version += 1
         self._raw_cache[path] = (stamp, self._raw_version, entries)
@@ -393,8 +396,10 @@ class EasyDateienActions:
             self.status_message = ""
             changed = True
 
+        is_cur_trash = is_trash_dir(self.current_dir)
         full_poll = now >= self._next_full_poll
-        if full_poll or self.dir_stamp(self.current_dir) != self._cur_stamp:
+        stamp_changed = self.dir_stamp(self.current_dir) != self._cur_stamp
+        if stamp_changed or (full_poll and not is_cur_trash):
             before = self._cur_sig
             t0 = time.monotonic()
             self.refresh_items()
@@ -409,6 +414,8 @@ class EasyDateienActions:
             if cached is None or cached[0] != self.dir_stamp(path):
                 changed = True
             elif full_poll:
+                if is_trash_dir(path):
+                    continue
                 old_sig = listing_signature(cached[2])
                 new_entries = self.get_raw_entries(path, fresh=True)
                 if listing_signature(new_entries) != old_sig:
@@ -461,6 +468,7 @@ class EasyDateienActions:
         if self.filter_query:
             self.filter_query = ""
         self.refresh_items()
+        self._next_full_poll = time.monotonic() + 2.0
         remembered_idx = self.dir_cursor_memory.get(self.current_dir)
         if remembered_idx is not None and self.items:
             self.selected_idx = max(0, min(remembered_idx, len(self.items) - 1))
@@ -1195,6 +1203,7 @@ class EasyDateienActions:
                                 c += 1
                         shutil.move(trash_p, dest_target)
                         restored += 1
+                invalidate_trash_cache()
                 self.refresh_items(force=True)
                 self.set_status(f"Rückgängig: {restored} Element(e) aus Papierkorb wiederhergestellt", "success")
 
@@ -2142,6 +2151,7 @@ class EasyDateienActions:
                 self.clipboard_paths = [p for p in self.clipboard_paths if p not in targets]
                 if not self.clipboard_paths:
                     self.clipboard_mode = None
+                invalidate_trash_cache()
                 self.refresh_items(force=True)
                 if deleted_records and moved_records:
                     self.set_status(f"{len(deleted_records)} Element(e) endgültig gelöscht, {len(moved_records)} in Papierkorb verschoben", "success")

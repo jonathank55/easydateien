@@ -53,6 +53,7 @@ from easydateien_ui import (
     build_modal_box,
     replace_ansi_range,
     render_input_field,
+    prewarm_trash_cache,
 )
 from easydateien_view import EasyDateienView
 
@@ -138,7 +139,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self._arranged_cache: Dict[Tuple, List[FileEntry]] = {}
         self._cur_stamp: int = -1
         self._cur_sig: Optional[Tuple] = None
-        self._next_full_poll: float = 0.0
+        self._next_full_poll: float = time.monotonic() + 2.0
         self._pane_paths: List[str] = []
         self.cached_file_preview_key: Optional[Tuple] = None
         self.cached_file_preview_lines: List[str] = []
@@ -161,6 +162,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         self._kitty_seq_cache: Dict = {}
 
         ensure_clip_helper()
+        prewarm_trash_cache()
         self.refresh_items()
 
     def get_kitty_image_sequence(self, png_path: str, cols: int, rows: int, row_pos: int, col_pos: int) -> str:

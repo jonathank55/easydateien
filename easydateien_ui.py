@@ -729,20 +729,40 @@ def natural_key(text: str) -> list:
     """Natürlicher Sortierschlüssel (datei2 < datei10), unabhängig von Groß-/Kleinschreibung."""
     return [int(p) if p.isdigit() else p for p in _NATURAL_RE.split(text.lower())]
 
+_TRASH_CACHE: Dict[str, object] = {
+    "stamp": -1,
+    "entries": [],
+    "fetching": False,
+    "thread": None,
+}
+_TRASH_CACHE_LOCK = threading.Lock()
+
+
 def is_trash_dir(path: str) -> bool:
     """Prüft, ob der angegebene Pfad das macOS-Papierkorb-Verzeichnis ist."""
-    if sys.platform != "darwin":
+    if sys.platform != "darwin" or not path:
         return False
     try:
-        trash_dir = os.path.realpath(os.path.expanduser("~/.Trash"))
-        target = os.path.realpath(os.path.expanduser(path))
-        return target == trash_dir
+        trash_dir = os.path.expanduser("~/.Trash")
+        if path == trash_dir or path == "~/.Trash":
+            return True
+        norm = os.path.normpath(os.path.expanduser(path))
+        if norm == trash_dir:
+            return True
+        return os.path.realpath(norm) == os.path.realpath(trash_dir)
     except Exception:
         return False
 
 
-def scan_trash_macos(path: str) -> List[FileEntry]:
-    """Liest den macOS-Papierkorb via AppleScript ein, wenn direkter POSIX-Zugriff verweigert wird."""
+def invalidate_trash_cache():
+    """Macht den internen Papierkorb-Cache ungültig, sodass frisch eingelesen wird."""
+    with _TRASH_CACHE_LOCK:
+        _TRASH_CACHE["stamp"] = -1
+        _TRASH_CACHE["entries"] = []
+
+
+def _fetch_trash_worker(exp_path: str, cur_stamp: int):
+    """Hintergrund-Worker zum Einlesen der Papierkorb-Einträge via AppleScript."""
     entries: List[FileEntry] = []
     try:
         script = (
@@ -754,10 +774,9 @@ def scan_trash_macos(path: str) -> List[FileEntry]:
             '    return theNames\n'
             'end tell'
         )
-        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=3.0)
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=2.0)
         if res.returncode == 0 and res.stdout:
             names = res.stdout.strip("\n").split("\0")
-            exp_path = os.path.expanduser(path)
             for name in names:
                 if not name:
                     continue
@@ -766,7 +785,67 @@ def scan_trash_macos(path: str) -> List[FileEntry]:
                     entries.append(FileEntry(p, name))
     except Exception:
         pass
-    return entries
+
+    with _TRASH_CACHE_LOCK:
+        if cur_stamp != -1:
+            _TRASH_CACHE["stamp"] = cur_stamp
+        _TRASH_CACHE["entries"] = entries
+        _TRASH_CACHE["fetching"] = False
+        _TRASH_CACHE["thread"] = None
+
+
+def prewarm_trash_cache():
+    """Startet ein asynchrones Vorwärmen des Papierkorb-Caches im Hintergrund."""
+    if sys.platform != "darwin":
+        return
+    trash_dir = os.path.expanduser("~/.Trash")
+    if not os.path.isdir(trash_dir):
+        return
+    with _TRASH_CACHE_LOCK:
+        if _TRASH_CACHE["fetching"]:
+            return
+        try:
+            cur_stamp = os.stat(trash_dir).st_mtime_ns
+        except OSError:
+            cur_stamp = -1
+        if _TRASH_CACHE["stamp"] == cur_stamp and _TRASH_CACHE["entries"]:
+            return
+        _TRASH_CACHE["fetching"] = True
+        t = threading.Thread(target=_fetch_trash_worker, args=(trash_dir, cur_stamp), daemon=True, name="trash-prewarm")
+        _TRASH_CACHE["thread"] = t
+        t.start()
+
+
+def scan_trash_macos(path: str) -> List[FileEntry]:
+    """Liest den macOS-Papierkorb ein. Nutzt atomares Caching und Vorwärmung ohne UI-Blockaden."""
+    exp_path = os.path.expanduser(path)
+    try:
+        cur_stamp = os.stat(exp_path).st_mtime_ns
+    except OSError:
+        cur_stamp = -1
+
+    with _TRASH_CACHE_LOCK:
+        if cur_stamp != -1 and cur_stamp == _TRASH_CACHE["stamp"] and _TRASH_CACHE["entries"]:
+            return list(_TRASH_CACHE["entries"])
+
+        if _TRASH_CACHE["entries"] and not _TRASH_CACHE["fetching"]:
+            _TRASH_CACHE["fetching"] = True
+            t = threading.Thread(target=_fetch_trash_worker, args=(exp_path, cur_stamp), daemon=True, name="trash-refresh")
+            _TRASH_CACHE["thread"] = t
+            t.start()
+            return list(_TRASH_CACHE["entries"])
+
+        th = _TRASH_CACHE["thread"]
+
+    if th is not None and th.is_alive():
+        th.join(timeout=0.4)
+        with _TRASH_CACHE_LOCK:
+            if _TRASH_CACHE["entries"]:
+                return list(_TRASH_CACHE["entries"])
+
+    _fetch_trash_worker(exp_path, cur_stamp)
+    with _TRASH_CACHE_LOCK:
+        return list(_TRASH_CACHE["entries"])
 
 
 def scan_raw(path: str) -> List[FileEntry]:
