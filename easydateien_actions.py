@@ -2097,22 +2097,42 @@ class EasyDateienActions:
                 trash_dir = os.path.expanduser("~/.Trash")
                 os.makedirs(trash_dir, exist_ok=True)
                 moved_records = []
+                deleted_records = []
 
                 for t in targets:
-                    if not os.path.exists(t):
+                    if not os.path.exists(t) and not os.path.islink(t):
                         continue
                     base_name = os.path.basename(t)
-                    dest_p = os.path.join(trash_dir, base_name)
-                    c = 1
-                    stem, ext = os.path.splitext(base_name)
-                    while os.path.exists(dest_p):
-                        dest_p = os.path.join(trash_dir, f"{stem}_{int(time.time())}_{c}{ext}")
-                        c += 1
+
+                    in_trash = False
                     try:
-                        shutil.move(t, dest_p)
-                        moved_records.append((t, dest_p))
+                        trash_real = os.path.realpath(trash_dir)
+                        t_real = os.path.realpath(t)
+                        in_trash = (t_real == trash_real or os.path.commonpath([t_real, trash_real]) == trash_real)
                     except Exception:
                         pass
+
+                    if in_trash:
+                        try:
+                            if os.path.islink(t) or not os.path.isdir(t):
+                                os.remove(t)
+                            else:
+                                shutil.rmtree(t)
+                            deleted_records.append(t)
+                        except Exception:
+                            pass
+                    else:
+                        dest_p = os.path.join(trash_dir, base_name)
+                        c = 1
+                        stem, ext = os.path.splitext(base_name)
+                        while os.path.exists(dest_p):
+                            dest_p = os.path.join(trash_dir, f"{stem}_{int(time.time())}_{c}{ext}")
+                            c += 1
+                        try:
+                            shutil.move(t, dest_p)
+                            moved_records.append((t, dest_p))
+                        except Exception:
+                            pass
 
                 if moved_records:
                     desc = f"{len(moved_records)} Element(e) löschen" if len(moved_records) > 1 else f"Löschen von {os.path.basename(moved_records[0][0])}"
@@ -2123,7 +2143,12 @@ class EasyDateienActions:
                 if not self.clipboard_paths:
                     self.clipboard_mode = None
                 self.refresh_items(force=True)
-                self.set_status(f"{len(moved_records)} Element(e) in Papierkorb verschoben (u = Rückgängig)", "success")
+                if deleted_records and moved_records:
+                    self.set_status(f"{len(deleted_records)} Element(e) endgültig gelöscht, {len(moved_records)} in Papierkorb verschoben", "success")
+                elif deleted_records:
+                    self.set_status(f"{len(deleted_records)} Element(e) endgültig gelöscht", "success")
+                else:
+                    self.set_status(f"{len(moved_records)} Element(e) in Papierkorb verschoben (u = Rückgängig)", "success")
             else:
                 self.set_status("Löschen abgebrochen")
             self.active_dialog = None

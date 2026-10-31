@@ -729,6 +729,46 @@ def natural_key(text: str) -> list:
     """Natürlicher Sortierschlüssel (datei2 < datei10), unabhängig von Groß-/Kleinschreibung."""
     return [int(p) if p.isdigit() else p for p in _NATURAL_RE.split(text.lower())]
 
+def is_trash_dir(path: str) -> bool:
+    """Prüft, ob der angegebene Pfad das macOS-Papierkorb-Verzeichnis ist."""
+    if sys.platform != "darwin":
+        return False
+    try:
+        trash_dir = os.path.realpath(os.path.expanduser("~/.Trash"))
+        target = os.path.realpath(os.path.expanduser(path))
+        return target == trash_dir
+    except Exception:
+        return False
+
+
+def scan_trash_macos(path: str) -> List[FileEntry]:
+    """Liest den macOS-Papierkorb via AppleScript ein, wenn direkter POSIX-Zugriff verweigert wird."""
+    entries: List[FileEntry] = []
+    try:
+        script = (
+            'tell application "Finder"\n'
+            '    set oldDelims to AppleScript\'s text item delimiters\n'
+            '    set AppleScript\'s text item delimiters to ASCII character 0\n'
+            '    set theNames to (name of every item of trash) as text\n'
+            '    set AppleScript\'s text item delimiters to oldDelims\n'
+            '    return theNames\n'
+            'end tell'
+        )
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=3.0)
+        if res.returncode == 0 and res.stdout:
+            names = res.stdout.strip("\n").split("\0")
+            exp_path = os.path.expanduser(path)
+            for name in names:
+                if not name:
+                    continue
+                p = os.path.join(exp_path, name)
+                if os.path.lexists(p):
+                    entries.append(FileEntry(p, name))
+    except Exception:
+        pass
+    return entries
+
+
 def scan_raw(path: str) -> List[FileEntry]:
     """Liest alle Einträge eines Verzeichnisses ungefiltert und unsortiert ein."""
     entries = []
@@ -737,6 +777,8 @@ def scan_raw(path: str) -> List[FileEntry]:
             for entry in it:
                 entries.append(FileEntry(entry.path, entry.name, entry))
     except OSError:
+        if sys.platform == "darwin" and is_trash_dir(path):
+            return scan_trash_macos(path)
         return []
     return entries
 

@@ -12,6 +12,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import re
 import zipfile
 
@@ -321,6 +322,43 @@ class TestAppKern(unittest.TestCase):
         self.app.active_dialog = "goto_menu"
         self.app.handle_dialog_key("f", None)
         self.assertTrue(self.app.current_dir.endswith("Documents"))
+        self.app.active_dialog = "goto_menu"
+        self.app.handle_dialog_key("t", None)
+        trash_dir = os.path.expanduser("~/.Trash")
+        if os.path.isdir(trash_dir):
+            self.assertEqual(os.path.realpath(self.app.current_dir), os.path.realpath(trash_dir))
+
+    def test_trash_erkennung_und_scan(self):
+        import easydateien_ui as ui
+        trash_dir = os.path.expanduser("~/.Trash")
+        if sys.platform == "darwin":
+            self.assertTrue(ui.is_trash_dir(trash_dir))
+            self.assertFalse(ui.is_trash_dir(self.base))
+
+        with patch("os.scandir", side_effect=PermissionError(1, "Operation not permitted")):
+            with patch("easydateien_ui.is_trash_dir", return_value=True):
+                with patch("easydateien_ui.scan_trash_macos", return_value=[ui.FileEntry(os.path.join(self.base, "fake.txt"), "fake.txt")]) as mock_fallback:
+                    entries = ui.scan_raw(trash_dir)
+                    mock_fallback.assert_called_once_with(trash_dir)
+                    self.assertEqual(len(entries), 1)
+                    self.assertEqual(entries[0].name, "fake.txt")
+
+    def test_loeschen_im_papierkorb_loescht_endgueltig(self):
+        with tempfile.TemporaryDirectory() as fake_trash:
+            test_file = os.path.join(fake_trash, "papierkorb_datei.txt")
+            with open(test_file, "w") as f:
+                f.write("inhalt")
+            self.assertTrue(os.path.exists(test_file))
+
+            self.app.enter_directory(fake_trash)
+            self.app.active_dialog = "trash_confirm"
+            self.app.selected_paths = {test_file}
+
+            with patch("os.path.expanduser", return_value=fake_trash):
+                self.app.handle_dialog_key("y", None)
+
+            self.assertFalse(os.path.exists(test_file))
+            self.assertIn("endgültig gelöscht", self.app.status_message)
 
     def test_cursor_bleibt_bei_refresh(self):
         names = [it.name for it in self.app.items]
