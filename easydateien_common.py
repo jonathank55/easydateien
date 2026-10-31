@@ -14,6 +14,13 @@ import json
 import re
 import functools
 import unicodedata
+import ctypes
+
+try:
+    _libc = ctypes.CDLL(None)
+    _wcwidth = _libc.wcwidth
+except Exception:
+    _wcwidth = None
 
 CONFIG_DIR = os.path.expanduser("~/.config/easydateien")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
@@ -100,11 +107,15 @@ def char_width(c: str) -> int:
     """Ermittelt die visuelle Terminalspaltenbreite eines einzelnen Zeichens."""
     if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
         return 0
+    if _wcwidth is not None:
+        try:
+            w = _wcwidth(ord(c))
+            if w >= 0:
+                return w
+        except Exception:
+            pass
     eaw = unicodedata.east_asian_width(c)
     if eaw in ("W", "F"):
-        return 2
-    cp = ord(c)
-    if 0x1F300 <= cp <= 0x1FAFF:
         return 2
     return 1
 

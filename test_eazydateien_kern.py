@@ -130,6 +130,10 @@ class TestHilfsfunktionen(unittest.TestCase):
     def test_str_width_und_pad_to_width(self):
         self.assertEqual(common.str_width("abc"), 3)
         self.assertGreaterEqual(common.str_width("äöü"), 3)
+        self.assertEqual(common.char_width("📢"), 2)
+        self.assertEqual(common.char_width("🗨"), 1)
+        self.assertEqual(common.char_width("\ufe0f"), 0)
+        self.assertEqual(common.str_width("🗨️ Critique Journal 5.html"), 25)
 
     def test_format_keys(self):
         self.assertEqual(common.format_keys(("UP",)), "↑")
