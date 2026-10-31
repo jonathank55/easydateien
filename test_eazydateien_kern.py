@@ -133,8 +133,13 @@ class TestHilfsfunktionen(unittest.TestCase):
         self.assertGreaterEqual(common.str_width("äöü"), 3)
         self.assertEqual(common.char_width("📢"), 2)
         self.assertEqual(common.char_width("🗨"), 1)
-        self.assertEqual(common.char_width("\ufe0f"), 0)
-        self.assertEqual(common.str_width("🗨️ Critique Journal 5.html"), 25)
+        # VS16 erzwingt Emoji-Darstellung: Basiszeichen + Selektor = 2 Spalten
+        self.assertEqual(common.char_width("\ufe0f"), 1)
+        self.assertEqual(common.str_width("🗨\ufe0f"), 2)
+        self.assertEqual(common.str_width("▶\ufe0f"), 2)
+        self.assertEqual(common.str_width("🗨️ Critique Journal 5.html"), 26)
+        self.assertEqual(common.safe_text("🚀\ufe0f"), "🚀")
+        self.assertEqual(common.str_width(common.safe_text("🚀\ufe0f")), 2)
 
     def test_format_keys(self):
         self.assertEqual(common.format_keys(("UP",)), "↑")

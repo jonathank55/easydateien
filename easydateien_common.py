@@ -70,6 +70,7 @@ ANSI_ESCAPE_RE = re.compile(
     r"|\x9d[^\x07\x1b\n]*(?:\x07|\x1b\\|$)"       # C1-OSC
 )
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_VS16 = "\ufe0f"
 
 DEFAULT_CONFIG = {
     "schnellstart_eintraege": [
@@ -104,7 +105,15 @@ DEFAULT_CONFIG = {
 
 @functools.lru_cache(maxsize=8192)
 def char_width(c: str) -> int:
-    """Ermittelt die visuelle Terminalspaltenbreite eines einzelnen Zeichens."""
+    """Ermittelt die visuelle Terminalspaltenbreite eines einzelnen Zeichens.
+
+    Der Variation Selector-16 (U+FE0F) erzwingt die Emoji-Darstellung: Moderne
+    Terminals zeichnen das Zeichen davor dann zweispaltig. Da das Basiszeichen
+    (z. B. 🗨, ▶) selbst nur eine Spalte meldet, zählt der Selektor die zweite
+    Spalte. Nach bereits breiten Zeichen entfernt safe_text() ihn vorab.
+    """
+    if c == _VS16:
+        return 1
     if not c or unicodedata.category(c) in ("Mn", "Me", "Cc", "Cf", "Cs"):
         return 0
     if _wcwidth is not None:
@@ -192,7 +201,17 @@ def pad_to_width(text: str, width: int, align: str = "left") -> str:
 @functools.lru_cache(maxsize=8192)
 def safe_text(text: str) -> str:
     """Ersetzt Steuerzeichen in Dateinamen, damit sie das Layout nie zerstören können."""
-    return _CONTROL_CHARS_RE.sub("?", text)
+    text = _CONTROL_CHARS_RE.sub("?", text)
+    if _VS16 in text:
+        # Redundanten Selektor nach bereits breiten Zeichen (z. B. 🚀) entfernen,
+        # sonst würde die Breite doppelt gezählt.
+        out = []
+        for i, ch in enumerate(text):
+            if ch == _VS16 and i > 0 and char_width(text[i - 1]) != 1:
+                continue
+            out.append(ch)
+        text = "".join(out)
+    return text
 
 def distribute_options(items, avail_w: int) -> str:
     """Verteilt Steuerungsoptionen gleichmäßig über die gegebene Breite (Space-Between / Justified)."""
