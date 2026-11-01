@@ -273,10 +273,10 @@ class EasyDateienView:
                     p_in_cut = (self.clipboard_mode == "cut" and p_it.path in self.clipboard_paths)
                     p_in_copy = (self.clipboard_mode == "copy" and p_it.path in self.clipboard_paths)
                     p_is_sel = p_it.path in self.selected_paths
-                    if p_in_cut:
-                        p_b_char = f"{C_BOLD_RED}×{C_RESET}"
-                    elif p_it.path in _flash_paths:
+                    if p_it.path in _flash_paths:
                         p_b_char = f"{C_BOLD_GREEN}+{C_RESET}"
+                    elif p_in_cut:
+                        p_b_char = f"{C_BOLD_RED}×{C_RESET}"
                     elif p_is_sel:
                         p_b_char = f"{C_BOLD_YELLOW}*{C_RESET}"
                     else:
@@ -308,10 +308,10 @@ class EasyDateienView:
                 in_copy = (self.clipboard_mode == "copy" and it.path in self.clipboard_paths)
                 in_flash = it.path in _flash_paths
 
-                if in_cut:
-                    b_char = f"{C_BOLD_RED}×{C_RESET}"
-                elif in_flash:
+                if in_flash:
                     b_char = f"{C_BOLD_GREEN}+{C_RESET}"
+                elif in_cut:
+                    b_char = f"{C_BOLD_RED}×{C_RESET}"
                 elif is_sel:
                     b_char = f"{C_BOLD_YELLOW}*{C_RESET}"
                 else:
@@ -344,10 +344,10 @@ class EasyDateienView:
                         c_in_cut = (self.clipboard_mode == "cut" and c_it.path in self.clipboard_paths)
                         c_in_copy = (self.clipboard_mode == "copy" and c_it.path in self.clipboard_paths)
                         c_is_sel = c_it.path in self.selected_paths
-                        if c_in_cut:
-                            c_b_char = f"{C_BOLD_RED}×{C_RESET}"
-                        elif c_it.path in _flash_paths:
+                        if c_it.path in _flash_paths:
                             c_b_char = f"{C_BOLD_GREEN}+{C_RESET}"
+                        elif c_in_cut:
+                            c_b_char = f"{C_BOLD_RED}×{C_RESET}"
                         elif c_is_sel:
                             c_b_char = f"{C_BOLD_YELLOW}*{C_RESET}"
                         else:

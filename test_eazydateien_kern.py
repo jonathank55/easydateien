@@ -417,6 +417,12 @@ class TestAppKern(unittest.TestCase):
             self.assertNotIn(os.path.join(self.dir_a, "datei.txt"), self.app.clipboard_paths)
             self.assertEqual(self.app.selected_paths, set())
             self.assertIn("4 kopiert", self.app.status_message)
+            # Kurzzeitiges '+'-Feedback hat Vorrang vor '×' und kehrt danach zu '×' zurück
+            screen_flash = "\n".join(re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", l) for l in self.app.build_screen(80, 24))
+            self.assertIn("+ test1/", screen_flash)
+            self.app._copy_flash_until = 0.0
+            screen_after = "\n".join(re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", l) for l in self.app.build_screen(80, 24))
+            self.assertIn("× test1/", screen_after)
 
     def test_filter(self):
         self.app.filter_query = "datei"
