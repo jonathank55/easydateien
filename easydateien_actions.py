@@ -575,6 +575,8 @@ class EasyDateienActions:
             self.selected_paths.add(item.path)
             if item.path in self.clipboard_paths:
                 self.clipboard_paths.remove(item.path)
+                if not self.clipboard_paths:
+                    self.clipboard_mode = None
             self.set_status(f"Auswahl: {len(self.selected_paths)}")
         if self.selected_idx < len(self.items) - 1:
             self.selected_idx += 1
@@ -596,23 +598,24 @@ class EasyDateienActions:
             return
         self.touch_last_used_dir()
         cur_p = self.items[self.selected_idx].path
+        cut_paths = list(self.clipboard_paths) if self.clipboard_mode == "cut" else []
         if self.selected_paths:
             # Auswahl zur Vormerkung hinzufügen; bestehende Vormerkung bleibt erhalten (ohne ESC wird nichts aufgehoben)
-            targets = list(self.clipboard_paths)
+            targets = list(cut_paths)
             for p in self.selected_paths:
                 if p not in targets:
                     targets.append(p)
             self.selected_paths.clear()
-        elif self.clipboard_mode == "cut" and cur_p in self.clipboard_paths:
+        elif cut_paths and cur_p in cut_paths:
             # Toggle: Vormerkung zurück in die Auswahl übernehmen (wieder mit "*" markiert)
-            self.selected_paths.update(self.clipboard_paths)
+            self.selected_paths.update(cut_paths)
             self.clipboard_mode = None
             self.clipboard_paths = []
             self.set_status(f"Auswahl: {len(self.selected_paths)}")
             return
-        elif self.clipboard_paths:
+        elif cut_paths:
             # Zeigerdatei zur Vormerkung hinzufügen statt die Vormerkung zu ersetzen
-            targets = list(self.clipboard_paths)
+            targets = list(cut_paths)
             if cur_p not in targets:
                 targets.append(cur_p)
         else:
@@ -631,7 +634,16 @@ class EasyDateienActions:
             return
         self.touch_last_used_dir()
         cur_p = self.items[self.selected_idx].path
-        targets = list(self.selected_paths) if self.selected_paths else [cur_p]
+        if self.clipboard_mode == "cut" and self.clipboard_paths:
+            targets = list(self.clipboard_paths)
+            for p in self.selected_paths:
+                if p not in targets:
+                    targets.append(p)
+            self.selected_paths.update(targets)
+        elif self.selected_paths:
+            targets = list(self.selected_paths)
+        else:
+            targets = [cur_p]
         # Auswahl bleibt erhalten (wie im Finder): Das Kopieren hebt die
         # Markierung nicht auf. Nur kurzzeitiges visuelles Feedback: Die
         # kopierten Eintraege zeigen fuer ~1 Sekunde '+', danach automatisch

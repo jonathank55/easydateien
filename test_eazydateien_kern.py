@@ -340,13 +340,14 @@ class TestAppKern(unittest.TestCase):
             self.assertTrue(ui.is_trash_dir(trash_dir))
             self.assertFalse(ui.is_trash_dir(self.base))
 
-        with patch("os.scandir", side_effect=PermissionError(1, "Operation not permitted")):
-            with patch("easydateien_ui.is_trash_dir", return_value=True):
-                with patch("easydateien_ui.scan_trash_macos", return_value=[ui.FileEntry(os.path.join(self.base, "fake.txt"), "fake.txt")]) as mock_fallback:
-                    entries = ui.scan_raw(trash_dir)
-                    mock_fallback.assert_called_once_with(trash_dir)
-                    self.assertEqual(len(entries), 1)
-                    self.assertEqual(entries[0].name, "fake.txt")
+        with patch("easydateien_ui.sys.platform", "darwin"):
+            with patch("os.scandir", side_effect=PermissionError(1, "Operation not permitted")):
+                with patch("easydateien_ui.is_trash_dir", return_value=True):
+                    with patch("easydateien_ui.scan_trash_macos", return_value=[ui.FileEntry(os.path.join(self.base, "fake.txt"), "fake.txt")]) as mock_fallback:
+                        entries = ui.scan_raw(trash_dir)
+                        mock_fallback.assert_called_once_with(trash_dir)
+                        self.assertEqual(len(entries), 1)
+                        self.assertEqual(entries[0].name, "fake.txt")
 
     def test_loeschen_im_papierkorb_loescht_endgueltig(self):
         with tempfile.TemporaryDirectory() as fake_trash:
@@ -385,6 +386,33 @@ class TestAppKern(unittest.TestCase):
         self.app.selected_paths.add(os.path.join(self.dir_a, "datei.txt"))
         self.app.toggle_select_all()
         self.assertEqual(self.app.selected_paths, set())
+
+    def test_kopieren_bei_aktiviertem_ausschneiden(self):
+        for n in ("test1", "test2", "test3", "test4"):
+            os.makedirs(os.path.join(self.dir_a, n), exist_ok=True)
+        self.app.refresh_items()
+        cut_targets = [os.path.join(self.dir_a, n) for n in ("test1", "test2", "test3", "test4")]
+        self.app.selected_paths = set(cut_targets)
+        # Cursor steht auf datei.txt (nicht Teil der 4 ausgeschnittenen Ordner)
+        for i, it in enumerate(self.app.items):
+            if it.name == "datei.txt":
+                self.app.selected_idx = i
+                break
+        with patch("easydateien_actions.sync_to_macos_clipboard"):
+            self.app.cut_selection()
+            self.assertEqual(self.app.clipboard_mode, "cut")
+            self.assertEqual(set(self.app.clipboard_paths), set(cut_targets))
+            self.assertEqual(self.app.selected_paths, set())
+
+            # Jetzt Kopieren über das Kopiermenü (c -> c), während der Cursor auf datei.txt steht
+            self.app.active_dialog = "copy_menu"
+            self.app.handle_dialog_key("c", None)
+
+            self.assertEqual(self.app.clipboard_mode, "copy")
+            self.assertEqual(set(self.app.clipboard_paths), set(cut_targets))
+            self.assertNotIn(os.path.join(self.dir_a, "datei.txt"), self.app.clipboard_paths)
+            self.assertEqual(self.app.selected_paths, set(cut_targets))
+            self.assertIn("4 kopiert", self.app.status_message)
 
     def test_filter(self):
         self.app.filter_query = "datei"
