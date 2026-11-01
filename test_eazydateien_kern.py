@@ -398,20 +398,24 @@ class TestAppKern(unittest.TestCase):
             if it.name == "datei.txt":
                 self.app.selected_idx = i
                 break
-        with patch("easydateien_actions.sync_to_macos_clipboard"):
+        with patch("easydateien_actions.sync_to_macos_clipboard") as mock_clip:
             self.app.cut_selection()
             self.assertEqual(self.app.clipboard_mode, "cut")
             self.assertEqual(set(self.app.clipboard_paths), set(cut_targets))
             self.assertEqual(self.app.selected_paths, set())
 
-            # Jetzt Kopieren über das Kopiermenü (c -> c), während der Cursor auf datei.txt steht
+            # Jetzt Kopieren über das Kopiermenü (c -> c), während der Cursor auf datei.txt steht:
+            # Alle 4 ausgeschnittenen Ordner werden kopiert, und Ausschneiden (×) bleibt erhalten.
+            mock_clip.reset_mock()
             self.app.active_dialog = "copy_menu"
             self.app.handle_dialog_key("c", None)
 
-            self.assertEqual(self.app.clipboard_mode, "copy")
+            mock_clip.assert_called_once()
+            self.assertEqual(set(mock_clip.call_args[0][0]), set(cut_targets))
+            self.assertEqual(self.app.clipboard_mode, "cut")
             self.assertEqual(set(self.app.clipboard_paths), set(cut_targets))
             self.assertNotIn(os.path.join(self.dir_a, "datei.txt"), self.app.clipboard_paths)
-            self.assertEqual(self.app.selected_paths, set(cut_targets))
+            self.assertEqual(self.app.selected_paths, set())
             self.assertIn("4 kopiert", self.app.status_message)
 
     def test_filter(self):

@@ -639,17 +639,16 @@ class EasyDateienActions:
             for p in self.selected_paths:
                 if p not in targets:
                     targets.append(p)
-            self.selected_paths.update(targets)
         elif self.selected_paths:
             targets = list(self.selected_paths)
+            self.clipboard_mode = "copy"
+            self.clipboard_paths = targets
         else:
             targets = [cur_p]
-        # Auswahl bleibt erhalten (wie im Finder): Das Kopieren hebt die
-        # Markierung nicht auf. Nur kurzzeitiges visuelles Feedback: Die
-        # kopierten Eintraege zeigen fuer ~1 Sekunde '+', danach automatisch
-        # zurueck zum vorherigen Zustand ('*' oder unmarkiert).
-        self.clipboard_mode = "copy"
-        self.clipboard_paths = targets
+            self.clipboard_mode = "copy"
+            self.clipboard_paths = targets
+        # Auswahl (sowie Ausschneide-Vormerkung '×') bleibt beim Kopieren
+        # erhalten: Das Kopieren hebt keine Markierung auf.
         sync_to_macos_clipboard(targets)
         self._copy_flash_paths = set(targets)
         self._copy_flash_until = time.monotonic() + 1.0
