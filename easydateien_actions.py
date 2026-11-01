@@ -341,7 +341,7 @@ class EasyDateienActions:
         version = self._raw_cache[path][1]
         cfg = self.config
         flt = self.filter_query if use_filter else ""
-        key = (path, version, cfg.get("show_hidden", False), cfg.get("sort_by", "mtime"),
+        key = (path, version, cfg.get("show_hidden", False), cfg.get("sort_by", "name"),
                cfg.get("sort_reverse", True), cfg.get("sort_dir_first", True), flt)
         res = self._arranged_cache.get(key)
         if res is None:
@@ -1040,7 +1040,7 @@ class EasyDateienActions:
         valid_entries = arrange_entries(
             valid_entries,
             show_hidden=True,
-            sort_by=self.config.get("sort_by", "mtime"),
+            sort_by=self.config.get("sort_by", "name"),
             sort_reverse=self.config.get("sort_reverse", True),
             sort_dir_first=self.config.get("sort_dir_first", True),
         )
@@ -1314,11 +1314,20 @@ class EasyDateienActions:
         clear_preview_queue()
 
     def toggle_sort(self):
-        modes = ["mtime", "name", "size", "ext"]
-        cur = self.config.get("sort_by", "mtime")
-        nxt = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "mtime"
+        modes = ["name", "mtime", "btime", "size", "ext", "atime"]
+        cur = self.config.get("sort_by", "name")
+        if cur in ("ctime", "birthtime"):
+            cur = "btime"
+        nxt = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "name"
         self.config["sort_by"] = nxt
-        desc = {"mtime": "Datum", "name": "Name", "size": "Größe", "ext": "Dateityp"}
+        desc = {
+            "name": "Name",
+            "mtime": "Änderungsdatum",
+            "btime": "Erstellungsdatum",
+            "size": "Größe",
+            "ext": "Dateityp",
+            "atime": "Zugangsdatum",
+        }
         self.clear_sort_caches()
         self.refresh_items(force=True)
         self.set_status(f"Sortierung: {desc.get(nxt, nxt)}", "info")
@@ -1333,7 +1342,7 @@ class EasyDateienActions:
     def load_file_preview_lines(self, path: str, max_lines: int, wrap_width: Optional[int] = None) -> List[str]:
         cfg = self.config
         # Sortierparameter gehören zum Cacheschlüssel, damit die Vorschau derselben Anordnung wie die Dateispalten folgt
-        sort_key = (path, cfg.get("sort_by", "mtime"), cfg.get("sort_reverse", True), cfg.get("sort_dir_first", True))
+        sort_key = (path, cfg.get("sort_by", "name"), cfg.get("sort_reverse", True), cfg.get("sort_dir_first", True))
         # Änderungstempel der Datei: bei Inhaltsänderung (z. B. externer Editor) wird die Vorschau neu geladen
         try:
             st = os.stat(path)
@@ -1370,7 +1379,7 @@ class EasyDateienActions:
                         zip_entries = arrange_entries(
                             zip_entries,
                             show_hidden=True,
-                            sort_by=cfg.get("sort_by", "mtime"),
+                            sort_by=cfg.get("sort_by", "name"),
                             sort_reverse=cfg.get("sort_reverse", True),
                             sort_dir_first=cfg.get("sort_dir_first", True),
                         )

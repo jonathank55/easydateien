@@ -93,7 +93,7 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
   - Versteckte Dateien anzeigen (`Ein` / `Aus`)
   - Konsole immer eingeblendet (`Ein` / `Aus`)
   - Vorschauumbruch (`Ein` / `Aus`)
-  - Datei- und Ordneranordnung (Untermenü): Sortierkriterium (Name, Änderungsdatum, Zugangsdatum, Größe, Endung), Sortierreihenfolge, Ordnerposition
+  - Standardsortierung (Untermenü): Sortierkriterium (Name, Änderungsdatum, Erstellungsdatum, Größe, Dateiendung, Zugangsdatum), Sortierreihenfolge, Ordnerposition
   - Editor für die Taste `o` (`nano`, `vim`, `nvim`, `micro`, `hx`, `emacs -nw`)
   - Tastenbelegungen (Untermenü zum Ansehen und Bearbeiten)
   - Schnellstarteinträge (Untermenü zum Hinzufügen, Löschen und Zurücksetzen)
@@ -236,8 +236,8 @@ Die Konfiguration wird im standardisierten JSON-Format gespeichert. Fehlende Sch
 | `preview_wrap` | `true` | Lange Vorschauzeilen werden umgebrochen (statt abgeschnitten) |
 | `text_editor` | `"nano %s"` | Editor für `o`; `%s` steht für den Dateipfad (im Menü wählbar: `nano`, `vim`, `nvim`, `micro`, `hx`, `emacs -nw`) |
 | `opener` | `"open %s"` | Befehl für `Enter` und Doppelklick |
-| `sort_by` | `"name"` | Sortierung: `name`, `mtime` (Änderungsdatum), `atime` (Zugangsdatum), `size` (Größe), `ext` (Endung/Typ) |
-| `sort_reverse` | `true` | Bei Datum, Zugangsdatum und Größe: Neueste bzw. größte zuerst (Name und Endung immer aufsteigend A–Z) |
+| `sort_by` | `"name"` | Sortierung: `name`, `mtime` (Änderungsdatum), `btime` (Erstellungsdatum), `size` (Größe), `ext` (Endung/Typ), `atime` (Zugangsdatum) |
+| `sort_reverse` | `true` | Bei Datumsfeldern (Änderungs-, Erstellungs- und Zugangsdatum) und Größe: Neueste bzw. größte zuerst (Name und Endung immer aufsteigend A–Z) |
 | `sort_dir_first` | `true` | Ordner vor Dateien anzeigen |
 | `show_hidden` | `false` | Versteckte Dateien anzeigen |
 | `schnellstart_eintraege` | (Liste) | Einträge des Schnellstartmenüs (`i`); verschachtelte Untermenüs über `untermenu` |

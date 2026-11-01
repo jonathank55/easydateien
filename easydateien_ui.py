@@ -82,7 +82,7 @@ class UndoAction:
         self.data = data
 
 class FileEntry:
-    __slots__ = ("name", "path", "is_dir", "is_symlink", "is_exec", "size", "mtime", "atime", "ext", "mode_str", "symlink_target", "is_broken")
+    __slots__ = ("name", "path", "is_dir", "is_symlink", "is_exec", "size", "mtime", "atime", "btime", "ext", "mode_str", "symlink_target", "is_broken")
 
     def __init__(self, path: str, name: str, dir_entry: Optional["os.DirEntry"] = None):
         self.path = path
@@ -94,6 +94,7 @@ class FileEntry:
         self.size = 0
         self.mtime = 0.0
         self.atime = 0.0
+        self.btime = 0.0
         self.mode_str = "----------"
         self.symlink_target = ""
         _, self.ext = os.path.splitext(name)
@@ -106,6 +107,7 @@ class FileEntry:
                 st = os.stat(path, follow_symlinks=False)
             self.mtime = st.st_mtime
             self.atime = st.st_atime
+            self.btime = getattr(st, "st_birthtime", getattr(st, "st_ctime", self.mtime))
             self.mode_str = stat.filemode(st.st_mode)
             self.size = st.st_size
             if self.is_symlink:
@@ -885,6 +887,8 @@ def arrange_entries(
         entries.sort(key=lambda e: (e.ext.lower(), natural_key(e.name)))
     elif sort_by == "atime":
         entries.sort(key=lambda e: (e.atime, natural_key(e.name)), reverse=sort_reverse)
+    elif sort_by in ("btime", "ctime", "birthtime"):
+        entries.sort(key=lambda e: (e.btime, natural_key(e.name)), reverse=sort_reverse)
     else:
         entries.sort(key=lambda e: (e.mtime, natural_key(e.name)), reverse=sort_reverse)
     if sort_dir_first:

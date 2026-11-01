@@ -57,7 +57,7 @@ MAIN_MENU_ITEMS = [
     ("console_always_visible", "Konsole immer eingeblendet", "aus"),
     ("preview_wrap", "Vorschauumbruch", "ein"),
     ("preview_media", "Medienvorschau (Bilder/PDF)", "ein"),
-    ("sort", "Datei- und Ordneranordnung", "öffnen"),
+    ("sort", "Standardsortierung", "öffnen"),
     ("editor", "Editor", "nano"),
     ("keybindings", "Tastenbelegungen", "öffnen"),
     ("schnellstart", "Schnellstarteinträge", "öffnen"),
@@ -445,15 +445,18 @@ def sort_menu(fd: int):
     sort_options = [
         ("name", "Name (alphabetisch)", "Nach Dateinamen sortieren"),
         ("mtime", "Änderungsdatum", "Nach Modifikationszeit sortieren"),
-        ("atime", "Zugangsdatum", "Nach Zugriffszeit sortieren"),
+        ("btime", "Erstellungsdatum", "Nach Erstellungszeit sortieren"),
         ("size", "Größe", "Nach Dateigröße sortieren"),
-        ("ext", "Endung", "Nach Dateiendung sortieren"),
+        ("ext", "Dateiendung", "Nach Dateiendung sortieren"),
+        ("atime", "Zugangsdatum", "Nach Zugriffszeit sortieren"),
     ]
 
     while True:
         # Aktuelle Einstellungen anzeigen
-        current_sort = cfg.get("sort_by", "mtime")
-        reverse_state = "normal" if cfg.get("sort_reverse", False) else "umgekehrt"
+        current_sort = cfg.get("sort_by", "name")
+        if current_sort in ("ctime", "birthtime"):
+            current_sort = "btime"
+        reverse_state = "normal" if cfg.get("sort_reverse", True) else "umgekehrt"
         dir_first_state = "ordner zuerst" if cfg.get("sort_dir_first", True) else "gemischt"
 
         sort_rows = []
@@ -472,8 +475,8 @@ def sort_menu(fd: int):
         ]
 
         start, count = render_box(
-            "DATEI- UND ORDNERANORDNUNG",
-            "Sortierung und Anzeigereihenfolge festlegen",
+            "STANDARDSORTIERUNG",
+            "Standardsortierung und Anzeigereihenfolge festlegen",
             [(r[0], r[1], r[2]) for r in sort_rows],
             idx,
             footer_text
@@ -508,15 +511,18 @@ def sort_menu(fd: int):
                 # Sortierkriterium ändern
                 cfg["sort_by"] = selected_key
                 save_config(cfg)
-                status_hint = f"{C_BOLD}✓ Sortierung nach {sort_rows[idx][1].split('] ')[-1]}{C_RESET}"
+                opt_name = dict((k, l) for k, l, _ in sort_options).get(selected_key, selected_key)
+                status_hint = f"{C_BOLD}✓ Standardsortierung auf {opt_name} gesetzt{C_RESET}"
             elif selected_key == "reverse":
                 # Sortierreihenfolge umschalten
                 cfg["sort_reverse"] = not cfg.get("sort_reverse", True)
                 save_config(cfg)
+                status_hint = f"{C_BOLD}✓ Sortierreihenfolge geändert{C_RESET}"
             elif selected_key == "dir_first":
                 # Ordner-zuerst-Einstellung umschalten
                 cfg["sort_dir_first"] = not cfg.get("sort_dir_first", True)
                 save_config(cfg)
+                status_hint = f"{C_BOLD}✓ Ordnerposition geändert{C_RESET}"
 
 
 def keybindings_menu(fd: int):
@@ -556,6 +562,17 @@ def keybindings_menu(fd: int):
                 break
 
 
+SORT_LABEL_MAP = {
+    "name": "Name",
+    "mtime": "Änderungsdatum",
+    "btime": "Erstellungsdatum",
+    "ctime": "Erstellungsdatum",
+    "birthtime": "Erstellungsdatum",
+    "size": "Größe",
+    "ext": "Dateiendung",
+    "atime": "Zugangsdatum",
+}
+
 # Datengesteuerte Wertanzeige des Hauptmenüs: Jede Option bestimmt ihren
 # angezeigten Wert über eine Funktion; neue Optionen erfordern genau eine Zeile.
 MENU_VALUE_RENDERERS = {
@@ -564,7 +581,7 @@ MENU_VALUE_RENDERERS = {
     "console_always_visible": lambda cfg: f"[{'ein' if cfg.get('console_always_visible', False) else 'aus'}]",
     "preview_wrap": lambda cfg: f"[{'ein' if cfg.get('preview_wrap', True) else 'aus'}]",
     "preview_media": lambda cfg: f"[{'ein' if cfg.get('preview_media', True) else 'aus'}]",
-    "sort": lambda cfg: "[öffnen]",
+    "sort": lambda cfg: f"[{SORT_LABEL_MAP.get(cfg.get('sort_by', 'name'), 'Name')}]",
     "editor": lambda cfg: f"[{editor_command(cfg)}]",
     "keybindings": lambda cfg: f"[{len(cfg.get('schnellstart_eintraege') or cfg.get('__ss_default', []) or [])}]" if False else "[öffnen]",
     "schnellstart": lambda cfg: f"[{len(cfg.get('schnellstart_eintraege') or [])}]" if cfg.get('schnellstart_eintraege') else "[öffnen]",

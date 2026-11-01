@@ -150,7 +150,7 @@ class EasyDateienView:
                     parent_items = scan_directory(
                         parent_path,
                         show_hidden=self.config.get("show_hidden", False),
-                        sort_by=self.config.get("sort_by", "mtime"),
+                        sort_by=self.config.get("sort_by", "name"),
                         sort_reverse=self.config.get("sort_reverse", True),
                         sort_dir_first=self.config.get("sort_dir_first", True)
                     )
@@ -173,7 +173,7 @@ class EasyDateienView:
                 child_items = scan_directory(
                     cur_item.path,
                     show_hidden=self.config.get("show_hidden", False),
-                    sort_by=self.config.get("sort_by", "mtime"),
+                    sort_by=self.config.get("sort_by", "name"),
                     sort_reverse=self.config.get("sort_reverse", True),
                     sort_dir_first=self.config.get("sort_dir_first", True)
                 )

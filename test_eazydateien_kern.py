@@ -642,5 +642,82 @@ class TestAppKern(unittest.TestCase):
             os.close(w)
 
 
+class TestStandardsortierung(unittest.TestCase):
+    """Testet die Standardsortierung inklusive aller Kriterien (Name, mtime, btime, size, ext, atime)."""
+
+    def setUp(self):
+        self.orig_cwd = os.getcwd()
+        self.tmp = tempfile.mkdtemp()
+        self.f1 = os.path.join(self.tmp, "c_erstes.txt")
+        self.f2 = os.path.join(self.tmp, "a_zweites.log")
+        self.f3 = os.path.join(self.tmp, "b_drittes.doc")
+        with open(self.f1, "w") as f:
+            f.write("1")
+        with open(self.f2, "w") as f:
+            f.write("22")
+        with open(self.f3, "w") as f:
+            f.write("333")
+
+    def tearDown(self):
+        os.chdir(self.orig_cwd)
+        _shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_fileentry_btime_vorhanden(self):
+        fe = ed.FileEntry(self.f1, "c_erstes.txt")
+        self.assertTrue(hasattr(fe, "btime"))
+        self.assertIsInstance(fe.btime, float)
+        self.assertGreater(fe.btime, 0.0)
+
+    def test_arrange_entries_name(self):
+        raw = ed.scan_raw(self.tmp)
+        res = ed.arrange_entries(raw, sort_by="name", sort_reverse=False)
+        self.assertEqual([e.name for e in res], ["a_zweites.log", "b_drittes.doc", "c_erstes.txt"])
+
+    def test_arrange_entries_btime(self):
+        raw = ed.scan_raw(self.tmp)
+        raw[0].btime = 100.0
+        raw[1].btime = 300.0
+        raw[2].btime = 200.0
+        res = ed.arrange_entries(raw, sort_by="btime", sort_reverse=True)
+        self.assertEqual([e.btime for e in res], [300.0, 200.0, 100.0])
+        res_syn = ed.arrange_entries(raw, sort_by="ctime", sort_reverse=False)
+        self.assertEqual([e.btime for e in res_syn], [100.0, 200.0, 300.0])
+
+    def test_arrange_entries_size(self):
+        raw = ed.scan_raw(self.tmp)
+        res = ed.arrange_entries(raw, sort_by="size", sort_reverse=True)
+        self.assertEqual([e.name for e in res], ["b_drittes.doc", "a_zweites.log", "c_erstes.txt"])
+
+    def test_konfigurator_standardsortierung_eintrag_und_renderer(self):
+        import easydateien_konfigurator as cfg_mod
+        items = [item[0] for item in cfg_mod.MAIN_MENU_ITEMS]
+        self.assertIn("sort", items)
+        labels = dict((item[0], item[1]) for item in cfg_mod.MAIN_MENU_ITEMS)
+        self.assertEqual(labels["sort"], "Standardsortierung")
+
+        self.assertEqual(cfg_mod.MENU_VALUE_RENDERERS["sort"]({"sort_by": "name"}), "[Name]")
+        self.assertEqual(cfg_mod.MENU_VALUE_RENDERERS["sort"]({"sort_by": "mtime"}), "[Änderungsdatum]")
+        self.assertEqual(cfg_mod.MENU_VALUE_RENDERERS["sort"]({"sort_by": "btime"}), "[Erstellungsdatum]")
+        self.assertEqual(cfg_mod.MENU_VALUE_RENDERERS["sort"]({"sort_by": "size"}), "[Größe]")
+        self.assertEqual(cfg_mod.MENU_VALUE_RENDERERS["sort"]({"sort_by": "ext"}), "[Dateiendung]")
+        self.assertEqual(cfg_mod.MENU_VALUE_RENDERERS["sort"]({"sort_by": "atime"}), "[Zugangsdatum]")
+
+    def test_toggle_sort_durchlaeuft_alle_modi(self):
+        app = ed.EasyDateienApp(self.tmp)
+        app.config["sort_by"] = "name"
+        app.toggle_sort()
+        self.assertEqual(app.config["sort_by"], "mtime")
+        app.toggle_sort()
+        self.assertEqual(app.config["sort_by"], "btime")
+        app.toggle_sort()
+        self.assertEqual(app.config["sort_by"], "size")
+        app.toggle_sort()
+        self.assertEqual(app.config["sort_by"], "ext")
+        app.toggle_sort()
+        self.assertEqual(app.config["sort_by"], "atime")
+        app.toggle_sort()
+        self.assertEqual(app.config["sort_by"], "name")
+
+
 if __name__ == "__main__":
     unittest.main()
