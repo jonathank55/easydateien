@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# EasyDateien — Minimalistischer Terminaldateimanager für macOS
+# EasyDateien — Minimalistischer Terminaldateimanager für macOS und Linux
 # Installationsskript
 #
 # Zwei Installationswege:
@@ -125,17 +125,17 @@ if [ -n "$CLEANUP_DIR" ]; then
     rm -rf "$CLEANUP_DIR"
 fi
 
-if command -v clang >/dev/null 2>&1 && [ -f "$SRC_DIR/easydateien_clip.m" ]; then
+if [ "$(uname)" = "Darwin" ] && command -v clang >/dev/null 2>&1 && [ -f "$SRC_DIR/easydateien_clip.m" ]; then
     echo "Kompiliere natives macOS-Clipboard-Modul..."
     if clang -O3 -framework AppKit -framework Foundation -framework ImageIO "$SRC_DIR/easydateien_clip.m" -o "$CONFIG_DIR/easydateien_clip" 2>/dev/null; then
         chmod +x "$CONFIG_DIR/easydateien_clip"
     else
-        echo "Hinweis: Clipboard-Modul nicht kompilierbar (nicht macOS?); EasyDateien nutzt den AppleScript-Fallback." >&2
+        echo "Hinweis: Clipboard-Modul nicht kompilierbar; EasyDateien nutzt den Fallback." >&2
         rm -f "$CONFIG_DIR/easydateien_clip"
     fi
 fi
 
-if command -v clang >/dev/null 2>&1 && [ -f "$SRC_DIR/easydateien_pdf.m" ]; then
+if [ "$(uname)" = "Darwin" ] && command -v clang >/dev/null 2>&1 && [ -f "$SRC_DIR/easydateien_pdf.m" ]; then
     echo "Kompiliere natives macOS-PDF-Modul..."
     if clang -O3 -framework Foundation -framework PDFKit -framework CoreGraphics -framework ImageIO "$SRC_DIR/easydateien_pdf.m" -o "$CONFIG_DIR/easydateien_pdf" 2>/dev/null; then
         chmod +x "$CONFIG_DIR/easydateien_pdf"
@@ -171,7 +171,9 @@ with open('$CONFIG_DIR/config.json', 'w') as f:
 ')
 " 2>/dev/null; then
             echo "Hinweis: Konfiguration wird mit dokumentierten Standardwerten erstellt." >&2
-            cat > "$CONFIG_DIR/config.json" <<'STANDARD_CONFIG'
+            OPENER_DEF="open %s"
+            [ "$(uname)" != "Darwin" ] && OPENER_DEF="xdg-open %s"
+            cat > "$CONFIG_DIR/config.json" <<STANDARD_CONFIG
 {
   "esc_to_quit": false,
   "mouse_support": false,
@@ -179,7 +181,7 @@ with open('$CONFIG_DIR/config.json', 'w') as f:
   "console_always_visible": true,
   "preview_wrap": true,
   "text_editor": "nano %s",
-  "opener": "open %s",
+  "opener": "$OPENER_DEF",
   "sort_by": "name",
   "sort_reverse": true,
   "sort_dir_first": true,

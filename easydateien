@@ -19,6 +19,7 @@ import subprocess
 from easydateien_common import (
     CONFIG_FILE,
     KEY_BINDINGS, get_keybindings_from_config, build_keymap, load_config,
+    get_terminal_size,
 )
 from easydateien_preview import (
     supports_kitty_graphics, make_kitty_image_sequence,
@@ -30,6 +31,7 @@ from easydateien_ui import (
     HIDE_CURSOR, HOME_DIR, SHOW_CURSOR, UndoAction,
     build_keymap, copy_text_to_clipboard, ensure_clip_helper, get_keybindings_from_config,
     get_shell_environment, read_key, wrap_line_to_width,
+    _install_resize_handler, check_and_clear_winch_flag, get_clipboard_text,
 )
 from easydateien_actions import EasyDateienActions
 from easydateien_ui import (
@@ -249,9 +251,11 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
         try:
             while True:
                 self.sync_mouse_state()
-                curr_size = shutil.get_terminal_size((80, 24))
+                curr_size = get_terminal_size((80, 24))
                 term_cols, term_rows = curr_size.columns, curr_size.lines
-                if curr_size != last_size:
+                size_changed = (curr_size != last_size)
+                winch_fired = check_and_clear_winch_flag()
+                if size_changed or winch_fired:
                     last_size = curr_size
                     get_terminal_font_ratio(force_refresh=True)
                     needs_redraw = True
@@ -259,6 +263,8 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                 if needs_redraw:
                     lines = self.build_screen(term_cols, term_rows)
                     out_buf = []
+                    if size_changed:
+                        out_buf.append("\033[2J\033[H")
                     # Kitty Graphics löschen, wenn zuvor gezeichnet oder jetzt aktiv
                     if supports_kitty_graphics() and (getattr(self, "_kitty_last_shown", False) or getattr(self, "_kitty_preview", None)):
                         out_buf.append(KITTY_CLEAR_VISIBLE)
@@ -413,9 +419,9 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                             copy_text_to_clipboard(deleted)
                         self.console_input = self.console_input[:self.console_cursor_idx]
                         needs_redraw = True
-                    elif key == "\x19":  # Ctrl+Y (Yank / Einfügen aus macOS-Zwischenablage)
+                    elif key == "\x19":  # Ctrl+Y (Yank / Einfügen aus System-Zwischenablage)
                         try:
-                            pasted = subprocess.check_output(["pbpaste"], text=True)
+                            pasted = get_clipboard_text()
                             if pasted:
                                 pasted_clean = pasted.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
                                 self.console_input = self.console_input[:self.console_cursor_idx] + pasted_clean + self.console_input[self.console_cursor_idx:]
@@ -431,7 +437,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                         # Nach oben scrollen (Inhalt nach unten bewegen)
                         wrapped_lines: List[str] = []
                         for raw_line in self.console_output_lines:
-                            wrapped_lines.extend(wrap_line_to_width(raw_line, max(1, shutil.get_terminal_size((80, 24)).columns - 4)))
+                            wrapped_lines.extend(wrap_line_to_width(raw_line, max(1, get_terminal_size((80, 24)).columns - 4)))
                         max_scroll = max(0, len(wrapped_lines) - 1)
                         self.console_scroll_offset = min(max_scroll, self.console_scroll_offset + 2)
                         needs_redraw = True
@@ -446,7 +452,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                             # (Inhalt nach unten bewegen)
                             wrapped_lines: List[str] = []
                             for raw_line in self.console_output_lines:
-                                wrapped_lines.extend(wrap_line_to_width(raw_line, max(1, shutil.get_terminal_size((80, 24)).columns - 4)))
+                                wrapped_lines.extend(wrap_line_to_width(raw_line, max(1, get_terminal_size((80, 24)).columns - 4)))
                             max_scroll = max(0, len(wrapped_lines) - 1)
                             self.console_scroll_offset = min(max_scroll, self.console_scroll_offset + 1)
                         needs_redraw = True
@@ -658,8 +664,10 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     else:
                         try:
                             user_shell, env = get_shell_environment()
-                            subprocess.Popen(["open", self.current_dir], start_new_session=True, env=env)
-                            self.set_status(f"Im Finder geöffnet: {self.get_short_dir(self.current_dir)}", "success")
+                            opener_bin = "open" if sys.platform == "darwin" else "xdg-open"
+                            subprocess.Popen([opener_bin, self.current_dir], start_new_session=True, env=env)
+                            target_name = "Im Finder" if sys.platform == "darwin" else "Im Dateimanager"
+                            self.set_status(f"{target_name} geöffnet: {self.get_short_dir(self.current_dir)}", "success")
                         except Exception as e:
                             self.set_status(f"Fehler: {e}", "error")
                     needs_redraw = True
@@ -729,6 +737,7 @@ class EasyDateienApp(EasyDateienActions, EasyDateienView):
                     except Exception as e:
                         self.set_status(f"Fehler Konfigurator: {e}", "error")
                     tty.setcbreak(fd, termios.TCSADRAIN)
+                    _install_resize_handler()
                     sys.stdout.write("\033[?1049h" + HIDE_CURSOR + DISABLE_AUTOWRAP + "\033[?1007h")
                     # Konfiguration neu laden — inklusive keymap, damit
                     # geänderte Tastenbelegungen sofort wirken

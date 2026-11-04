@@ -203,6 +203,39 @@ def _read_image_pixel_size_raw(path: str) -> Optional[Tuple[int, int]]:
         if len(header) >= 24 and header[:8] == b"\x89PNG\r\n\x1a\n":
             w, h = struct.unpack(">II", header[16:24])
             return (w, h)
+        # JPEG: SOF0/SOF2 Marker
+        if len(header) >= 2 and header[:2] == b"\xff\xd8":
+            try:
+                with open(path, "rb") as jf:
+                    jf.seek(2)
+                    while True:
+                        b = jf.read(1)
+                        if not b:
+                            break
+                        if b != b"\xff":
+                            continue
+                        m = jf.read(1)
+                        while m == b"\xff":
+                            m = jf.read(1)
+                        if not m:
+                            break
+                        m_byte = m[0]
+                        if m_byte in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                            jf.read(3)
+                            h, w = struct.unpack(">HH", jf.read(4))
+                            return (w, h)
+                        elif m_byte in (0xD9, 0xDA):
+                            break
+                        else:
+                            length_bytes = jf.read(2)
+                            if len(length_bytes) < 2:
+                                break
+                            seg_len = struct.unpack(">H", length_bytes)[0]
+                            if seg_len < 2:
+                                break
+                            jf.seek(seg_len - 2, 1)
+            except Exception:
+                pass
         # GIF: Offset 6
         if len(header) >= 10 and header[:6] in (b"GIF87a", b"GIF89a"):
             w, h = struct.unpack("<HH", header[6:10])
@@ -229,6 +262,26 @@ def _read_image_pixel_size_raw(path: str) -> Optional[Tuple[int, int]]:
                 return (w, h)
         except Exception:
             pass
+
+    # Fallback über identify / magick auf Linux
+    identify = shutil.which("identify") or shutil.which("magick")
+    if identify:
+        try:
+            cmd = [identify, "-format", "%w %h", path] if not identify.endswith("magick") else [identify, "identify", "-format", "%w %h", path]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=1.0)
+            parts = res.stdout.strip().split()
+            if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                return (int(parts[0]), int(parts[1]))
+        except Exception:
+            pass
+
+    # Fallback über PIL (Pillow)
+    try:
+        from PIL import Image as _PIL_Image
+        with _PIL_Image.open(path) as im:
+            return im.size
+    except Exception:
+        pass
     return None
 
 
@@ -493,8 +546,8 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> 
             except (subprocess.TimeoutExpired, OSError):
                 pass
 
-        # Konvertierung via magick
-        magick = shutil.which("magick")
+        # Konvertierung via magick / convert (Linux & macOS)
+        magick = shutil.which("magick") or shutil.which("convert")
         if magick:
             try:
                 cmd = [magick, path, "-resize", f"{max_dim}x{max_dim}>", cached_png]
@@ -505,6 +558,18 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> 
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
+
+        # Konvertierung via Pillow (reines Python)
+        try:
+            from PIL import Image as _PIL_Image
+            with _PIL_Image.open(path) as img:
+                img.thumbnail((max_dim, max_dim))
+                img.save(cached_png, "PNG")
+                _THUMB_MEM_CACHE[mem_key] = cached_png
+                _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
+                return cached_png
+        except Exception:
+            pass
 
         # SVG: Falls sips/magick scheitern, chafa/direkt probieren
         if ext == ".svg":
@@ -616,10 +681,9 @@ def make_chafa_preview_lines(image_path: str, cols: int, rows: int) -> List[str]
 
 
 def make_python_halfblock_lines(image_path: str, cols: int, rows: int) -> List[str]:
-    """Universeller Python-Halbblock-Renderer für Terminals ohne externes Chafa."""
+    """Universeller Python-Halbblock-Renderer für Terminals ohne externes Chafa (macOS & Linux)."""
     sips = shutil.which("sips")
-    if not sips:
-        return []
+    conv_tool = sips or shutil.which("magick") or shutil.which("convert")
 
     cache_dir = get_media_cache_dir()
     tmp_bmp = os.path.join(cache_dir, f"conv_{os.getpid()}.bmp")
@@ -627,10 +691,22 @@ def make_python_halfblock_lines(image_path: str, cols: int, rows: int) -> List[s
     pixel_w = max(2, cols)
 
     try:
-        cmd = [sips, "-s", "format", "bmp", "-z", str(pixel_h), str(pixel_w), image_path, "--out", tmp_bmp]
-        res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2.0)
-        if res.returncode != 0 or not os.path.exists(tmp_bmp):
-            return []
+        if conv_tool:
+            if conv_tool == sips:
+                cmd = [sips, "-s", "format", "bmp", "-z", str(pixel_h), str(pixel_w), image_path, "--out", tmp_bmp]
+            else:
+                cmd = [conv_tool, image_path, "-resize", f"{pixel_w}x{pixel_h}!", "-type", "truecolor", f"bmp:{tmp_bmp}"]
+            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2.0)
+            if res.returncode != 0 or not os.path.exists(tmp_bmp):
+                return []
+        else:
+            try:
+                from PIL import Image as _PIL_Image
+                with _PIL_Image.open(image_path) as im:
+                    im = im.convert("RGB").resize((pixel_w, pixel_h))
+                    im.save(tmp_bmp, "BMP")
+            except Exception:
+                return []
 
         with open(tmp_bmp, "rb") as f:
             data = f.read()

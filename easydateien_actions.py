@@ -9,6 +9,7 @@ und die Helfer aus easydateien_ui.
 from easydateien_common import (
     CONFIG_FILE, DEFAULT_CONFIG,
     KEY_BINDINGS, get_keybindings_from_config, build_keymap,
+    get_terminal_size,
 )
 from easydateien_ui import (
     ANSI_ESCAPE_RE, C_BOLD, C_DIM, C_INVERT, C_RESET, DEFAULT_CONFIG, copy_text_to_clipboard,
@@ -21,7 +22,7 @@ from easydateien_ui import (
     signal, stat, str_width, subprocess,
     sync_to_macos_clipboard, sys, termios, time,
     tty, wrap_line_to_width, zipfile,
-    invalidate_trash_cache, is_trash_dir,
+    invalidate_trash_cache, is_trash_dir, get_trash_dir, get_clipboard_text,
 )
 
 import os
@@ -525,7 +526,9 @@ class EasyDateienActions:
         return template.replace("%s", quoted) if "%s" in template else f"{template} {quoted}"
 
     def open_with_system(self, item: FileEntry):
-        opener = self.config.get("opener", "open %s") or "open %s"
+        opener = self.config.get("opener", "") or ""
+        if not opener or opener == "open %s":
+            opener = "open %s" if sys.platform == "darwin" else "xdg-open %s"
         cmd = self.build_command(opener, item.path)
         user_shell, env = get_shell_environment()
         try:
@@ -652,7 +655,9 @@ class EasyDateienActions:
         sync_to_macos_clipboard(targets)
         self._copy_flash_paths = set(targets)
         self._copy_flash_until = time.monotonic() + 1.0
-        self.set_status(f"{len(targets)} kopiert (Cmd+V im Finder, p hier)", "success")
+        target_mgr = "im Finder" if sys.platform == "darwin" else "im Dateimanager"
+        shortcut = "Cmd+V" if sys.platform == "darwin" else "Strg+V"
+        self.set_status(f"{len(targets)} kopiert ({shortcut} {target_mgr}, p hier)", "success")
 
     def create_symlink_for_selection(self, link_name: str):
         """Erstellt eine Verknuepfung mit dem Namen `link_name` im aktuellen Ordner,
@@ -1193,7 +1198,7 @@ class EasyDateienActions:
             return
 
         action = self.undo_stack.pop()
-        trash_dir = os.path.expanduser("~/.Trash")
+        trash_dir = get_trash_dir()
         try:
             os.makedirs(trash_dir, exist_ok=True)
         except OSError:
@@ -1554,7 +1559,7 @@ class EasyDateienActions:
         """Zeichnet den Bildschirm während eines laufenden Befehls neu, damit
         die streamende Konsolenausgabe live sichtbar ist."""
         try:
-            curr_size = shutil.get_terminal_size((80, 24))
+            curr_size = get_terminal_size((80, 24))
             term_cols, term_rows = curr_size.columns, curr_size.lines
             lines = self.build_screen(term_cols, term_rows)
             out_buf = [f"\033[1;{term_rows}r"]
@@ -1578,7 +1583,7 @@ class EasyDateienActions:
         try:
             import fcntl
             import struct
-            curr = shutil.get_terminal_size((80, 24))
+            curr = get_terminal_size((80, 24))
             # Innenbreite des Panels: Rand │ plus je ein Leerzeichen Abstand
             # links und rechts ergeben term_cols - 4 nutzbare Zeichen.
             panel_w = max(20, curr.columns - 4)
@@ -1770,7 +1775,7 @@ class EasyDateienActions:
             self.set_status(f"Kein Befehl für: {titel}", "warning")
             return
         self.active_dialog = None
-        ist_gui = ("open -a" in befehl) or ("osascript" in befehl)
+        ist_gui = ("open -a" in befehl) or ("osascript" in befehl) or ("xdg-open" in befehl) or ("gtk-launch" in befehl) or befehl.strip().endswith("&")
         if ist_gui:
             try:
                 subprocess.Popen(
@@ -2040,7 +2045,7 @@ class EasyDateienActions:
             # Berechne die Gesamtzahl der Zeilen in der Konsole nach dem Umbruch
             wrapped_lines: List[str] = []
             for raw_line in self.console_output_lines:
-                wrapped_lines.extend(wrap_line_to_width(raw_line, max(1, shutil.get_terminal_size((80, 24)).columns - 4)))
+                wrapped_lines.extend(wrap_line_to_width(raw_line, max(1, get_terminal_size((80, 24)).columns - 4)))
 
             # Maximale Scroll-Position berechnen
             max_scroll = max(0, len(wrapped_lines) - 1)
@@ -2123,7 +2128,7 @@ class EasyDateienActions:
         if self.active_dialog == "trash_confirm":
             if key in ("y", "Y", "ENTER"):
                 targets = list(self.selected_paths) if self.selected_paths else ([self.items[self.selected_idx].path] if self.items else [])
-                trash_dir = os.path.expanduser("~/.Trash")
+                trash_dir = get_trash_dir()
                 os.makedirs(trash_dir, exist_ok=True)
                 moved_records = []
                 deleted_records = []
@@ -2301,7 +2306,8 @@ class EasyDateienActions:
                 self.change_directory(HOME_DIR)
                 self.set_status("Home (~)", "info")
             elif c == "t":
-                trash_p = os.path.expanduser("~/.Trash")
+                trash_p = get_trash_dir()
+                os.makedirs(trash_p, exist_ok=True)
                 if os.path.isdir(trash_p):
                     self.change_directory(trash_p)
                     self.set_status("Papierkorb", "info")
@@ -2315,10 +2321,7 @@ class EasyDateienActions:
                 c_files = get_macos_clipboard_files()
                 target = c_files[0] if c_files else ""
                 if not target:
-                    try:
-                        target = subprocess.check_output(["pbpaste"], text=True).strip()
-                    except Exception:
-                        pass
+                    target = get_clipboard_text().strip()
                 target = os.path.expanduser(target)
                 if os.path.isdir(target):
                     self.change_directory(target)

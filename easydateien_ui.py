@@ -21,10 +21,12 @@ import re
 import argparse
 import stat
 import shlex
+from urllib.parse import unquote, urlparse
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Dict, Set, Optional, Tuple
 
 from easydateien_common import (
+    get_terminal_size,
     build_keymap,
     key_display,
     build_help_items,
@@ -631,39 +633,102 @@ def _enqueue_clipboard(kind: str, payload: object):
 
 
 def _sync_paths_now(abs_paths: List[str]):
-    """Setzt die macOS-Zwischenablage für die übergebenen (absoluten) Pfade."""
+    """Setzt die System-Zwischenablage für die übergebenen (absoluten) Pfade (macOS & Linux)."""
     if not abs_paths:
         return
-    helper = ensure_clip_helper()
-    if helper:
+    if sys.platform == "darwin":
+        helper = ensure_clip_helper()
+        if helper:
+            try:
+                res = subprocess.run([helper, "set"] + abs_paths, capture_output=True, timeout=4.0)
+                if res.returncode == 0:
+                    return
+            except Exception:
+                pass
+        # AppleScript-Fallback auf macOS
         try:
-            res = subprocess.run([helper, "set"] + abs_paths, capture_output=True, timeout=4.0)
-            if res.returncode == 0:
-                return
+            items = ", ".join([f'(POSIX file "{p.replace(chr(34), chr(92)+chr(34))}" as alias)' for p in abs_paths])
+            as_code = f'set the clipboard to {{{items}}}'
+            subprocess.run(["osascript", "-e", as_code], capture_output=True, timeout=2.0)
+            return
         except Exception:
             pass
-    # AppleScript-Fallback
-    try:
-        items = ", ".join([f'(POSIX file "{p.replace(chr(34), chr(92)+chr(34))}" as alias)' for p in abs_paths])
-        as_code = f'set the clipboard to {{{items}}}'
-        subprocess.run(["osascript", "-e", as_code], capture_output=True, timeout=2.0)
-    except Exception:
-        pass
+
+    # Linux (Wayland / X11)
+    uri_list = "".join(f"file://{p}\r\n" for p in abs_paths).encode("utf-8")
+    text_data = "\n".join(abs_paths).encode("utf-8")
+    if shutil.which("wl-copy"):
+        try:
+            subprocess.run(["wl-copy", "-t", "text/uri-list"], input=uri_list, timeout=2.0)
+            return
+        except Exception:
+            try:
+                subprocess.run(["wl-copy"], input=text_data, timeout=2.0)
+                return
+            except Exception:
+                pass
+    if shutil.which("xclip"):
+        try:
+            subprocess.run(["xclip", "-selection", "clipboard", "-t", "text/uri-list"], input=uri_list, timeout=2.0)
+            return
+        except Exception:
+            try:
+                subprocess.run(["xclip", "-selection", "clipboard"], input=text_data, timeout=2.0)
+                return
+            except Exception:
+                pass
+    if shutil.which("xsel"):
+        try:
+            subprocess.run(["xsel", "--clipboard", "--input"], input=text_data, timeout=2.0)
+            return
+        except Exception:
+            pass
 
 
 def _copy_text_now(text: str):
-    """Kopiert reinen Text in das macOS-Clipboard."""
+    """Kopiert reinen Text in das System-Clipboard (macOS & Linux)."""
     if not text:
         return
-    try:
-        p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
-        p.communicate(input=text.encode("utf-8"))
-    except Exception:
-        pass
+    data = text.encode("utf-8")
+    if sys.platform == "darwin":
+        if shutil.which("pbcopy"):
+            try:
+                p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+                p.communicate(input=data)
+                return
+            except Exception:
+                pass
+    if shutil.which("wl-copy"):
+        try:
+            p = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE)
+            p.communicate(input=data)
+            return
+        except Exception:
+            pass
+    if shutil.which("xclip"):
+        try:
+            p = subprocess.Popen(["xclip", "-selection", "clipboard"], stdin=subprocess.PIPE)
+            p.communicate(input=data)
+            return
+        except Exception:
+            pass
+    if shutil.which("xsel"):
+        try:
+            p = subprocess.Popen(["xsel", "--clipboard", "--input"], stdin=subprocess.PIPE)
+            p.communicate(input=data)
+            return
+        except Exception:
+            pass
+    if shutil.which("pbcopy"):
+        try:
+            p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+            p.communicate(input=data)
+        except Exception:
+            pass
 
 
 def sync_to_macos_clipboard(paths: List[str]):
-    """Synchronisiert Dateipfade nativ in die macOS-Zwischenablage für Finder (Cmd+V) und Texteditoren.
+    """Synchronisiert Dateipfade nativ in die System-Zwischenablage für Dateimanager und Texteditoren.
 
     Die eigentliche Übertragung läuft asynchron im Hintergrund; die Funktion
     kehrt sofort zurück, damit die Oberfläche nie auf das Hilfsprogramm wartet.
@@ -674,30 +739,78 @@ def sync_to_macos_clipboard(paths: List[str]):
 
 
 def copy_text_to_clipboard(text: str):
-    """Kopiert reinen Text in das macOS-Clipboard (asynchron im Hintergrund)."""
+    """Kopiert reinen Text in die System-Zwischenablage (asynchron im Hintergrund)."""
     if text is None:
         return
     _enqueue_clipboard("text", text)
 
-def get_macos_clipboard_files() -> List[str]:
-    """Liest echte Dateiobjekte und Pfade aus dem macOS-Pasteboard."""
-    helper = ensure_clip_helper()
-    if helper:
+
+def get_clipboard_text() -> str:
+    """Liest reinen Text aus der systemweiten Zwischenablage (macOS & Linux)."""
+    if sys.platform == "darwin":
+        if shutil.which("pbpaste"):
+            try:
+                return subprocess.check_output(["pbpaste"], text=True, timeout=1.0)
+            except Exception:
+                pass
+    if shutil.which("wl-paste"):
         try:
-            out = subprocess.check_output([helper, "get"], text=True, timeout=4.0)
-            lines = [l.strip() for l in out.splitlines() if l.strip() and os.path.exists(l.strip())]
-            if lines:
-                return lines
+            return subprocess.check_output(["wl-paste", "--no-newline"], text=True, timeout=1.0)
         except Exception:
             pass
-    try:
-        out = subprocess.check_output(["pbpaste"], text=True, timeout=1.0)
-        lines = [l.strip() for l in out.splitlines() if l.strip() and os.path.exists(l.strip())]
+    if shutil.which("xclip"):
+        try:
+            return subprocess.check_output(["xclip", "-selection", "clipboard", "-o"], text=True, timeout=1.0)
+        except Exception:
+            pass
+    if shutil.which("xsel"):
+        try:
+            return subprocess.check_output(["xsel", "--clipboard", "--output"], text=True, timeout=1.0)
+        except Exception:
+            pass
+    if shutil.which("pbpaste"):
+        try:
+            return subprocess.check_output(["pbpaste"], text=True, timeout=1.0)
+        except Exception:
+            pass
+    return ""
+
+
+def get_macos_clipboard_files() -> List[str]:
+    """Liest echte Dateiobjekte und Pfade aus dem Pasteboard (macOS & Linux)."""
+    if sys.platform == "darwin":
+        helper = ensure_clip_helper()
+        if helper:
+            try:
+                out = subprocess.check_output([helper, "get"], text=True, timeout=4.0)
+                lines = [l.strip() for l in out.splitlines() if l.strip() and os.path.exists(l.strip())]
+                if lines:
+                    return lines
+            except Exception:
+                pass
+    raw = get_clipboard_text()
+    if raw:
+        lines = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("file://"):
+                try:
+                    p = unquote(urlparse(line).path)
+                    if os.path.exists(p):
+                        lines.append(p)
+                        continue
+                except Exception:
+                    pass
+            if os.path.exists(line):
+                lines.append(line)
         if lines:
             return lines
-    except Exception:
-        pass
     return []
+
+
+get_clipboard_files = get_macos_clipboard_files
 
 def get_file_type_desc(item: FileEntry) -> str:
     """Liefert eine präzise deutsche Typbezeichnung."""
@@ -740,20 +853,39 @@ _TRASH_CACHE: Dict[str, object] = {
 _TRASH_CACHE_LOCK = threading.Lock()
 
 
+def get_trash_dir() -> str:
+    """Liefert den systemspezifischen Papierkorb-Pfad (macOS: ~/.Trash, Linux: XDG Trash)."""
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/.Trash")
+    xdg_data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return os.path.join(xdg_data, "Trash", "files")
+
+
 def is_trash_dir(path: str) -> bool:
-    """Prüft, ob der angegebene Pfad das macOS-Papierkorb-Verzeichnis ist."""
-    if sys.platform != "darwin" or not path:
+    """Prüft, ob der angegebene Pfad ein Papierkorb-Verzeichnis ist (macOS ~/.Trash oder Linux XDG Trash)."""
+    if not path:
         return False
     try:
-        trash_dir = os.path.expanduser("~/.Trash")
-        if path == trash_dir or path == "~/.Trash":
-            return True
         norm = os.path.normpath(os.path.expanduser(path))
-        if norm == trash_dir:
+        target = os.path.realpath(norm)
+        # macOS Papierkorb
+        mac_trash = os.path.realpath(os.path.expanduser("~/.Trash"))
+        if target == mac_trash or norm in (os.path.expanduser("~/.Trash"), "~/.Trash"):
             return True
-        return os.path.realpath(norm) == os.path.realpath(trash_dir)
+        # Linux FreeDesktop / XDG Papierkorb
+        xdg_data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+        linux_trash = os.path.realpath(os.path.join(xdg_data, "Trash"))
+        linux_files = os.path.realpath(os.path.join(xdg_data, "Trash", "files"))
+        if target in (linux_trash, linux_files) or norm in (
+            os.path.join(xdg_data, "Trash"),
+            os.path.join(xdg_data, "Trash", "files"),
+            "~/.local/share/Trash",
+            "~/.local/share/Trash/files",
+        ):
+            return True
     except Exception:
-        return False
+        pass
+    return False
 
 
 def invalidate_trash_cache():
@@ -947,6 +1079,22 @@ def format_entry_name(it: FileEntry, width: int, bold: bool = False) -> str:
 # Timeout abzuwarten) und die Hauptschleife sofort neu zeichnet.
 RESIZE_PIPE = os.pipe()
 WAKE_PIPE = os.pipe()
+try:
+    os.set_blocking(RESIZE_PIPE[0], False)
+    os.set_blocking(RESIZE_PIPE[1], False)
+    os.set_blocking(WAKE_PIPE[0], False)
+    os.set_blocking(WAKE_PIPE[1], False)
+except Exception:
+    pass
+
+_SIGWINCH_FLAG = False
+
+
+def check_and_clear_winch_flag() -> bool:
+    global _SIGWINCH_FLAG
+    val = _SIGWINCH_FLAG
+    _SIGWINCH_FLAG = False
+    return val
 
 
 def notify_ui_wakeup():
@@ -966,6 +1114,8 @@ def _verwerfe_wake_events():
 
 
 def _bei_sigwinch(signum, frame):
+    global _SIGWINCH_FLAG
+    _SIGWINCH_FLAG = True
     try:
         os.write(RESIZE_PIPE[1], b"r")
     except OSError:

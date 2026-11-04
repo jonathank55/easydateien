@@ -1,6 +1,6 @@
 # EasyDateien
 
-**Minimalistischer, hocheffizienter Terminaldateimanager für macOS mit integrierter Konsole und flüssiger Tastaturnavigation (deutschsprachig).**
+**Minimalistischer, hocheffizienter Terminaldateimanager für macOS und Linux mit integrierter Konsole und flüssiger Tastaturnavigation (deutschsprachig).**
 
 EasyDateien ist ein extrem schlanker, reaktionsschneller und rein deutschsprachiger Terminaldateimanager ohne externe Python-Abhängigkeiten. Er wurde entwickelt für Anwender, die blitzschnell im Terminal durch Verzeichnisse navigieren, Dateien auswählen, verschieben, kopieren, suchen, komprimieren oder in Editoren bearbeiten möchten, kombiniert mit einem vollintegrierten Terminalpanel für maximale Produktivität.
 
@@ -55,17 +55,17 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
   - **Suchen & Schnellfilter (`/`):** Interaktiver Live-Filter für die Dateiliste.  
   - **Neu erstellen (`n`):** Neue Dateien oder Verzeichnisse anlegen (Ordner mit `/` am Ende).  
   - **Umbenennen (`r`):** Inline-Umbenennen mit Sofort-Feedback.  
-  - **Papierkorb (`Entfernen` oder `Rücktaste`):** Sicheres Verschieben in den macOS-Papierkorb (`~/.Trash`) mit Sicherheitsabfrage.  
+  - **Papierkorb (`Entfernen` oder `Rücktaste`):** Sicheres Verschieben in den Papierkorb (macOS: `~/.Trash`, Linux: `~/.local/share/Trash`) mit Sicherheitsabfrage.  
   - **Rückgängig (`u`):** Mehrstufiges Undo-System für Erstellen, Umbenennen, Löschen, Einfügen sowie ZIP-Erstellen und -Entpacken.  
   - **ZIP-Komprimierung (`z`):** Ausgewählte Dateien und Ordner als ZIP-Archiv komprimieren; läuft im Hintergrund mit Fortschrittsanzeige (z. B. `ZIP wird erstellt (120/400)…`), die App bleibt voll bedienbar; der Cursor springt auf das fertige Archiv.  
   - **ZIP-Entpacken (`e`):** Markierte bzw. ausgewählte ZIP-Archive in einen neuen Ordner entpacken.  
   - **Editorintegration (`o`):** Dateien im konfigurierten Texteditor bearbeiten (Standard `nano`; im Konfigurationsmenü wählbar).  
-  - **Systemweites Öffnen (`Enter`):** Öffnet Dateien mit der macOS-Standard-App oder Ordner direkt im Finder (Befehl über `opener` konfigurierbar).  
+  - **Systemweites Öffnen (`Enter`):** Öffnet Dateien mit der Standard-App oder Ordner direkt im Systemdateimanager (Finder auf macOS, Dateimanager auf Linux; Befehl über `opener` konfigurierbar).  
 
 - **Details & Vorschau (rechte Spalte):**  
   Bei Dateien zeigt die rechte Spalte Typ, Größe, Datum und Rechte (bei Symlinks zusätzlich das Ziel) sowie – bei ausreichender Fensterhöhe – eine Textvorschau bzw. den Inhalt von ZIP-Archiven. Bei Ordnern wird deren Inhalt angezeigt. Symlinks erscheinen als `name @ ziel`.
 
-- **Auswahldarstellung & macOS-Systemzwischenablage:**  
+- **Auswahldarstellung & Systemzwischenablage:**  
   - Auswahl: `*` vor dem Namen; der aktuell ausgewählte Eintrag (Cursor) wird invertiert hervorgehoben  
   - Ausschneiden (Cut): `×` (z. B. `  ×datei.txt`)  
   - Kopieren: Kurzzeitiges Feedback `+` (fett, ca. 1 Sekunde nach dem Kopieren; Vorrang vor `*`; kehrt danach automatisch zum vorherigen Zustand zurück)  
@@ -73,7 +73,7 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
   - `a`: Alle sichtbaren Dateien auf einmal markieren oder abwählen  
   - `x`: Auswahl (oder der Eintrag unter dem Cursor) zum **Ausschneiden** vormerken (`×`); erneutes `x` auf einer ausgeschnittenen Datei nimmt die Vormerkung zurück  
   - `c`: **Kopiermenü** öffnen (invertiertes Menü wie bei `g`/`h`):  
-    - `c` im Menü: Markierte Dateien zum **Kopieren** vormerken. **Echte macOS-Systemzwischenablage-Integration:** Dateien werden als native macOS-Dateireferenzen (`NSFilenamesPboardType` / `public.file-url`) registriert und können sofort systemweit im Finder (Cmd+V), in Mail, WhatsApp, Slack oder Notizen eingefügt werden! Die Auswahl bleibt dabei erhalten.  
+    - `c` im Menü: Markierte Dateien zum **Kopieren** vormerken. **Echte Systemzwischenablage-Integration:** Dateien werden auf macOS (Finder-kompatibel via Pasteboard) sowie auf Linux (via Wayland wl-clipboard bzw. X11 xclip/xsel) systemweit registriert und können sofort in anderen Anwendungen eingefügt werden! Die Auswahl bleibt dabei erhalten.  
     - `f` im Menü: Dateinamen in die Zwischenablage kopieren  
     - `d` im Menü: Ordnerpfad in die Zwischenablage kopieren    - `v`: **Verknüpfung erstellen** — öffnet einen Eingabedialog für den Linknamen; leer lassen für den automatischen Vorschlag `<Zielname> - Link`. Die Verknüpfung zeigt auf die Auswahl (ein einzelnes Element) bzw. den Eintrag unter dem Cursor und wird im aktuellen Ordner erstellt (bei Namenskollision automatisch `<Name> (1)`, `<Name> (2)`, …). Rückgängig mit `u`.    - `p`: Vormerkung im aktuellen Verzeichnis **einfügen** (erkennt auch im Finder kopierte Dateien). Läuft im Hintergrund mit Fortschrittsanzeige (z. B. `Einfügen läuft (120/401)…`), die App bleibt voll bedienbar. Existiert der Name bereits, erscheint eine Rückfrage (`y` ersetzen, `n` überspringen, `a` alle ersetzen; bei Kopien erhalten Duplikate bei Bedarf eine Nummerierung `(1)`).  
 
@@ -161,8 +161,9 @@ Das Skript
 
 ### Voraussetzungen
 
-- macOS mit Python 3 (nur Standardbibliothek, keine externen Python-Abhängigkeiten)
-- Optional: `clang` (Xcode Command Line Tools) für das native Clipboard-Modul (wird bei Bedarf auch beim ersten Start kompiliert); ohne `clang` nutzt EasyDateien AppleScript zum Kopieren und `pbpaste` zum Einfügen
+- macOS oder Linux mit Python 3 (nur Standardbibliothek, keine externen Python-Abhängigkeiten)
+- Optional (macOS): `clang` (Xcode Command Line Tools) für das native Clipboard- und PDF-Modul
+- Optional (Linux): `wl-clipboard` (Wayland) oder `xclip` / `xsel` (X11) für die Systemzwischenablage; `poppler-utils` (`pdftoppm`) für PDF-Vorschauen
 - Ein UTF-8-fähiges Terminal mit ANSI-/SGR-Maus-Unterstützung
 
 ---

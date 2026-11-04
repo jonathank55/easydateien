@@ -17,6 +17,7 @@ import shutil
 import argparse
 
 from easydateien_common import (
+    get_terminal_size,
     ANSI_ESCAPE_RE,
     C_RESET,
     C_BOLD,
@@ -38,6 +39,12 @@ from easydateien_common import (
     load_config,
     save_config,
     format_keys,
+)
+from easydateien_ui import (
+    RESIZE_PIPE,
+    _bei_sigwinch,
+    _verwerfe_resize_events,
+    _install_resize_handler,
 )
 
 # Kompatibilitäts-Re-Exports: Der Dateimanager und externe Aufrufe können diese
@@ -178,8 +185,16 @@ def clicked_row(k: str, start: int, count: int) -> "int | None":
         return start + row_i
     return None
 
+_LAST_BOX_SIZE = None
+
 def render_box(title: str, subtitle: str, rows: list, cur_idx: int, footer: str):
-    term_cols, term_rows = shutil.get_terminal_size((80, 24))
+    global _LAST_BOX_SIZE
+    curr_size = get_terminal_size((80, 24))
+    term_cols, term_rows = curr_size.columns, curr_size.lines
+    if curr_size != _LAST_BOX_SIZE:
+        _LAST_BOX_SIZE = curr_size
+        sys.stdout.write("\033[2J\033[H")
+        sys.stdout.flush()
     inner = max(4, term_cols - 2)
     fixed_h = 7
     avail_rows = max(1, term_rows - fixed_h)
@@ -996,21 +1011,6 @@ def main_menu(fd: int):
                         status_hint = "Zurücksetzen abgebrochen"
     return cfg
 
-# Self-Pipe-Muster: Das Signal schreibt sofort ein Byte in eine Pipe, auf
-# der select() mitwacht. Dadurch reagiert das Warten ohne Poll-Takt und ohne
-# Verzoegerung auf Resize (PEP 475 wuerde sonst den Timeout trotz Signal
-# abwarten -> traege Darstellung beim Fensterziehen).
-_RESIZE_PIPE = os.pipe()
-
-
-def _bei_resize(signum, frame):
-    """Terminalgroesse geaendert: sofortiges Aufwecken des Wartens."""
-    try:
-        os.write(_RESIZE_PIPE[1], b"r")
-    except OSError:
-        pass
-
-
 def _warte_auf_taste(fd: int) -> str:
     """Wartet auf eine Taste ODER einen Fenster-Resize und meldet beides.
 
@@ -1019,12 +1019,9 @@ def _warte_auf_taste(fd: int) -> str:
     zurueck, wenn sich die Terminalgroesse geaendert hat."""
     try:
         while True:
-            r, _, _ = select.select([fd, _RESIZE_PIPE[0]], [], [])
-            if _RESIZE_PIPE[0] in r:
-                try:
-                    os.read(_RESIZE_PIPE[0], 64)
-                except OSError:
-                    pass
+            r, _, _ = select.select([fd, RESIZE_PIPE[0]], [], [])
+            if RESIZE_PIPE[0] in r:
+                _verwerfe_resize_events()
                 return "resize"
             if fd in r:
                 k = read_key(fd, timeout=0.05)
@@ -1038,11 +1035,7 @@ def run_konfigurator(standalone: bool = True):
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     tty.setcbreak(fd, termios.TCSADRAIN)
-    try:
-        import signal as _signal
-        _signal.signal(_signal.SIGWINCH, _bei_resize)
-    except Exception:
-        pass
+    _install_resize_handler()
     if standalone:
         sys.stdout.write("\033[?1049h\033[?25l" + DISABLE_AUTOWRAP + "\033[?1000h\033[?1006h\033[2J\033[3J\033[H")
         sys.stdout.flush()
@@ -1053,6 +1046,7 @@ def run_konfigurator(standalone: bool = True):
         cfg = main_menu(fd)
         return cfg
     finally:
+        _install_resize_handler()
         if standalone:
             sys.stdout.write("\033[?1006l\033[?1000l\033[?25h" + ENABLE_AUTOWRAP + "\033[?1049l")
             sys.stdout.flush()

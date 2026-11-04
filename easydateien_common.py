@@ -10,11 +10,44 @@ ausschließlich von hier, damit beide Programme niemals auseinanderlaufen.
 """
 
 import os
+import sys
+import shutil
 import json
 import re
 import functools
 import unicodedata
 import ctypes
+
+# Geerbte Terminalgrößenvariablen entfernen, damit shutil.get_terminal_size()
+# und ioctl nicht auf statische Werte fixiert werden und SIGWINCH wirkt
+os.environ.pop("COLUMNS", None)
+os.environ.pop("LINES", None)
+
+
+def get_terminal_size(fallback=(80, 24)) -> os.terminal_size:
+    """Ermittelt die exakte, aktuelle Terminalgröße direkt über das Betriebssystem (ioctl),
+    ohne von vererbten Umgebungsvariablen (COLUMNS/LINES) blockiert zu werden."""
+    os.environ.pop("COLUMNS", None)
+    os.environ.pop("LINES", None)
+    for stream in (sys.stdout, sys.stdin, sys.stderr):
+        try:
+            if stream and hasattr(stream, "fileno"):
+                fn = stream.fileno()
+                if os.isatty(fn):
+                    sz = os.get_terminal_size(fn)
+                    cols = sz.columns if sz.columns > 0 else fallback[0]
+                    rows = sz.lines if sz.lines > 0 else fallback[1]
+                    return os.terminal_size((cols, rows))
+        except (AttributeError, ValueError, OSError):
+            continue
+    try:
+        sz = shutil.get_terminal_size(fallback)
+        cols = sz.columns if sz.columns > 0 else fallback[0]
+        rows = sz.lines if sz.lines > 0 else fallback[1]
+        return os.terminal_size((cols, rows))
+    except Exception:
+        return os.terminal_size(fallback)
+
 
 try:
     _libc = ctypes.CDLL(None)
@@ -75,10 +108,10 @@ _VS16 = "\ufe0f"
 DEFAULT_CONFIG = {
     "schnellstart_eintraege": [
         {"titel": "Dateien", "befehl": "easydateien"},
-        {"titel": "Textdatei", "befehl": "osascript -e 'tell application \"TextEdit\"' -e 'activate' -e 'make new document' -e 'end tell' >/dev/null 2>&1"},
-        {"titel": "Safari", "befehl": "open -a Safari"},
-        {"titel": "iMessage", "befehl": "open -a Messages"},
-        {"titel": "WhatsApp", "befehl": "open -a WhatsApp"},
+        {"titel": "Textdatei", "befehl": "osascript -e 'tell application \"TextEdit\"' -e 'activate' -e 'make new document' -e 'end tell' >/dev/null 2>&1" if sys.platform == "darwin" else "xdg-open '' >/dev/null 2>&1 || gedit >/dev/null 2>&1 || nano"},
+        {"titel": "Browser", "befehl": "open -a Safari" if sys.platform == "darwin" else "xdg-open https://"},
+        {"titel": "iMessage" if sys.platform == "darwin" else "Terminal", "befehl": "open -a Messages" if sys.platform == "darwin" else "x-terminal-emulator >/dev/null 2>&1"},
+        {"titel": "WhatsApp", "befehl": "open -a WhatsApp" if sys.platform == "darwin" else "xdg-open https://web.whatsapp.com"},
         {"titel": "VPN", "untermenu": [
             {"titel": "Verbindung → DE", "befehl": "windscribe-cli connect DE"},
             {"titel": "Verbindung → Schnellste", "befehl": "windscribe-cli connect best"},
@@ -92,7 +125,7 @@ DEFAULT_CONFIG = {
     "preview_wrap": True,
     "preview_media": True,
     "text_editor": "nano %s",
-    "opener": "open %s",
+    "opener": "open %s" if sys.platform == "darwin" else "xdg-open %s",
     "sort_by": "name",
     "sort_reverse": True,
     "sort_dir_first": True,
