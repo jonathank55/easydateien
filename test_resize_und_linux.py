@@ -112,6 +112,43 @@ class TestLinuxCompatibility(unittest.TestCase):
                     res = ui.get_clipboard_text()
                     self.assertEqual(res, "inhalt-linux\n")
 
+    def test_linux_documents_dir(self):
+        """Prüft, dass auf Linux Dokumente (~/Dokumente bzw. XDG) und auf macOS Documents genutzt wird."""
+        with tempfile.TemporaryDirectory() as tmp_home:
+            dok_path = os.path.join(tmp_home, "Dokumente")
+            os.makedirs(dok_path, exist_ok=True)
+            # 1. Linux mit vorhandenem ~/Dokumente
+            with patch("easydateien_ui.sys.platform", "linux"), patch("os.path.expanduser", side_effect=lambda p: p.replace("~", tmp_home)):
+                self.assertEqual(ui.get_documents_dir(), dok_path)
+
+            # 2. Linux XDG_DOCUMENTS_DIR
+            custom_doc = os.path.join(tmp_home, "MeinArchiv")
+            os.makedirs(custom_doc, exist_ok=True)
+            with patch.dict(os.environ, {"XDG_DOCUMENTS_DIR": custom_doc}):
+                with patch("easydateien_ui.sys.platform", "linux"):
+                    self.assertEqual(ui.get_documents_dir(), custom_doc)
+
+            # 3. macOS nutzt ~/Documents
+            with patch("easydateien_ui.sys.platform", "darwin"):
+                with patch("os.path.expanduser", return_value="/Users/test/Documents"):
+                    self.assertEqual(ui.get_documents_dir(), "/Users/test/Documents")
+
+    def test_goto_menu_linux_navigates_to_dokumente(self):
+        """Prüft, dass das Gehe-zu-Menü ([g] [f]) auf Linux zu Dokumente navigiert."""
+        orig_cwd = os.getcwd()
+        try:
+            with tempfile.TemporaryDirectory() as tmp_home:
+                dok_path = os.path.join(tmp_home, "Dokumente")
+                os.makedirs(dok_path, exist_ok=True)
+                app = ed.EasyDateienApp(tmp_home)
+                app.active_dialog = "goto_menu"
+                with patch("easydateien_ui.sys.platform", "linux"), patch("os.path.expanduser", side_effect=lambda p: p.replace("~", tmp_home)):
+                    app.handle_dialog_key("f", None)
+                    self.assertEqual(os.path.realpath(app.current_dir), os.path.realpath(dok_path))
+                    self.assertIn("Dokumente", app.status_message)
+        finally:
+            os.chdir(orig_cwd)
+
     def test_native_jpeg_dimension_reading_without_sips(self):
         """Liest Pixeldimensionen einer JPEG-Datei ohne sips (nativ in Python)."""
         # Minimaler gültiger JPEG-Header mit SOF0-Segment (Breite: 320, Höhe: 240)

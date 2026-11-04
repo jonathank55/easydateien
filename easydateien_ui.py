@@ -861,6 +861,68 @@ def get_trash_dir() -> str:
     return os.path.join(xdg_data, "Trash", "files")
 
 
+def get_documents_dir() -> str:
+    """Liefert den systemspezifischen Dokumente-Pfad (macOS: ~/Documents, Linux: ~/Dokumente bzw. XDG)."""
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Documents")
+    # 1. XDG_DOCUMENTS_DIR Umgebungsvariable
+    xdg_doc = os.environ.get("XDG_DOCUMENTS_DIR")
+    if xdg_doc:
+        val = os.path.expanduser(os.path.expandvars(xdg_doc))
+        if os.path.isdir(val):
+            return val
+    # 2. XDG user-dirs.dirs Konfigurationsdatei auslesen
+    user_dirs_file = os.path.expanduser("~/.config/user-dirs.dirs")
+    if os.path.isfile(user_dirs_file):
+        try:
+            with open(user_dirs_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("XDG_DOCUMENTS_DIR="):
+                        val = line.split("=", 1)[1].strip('"\'')
+                        val = val.replace("$HOME", os.path.expanduser("~"))
+                        if os.path.isdir(val):
+                            return val
+        except Exception:
+            pass
+    # 3. Standard-Linux-Pfade: ~/Dokumente bevorzugen, Fallback ~/Documents
+    dok = os.path.expanduser("~/Dokumente")
+    if os.path.isdir(dok):
+        return dok
+    doc = os.path.expanduser("~/Documents")
+    if os.path.isdir(doc):
+        return doc
+    return dok
+
+
+def get_downloads_dir() -> str:
+    """Liefert den systemspezifischen Downloads-Pfad (macOS: ~/Downloads, Linux: ~/Downloads bzw. XDG)."""
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Downloads")
+    # 1. XDG_DOWNLOAD_DIR Umgebungsvariable
+    xdg_dl = os.environ.get("XDG_DOWNLOAD_DIR")
+    if xdg_dl:
+        val = os.path.expanduser(os.path.expandvars(xdg_dl))
+        if os.path.isdir(val):
+            return val
+    # 2. XDG user-dirs.dirs Konfigurationsdatei auslesen
+    user_dirs_file = os.path.expanduser("~/.config/user-dirs.dirs")
+    if os.path.isfile(user_dirs_file):
+        try:
+            with open(user_dirs_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("XDG_DOWNLOAD_DIR="):
+                        val = line.split("=", 1)[1].strip('"\'')
+                        val = val.replace("$HOME", os.path.expanduser("~"))
+                        if os.path.isdir(val):
+                            return val
+        except Exception:
+            pass
+    dl = os.path.expanduser("~/Downloads")
+    return dl
+
+
 def is_trash_dir(path: str) -> bool:
     """Prüft, ob der angegebene Pfad ein Papierkorb-Verzeichnis ist (macOS ~/.Trash oder Linux XDG Trash)."""
     if not path:

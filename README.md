@@ -79,11 +79,11 @@ Ich schätze und liebe [Yazi](https://yazi-rs.github.io) sehr. Dieses Projekt is
 
 - **Gehe-zu-Schnellnavigation (`g`):**  
   - `g d`: Downloads (`~/Downloads`)  
-  - `g f`: Dokumente (`~/Documents`)  
+  - `g f`: Dokumente (`~/Documents` auf macOS, `~/Dokumente` auf Linux)  
   - `g -`: Gemerkter Ordner — zuvor mit `-` gemerkt und gültig, bis ein neuer Ordner mit `-` gemerkt wird. Ohne gemerkten Ordner springt `g -` zum zuletzt verwendeten Ordner (der Ordner der letzten Aktion, z. B. Auswahl, Kopieren, Ausschneiden, Einfügen, ZIP, Entpacken, Konsole; reine Navigation zählt nicht)  
 - **Schnellstartmenü (`i`):** Apps und Befehle per Tastendruck starten (Safari, iMessage, VPN-Profile u. a.; Einträge sind als `[1]`, `[2]`, … nummeriert; Pfeiltasten navigieren, `Enter` führt aus, Ziffern `1`–`9` wählen direkt, `ESC`/`q` schließt, in Untermenüs geht `ESC` eine Ebene zurück). Einträge — auch verschachtelte Untermenüs — werden zentral in der Konfiguration (`schnellstart_eintraege`) verwaltet und im Konfigurator (`m` → Schnellstarteinträge) hinzugefügt, gelöscht oder auf Standard zurückgesetzt. GUI-Befehle (`open -a`, `osascript`) starten entkoppelt; CLI-Befehle laufen in der integrierten Konsole.
   - `g h` / `~`: Benutzerordner (`~`)  
-  - `g t`: Papierkorb (`~/.Trash`)  
+  - `g t`: Papierkorb (`~/.Trash` auf macOS, `~/.local/share/Trash` auf Linux)  
   - `g i`: Pfad manuell eingeben  
   - `g p`: Zu Pfad aus Zwischenablage springen  
 

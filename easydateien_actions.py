@@ -23,6 +23,7 @@ from easydateien_ui import (
     sync_to_macos_clipboard, sys, termios, time,
     tty, wrap_line_to_width, zipfile,
     invalidate_trash_cache, is_trash_dir, get_trash_dir, get_clipboard_text,
+    get_documents_dir, get_downloads_dir,
 )
 
 import os
@@ -2289,11 +2290,19 @@ class EasyDateienActions:
             c = key.lower()
             self.active_dialog = None
             if c == "d":
-                self.change_directory(os.path.expanduser("~/Downloads"))
-                self.set_status("Downloads", "info")
+                dl_dir = get_downloads_dir()
+                if os.path.isdir(dl_dir):
+                    self.change_directory(dl_dir)
+                    self.set_status("Downloads", "info")
+                else:
+                    self.set_status(f"Downloads-Ordner nicht gefunden ({self.get_short_dir(dl_dir)})", "warning")
             elif c == "f":
-                self.change_directory(os.path.expanduser("~/Documents"))
-                self.set_status("Dokumente", "info")
+                doc_dir = get_documents_dir()
+                if os.path.isdir(doc_dir):
+                    self.change_directory(doc_dir)
+                    self.set_status("Dokumente", "info")
+                else:
+                    self.set_status(f"Dokumente-Ordner nicht gefunden ({self.get_short_dir(doc_dir)})", "warning")
             elif c in ("-", "_"):
                 target = self.marked_dir or self.last_visited_dir
                 if target and os.path.isdir(target):

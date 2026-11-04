@@ -196,6 +196,7 @@ class TestAppKern(unittest.TestCase):
             f.write("test")
         os.makedirs(os.path.join(self.base, "Downloads"), exist_ok=True)
         os.makedirs(os.path.join(self.base, "Documents"), exist_ok=True)
+        os.makedirs(os.path.join(self.base, "Dokumente"), exist_ok=True)
         os.environ["HOME"] = self.base
         ed.HOME_DIR = self.base
         ed.CONFIG_DIR = os.path.join(self.base, ".config", "easydateien")
@@ -326,7 +327,7 @@ class TestAppKern(unittest.TestCase):
         self.assertTrue(self.app.current_dir.endswith("Downloads"))
         self.app.active_dialog = "goto_menu"
         self.app.handle_dialog_key("f", None)
-        self.assertTrue(self.app.current_dir.endswith("Documents"))
+        self.assertTrue(self.app.current_dir.endswith(("Documents", "Dokumente")))
         self.app.active_dialog = "goto_menu"
         self.app.handle_dialog_key("t", None)
         trash_dir = os.path.expanduser("~/.Trash")
@@ -360,7 +361,7 @@ class TestAppKern(unittest.TestCase):
             self.app.active_dialog = "trash_confirm"
             self.app.selected_paths = {test_file}
 
-            with patch("os.path.expanduser", return_value=fake_trash):
+            with patch("easydateien_actions.get_trash_dir", return_value=fake_trash), patch("os.path.expanduser", return_value=fake_trash):
                 self.app.handle_dialog_key("y", None)
 
             self.assertFalse(os.path.exists(test_file))

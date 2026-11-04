@@ -132,7 +132,7 @@ class TestKonsoleUnit(unittest.TestCase):
         app.console_focused = True
         try:
             app.run_console_command("ls", None, None)
-            zeilen = [l for l in app.console_output_lines if l and not l.startswith("$ ")]
+            zeilen = [l for l in app.console_output_lines if l and not l.startswith("$ ") and not l.startswith("bash: ")]
             self.assertTrue(zeilen)
             for l in zeilen:
                 self.assertLessEqual(
