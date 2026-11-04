@@ -132,15 +132,26 @@ class TestKonsoleUnit(unittest.TestCase):
         app.console_focused = True
         try:
             app.run_console_command("ls", None, None)
-            zeilen = [l for l in app.console_output_lines if l and not l.startswith("$ ") and not l.startswith("bash: ")]
+            zeilen = [l for l in app.console_output_lines if l and not l.startswith("$ ")]
             self.assertTrue(zeilen)
             for l in zeilen:
                 self.assertLessEqual(
                     len(visible(l)), 80,
                     f"ls-Zeile breiter als Terminal: {l!r}")
+            self.assertFalse(any("bash:" in l.lower() for l in app.console_output_lines))
         finally:
             os.chdir(self.orig_cwd)
             shutil.rmtree(base, ignore_errors=True)
+
+    def test_keine_jobsteuerung_fehlermeldungen_in_konsole(self):
+        self.app.run_console_command("ls", None, None)
+        output = "\n".join(self.app.console_output_lines).lower()
+        for fehler in (
+            "kann die prozessgruppe", "cannot set terminal process group",
+            "keine jobsteuerung", "no job control",
+            "unpassender ioctl", "inappropriate ioctl",
+        ):
+            self.assertNotIn(fehler, output)
 
     def test_umbruch_erhaelt_inhalt(self):
         self.app.run_console_command(

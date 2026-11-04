@@ -1533,7 +1533,9 @@ class EasyDateienActions:
     _CONSOLE_IGNORED_PATTERNS = (
         "restored session", "saving session", "saving history",
         "copying shared history", "copying history", "completed.",
-        "no job control in this shell",
+        "no job control in this shell", "keine jobsteuerung in dieser shell",
+        "cannot set terminal process group", "kann die prozessgruppe des terminals nicht setzen",
+        "inappropriate ioctl", "unpassender ioctl",
         "session contents restored", "session saved",
     )
 
@@ -1594,7 +1596,7 @@ class EasyDateienActions:
             pass
         try:
             proc = subprocess.Popen(
-                [user_shell, "-i", "-c", cmd],
+                [user_shell, "-c", cmd],
                 cwd=self.current_dir,
                 # Keine Eingaben an den Befehl: Die Konsole erlaubt nur
                 # nichtinteraktive Befehle. /dev/null verhindert, dass ein
