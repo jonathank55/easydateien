@@ -820,6 +820,14 @@ def get_file_type_desc(item: FileEntry) -> str:
         return "Link auf Ordner" if item.is_dir else "Symbolischer Link"
     if item.is_dir:
         return "Verzeichnis"
+    if getattr(item, "mode_str", "").startswith("c"):
+        return "Zeichenorientiertes Gerät"
+    if getattr(item, "mode_str", "").startswith("b"):
+        return "Blockorientiertes Gerät"
+    if getattr(item, "mode_str", "").startswith("p"):
+        return "Named Pipe (FIFO)"
+    if getattr(item, "mode_str", "").startswith("s"):
+        return "Socket"
     ext = item.ext.lower()
     m = {
         ".txt": "Textdokument", ".md": "Markdown-Datei", ".py": "Python-Skript",

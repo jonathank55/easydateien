@@ -175,11 +175,22 @@ class TestHilfsfunktionen(unittest.TestCase):
             is_dir = True
             is_exec = False
             ext = ""
+            mode_str = "drwxr-xr-x"
 
         self.assertEqual(ed.get_file_type_desc(Fake()), "Verzeichnis")
         Fake.is_dir = False
         Fake.ext = ".py"
+        Fake.mode_str = "-rw-r--r--"
         self.assertEqual(ed.get_file_type_desc(Fake()), "Python-Skript")
+        Fake.ext = ""
+        Fake.mode_str = "crw-rw-rw-"
+        self.assertEqual(ed.get_file_type_desc(Fake()), "Zeichenorientiertes Gerät")
+        Fake.mode_str = "brw-rw----"
+        self.assertEqual(ed.get_file_type_desc(Fake()), "Blockorientiertes Gerät")
+        Fake.mode_str = "prw-r--r--"
+        self.assertEqual(ed.get_file_type_desc(Fake()), "Named Pipe (FIFO)")
+        Fake.mode_str = "srwxrwxrwx"
+        self.assertEqual(ed.get_file_type_desc(Fake()), "Socket")
 
 
 class TestAppKern(unittest.TestCase):
@@ -618,6 +629,29 @@ class TestAppKern(unittest.TestCase):
         self.assertEqual(self.app.preview_scroll_offset, 1)
         self.app.handle_mouse_wheel("up", x=80, y=10)
         self.assertEqual(self.app.preview_scroll_offset, 0)
+
+    def test_spezialdateien_vorschau_und_behandlung(self):
+        fifo_pfad = os.path.join(self.dir_a, "test_fifo")
+        try:
+            os.mkfifo(fifo_pfad)
+        except OSError:
+            pass
+
+        if os.path.exists(fifo_pfad):
+            lines = self.app.load_file_preview_lines(fifo_pfad, 10, 40)
+            self.assertEqual(lines, ["[Named Pipe (FIFO)]"])
+
+        if os.path.exists("/dev/ptmx"):
+            lines_ptmx = self.app.load_file_preview_lines("/dev/ptmx", 10, 40)
+            self.assertEqual(lines_ptmx, ["[Zeichenorientierte Gerätedatei]"])
+
+        # Editor- und Öffner-Schutz für Spezialdateien
+        fake_spezial = ed.FileEntry(fifo_pfad if os.path.exists(fifo_pfad) else "/dev/ptmx", "ptmx")
+        self.app.open_in_editor(fake_spezial, None, None)
+        self.assertIn("Spezialdateien lassen sich nicht im Editor öffnen", self.app.status_message)
+
+        self.app.open_with_system(fake_spezial)
+        self.assertIn("Spezialdateien können nicht geöffnet werden", self.app.status_message)
 
     def test_read_key_page_up_down_varianten(self):
         r, w = os.pipe()

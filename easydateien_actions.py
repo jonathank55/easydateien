@@ -527,6 +527,9 @@ class EasyDateienActions:
         return template.replace("%s", quoted) if "%s" in template else f"{template} {quoted}"
 
     def open_with_system(self, item: FileEntry):
+        if item.mode_str.startswith(("c", "b", "p", "s")):
+            self.set_status("Spezialdateien können nicht geöffnet werden", "warning")
+            return
         opener = self.config.get("opener", "") or ""
         if not opener or opener == "open %s":
             opener = "open %s" if sys.platform == "darwin" else "xdg-open %s"
@@ -543,6 +546,9 @@ class EasyDateienActions:
         """Öffnet die Datei im konfigurierten Texteditor (Standard: nano; in den Einstellungen änderbar)."""
         if item.is_dir:
             self.set_status("Ordner lassen sich nicht im Editor öffnen", "warning")
+            return
+        if item.mode_str.startswith(("c", "b", "p", "s")):
+            self.set_status("Spezialdateien lassen sich nicht im Editor öffnen", "warning")
             return
         template = self.config.get("text_editor", "nano %s") or "nano %s"
         user_shell, env = get_shell_environment()
@@ -999,7 +1005,11 @@ class EasyDateienActions:
                         for file in files:
                             file_path = os.path.join(root, file)
                             try:
-                                if not os.path.exists(file_path) or stat.S_ISSOCK(os.stat(file_path).st_mode):
+                                if not os.path.exists(file_path):
+                                    skipped += 1
+                                    continue
+                                st = os.stat(file_path)
+                                if not stat.S_ISREG(st.st_mode):
                                     skipped += 1
                                     continue
                                 zf.write(file_path, os.path.relpath(file_path, base_dir))
@@ -1009,6 +1019,10 @@ class EasyDateienActions:
                                 skipped += 1
                 else:
                     try:
+                        st = os.stat(target)
+                        if not stat.S_ISREG(st.st_mode):
+                            skipped += 1
+                            continue
                         zf.write(target, os.path.basename(target))
                         if progress is not None:
                             progress["done"] += 1
@@ -1038,8 +1052,12 @@ class EasyDateienActions:
             if not os.path.exists(target):
                 self.set_status(f"Warnung: \u201e{os.path.basename(target)}\u201c existiert nicht und wird \u00fcbersprungen", "warning")
                 continue
-            if stat.S_ISSOCK(os.stat(target).st_mode):
-                self.set_status(f"Warnung: \u201e{os.path.basename(target)}\u201c ist ein Socket und wird \u00fcbersprungen", "warning")
+            try:
+                st = os.stat(target)
+                if not stat.S_ISREG(st.st_mode) and not stat.S_ISDIR(st.st_mode):
+                    self.set_status(f"Warnung: \u201e{os.path.basename(target)}\u201c ist eine Spezialdatei und wird \u00fcbersprungen", "warning")
+                    continue
+            except OSError:
                 continue
             valid_entries.append(FileEntry(target, os.path.basename(target)))
 
@@ -1350,6 +1368,7 @@ class EasyDateienActions:
         # Sortierparameter gehören zum Cacheschlüssel, damit die Vorschau derselben Anordnung wie die Dateispalten folgt
         sort_key = (path, cfg.get("sort_by", "name"), cfg.get("sort_reverse", True), cfg.get("sort_dir_first", True))
         # Änderungstempel der Datei: bei Inhaltsänderung (z. B. externer Editor) wird die Vorschau neu geladen
+        st: Optional[os.stat_result] = None
         try:
             st = os.stat(path)
             file_stamp: Optional[Tuple[int, int]] = (st.st_mtime_ns, st.st_size)
@@ -1367,89 +1386,106 @@ class EasyDateienActions:
         if (self.cached_file_preview_path != path or self.cached_file_preview_key != cache_key
                 or not self.cached_file_preview_lines):
             lines = []
-            try:
-                if zipfile.is_zipfile(path):
-                    with zipfile.ZipFile(path, "r") as zf:
-                        infos = zf.infolist()
-                        zip_entries = []
-                        for info in infos:
-                            fe = FileEntry("", info.filename)
-                            fe.size = info.file_size
-                            fe.is_dir = info.is_dir()
-                            try:
-                                fe.mtime = time.mktime(info.date_time + (0, 0, -1))
-                            except (OverflowError, ValueError):
-                                fe.mtime = 0.0
-                            zip_entries.append(fe)
-                        # Gleiche Anordnung wie in den Dateispalten (versteckte Dateien eingeschlossen)
-                        zip_entries = arrange_entries(
-                            zip_entries,
-                            show_hidden=True,
-                            sort_by=cfg.get("sort_by", "name"),
-                            sort_reverse=cfg.get("sort_reverse", True),
-                            sort_dir_first=cfg.get("sort_dir_first", True),
-                        )
-                        lines.append(f"Archivinhalt ({len(infos)} Dateien):")
-                        for fe in zip_entries[:10000]:
-                            if fe.is_dir:
-                                lines.append(f" {fe.name}")
-                            else:
-                                lines.append(f" {fe.name} ({format_size(fe.size)})")
-                elif is_media:
-                    thumb = get_cached_thumbnail(path, page=cur_pdf_page)
-                    if thumb:
-                        if supports_kitty_graphics():
-                            # Kitty-Grafikmodus: Terminal rendert Pixelbild direkt in den Bereich
-                            lines = [""] * max(1, max_lines)
-                        else:
-                            # Fallback für Terminals ohne Kitty-Grafik (z.B. Terminal.app):
-                            max_w = wrap_width if wrap_width and wrap_width > 0 else 30
-                            max_h = max_lines if max_lines > 0 else 15
-                            dims = get_image_pixel_size(thumb)
-                            if dims:
-                                font_ratio = get_terminal_font_ratio()
-                                fit_w, fit_h = compute_fit_dimensions(dims[0], dims[1], max_w, max_h, font_ratio)
-                            else:
-                                fit_w, fit_h = max_w, max_h
-                            lines = make_chafa_preview_lines(thumb, fit_w, fit_h)
-                            if not lines:
-                                lines = ["[Vorschau nicht verfügbar]"]
-                    else:
-                        ext_desc = "PDF" if path.lower().endswith(".pdf") else "Bild"
-                        lines = [f" [Lade {ext_desc}-Vorschau...]"]
+            if st is None:
+                lines = ["[Datei nicht gefunden oder nicht zugreifbar]"]
+            elif not stat.S_ISREG(st.st_mode):
+                mode = st.st_mode
+                if stat.S_ISCHR(mode):
+                    lines = ["[Zeichenorientierte Gerätedatei]"]
+                elif stat.S_ISBLK(mode):
+                    lines = ["[Blockorientierte Gerätedatei]"]
+                elif stat.S_ISFIFO(mode):
+                    lines = ["[Named Pipe (FIFO)]"]
+                elif stat.S_ISSOCK(mode):
+                    lines = ["[Socket]"]
+                elif stat.S_ISDIR(mode):
+                    lines = ["[Verzeichnis]"]
                 else:
-                    # Dateigroesse pruefen: Riesendateien (Modelle, Videos)
-                    # brauchen keinen vollstaendigen Vorschaucache; sie
-                    # werden nur bis zum Budget gelesen (Scrollen deckt das
-                    # Lesenswerte ab, ohne die App beim Blättern zu blocken).
-                    try:
-                        file_size = os.path.getsize(path)
-                    except OSError:
-                        file_size = 0
-                    VORSCHAU_BUDGET_BYTES = 1 * 1024 * 1024  # 1 MB
-                    with open(path, "r", encoding="utf-8", errors="replace") as f:
-                        gelesen = 0
-                        for _ in range(10000):
-                            line = f.readline()
-                            if not line:
-                                break
-                            gelesen += len(line)
-                            if gelesen > VORSCHAU_BUDGET_BYTES:
-                                # Budget erreicht: Vorschau endet hier; der
-                                # Rest bleibt ungeladen (verhindert Sekunden-
-                                # langes Einfrieren bei GB-Dateien).
-                                lines.append("… [weitere Inhalte nicht geladen]")
-                                break
-                            clean_line = line.rstrip("\r\n").replace("\t", "    ")
-                            clean_line = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_line)
-                            if "\x00" in line or (len(clean_line) == 0 and len(line.strip()) > 0 and file_size > 1024 * 1024):
-                                # Binaärinhalt in einer Grossdatei: Vorschau
-                                # abbrechen statt Muell anzeigen bzw. zu lesen.
-                                lines = ["[Binärdatei oder nicht lesbar]"] if not lines else lines
-                                break
-                            lines.append(clean_line)
-            except Exception:
-                lines = ["[Binäre Datei oder nicht lesbar]"]
+                    lines = ["[Spezialdatei oder nicht lesbar]"]
+            else:
+                try:
+                    if zipfile.is_zipfile(path):
+                        with zipfile.ZipFile(path, "r") as zf:
+                            infos = zf.infolist()
+                            zip_entries = []
+                            for info in infos:
+                                fe = FileEntry("", info.filename)
+                                fe.size = info.file_size
+                                fe.is_dir = info.is_dir()
+                                try:
+                                    fe.mtime = time.mktime(info.date_time + (0, 0, -1))
+                                except (OverflowError, ValueError):
+                                    fe.mtime = 0.0
+                                zip_entries.append(fe)
+                            # Gleiche Anordnung wie in den Dateispalten (versteckte Dateien eingeschlossen)
+                            zip_entries = arrange_entries(
+                                zip_entries,
+                                show_hidden=True,
+                                sort_by=cfg.get("sort_by", "name"),
+                                sort_reverse=cfg.get("sort_reverse", True),
+                                sort_dir_first=cfg.get("sort_dir_first", True),
+                            )
+                            lines.append(f"Archivinhalt ({len(infos)} Dateien):")
+                            for fe in zip_entries[:10000]:
+                                if fe.is_dir:
+                                    lines.append(f" {fe.name}")
+                                else:
+                                    lines.append(f" {fe.name} ({format_size(fe.size)})")
+                    elif is_media:
+                        thumb = get_cached_thumbnail(path, page=cur_pdf_page)
+                        if thumb:
+                            if supports_kitty_graphics():
+                                # Kitty-Grafikmodus: Terminal rendert Pixelbild direkt in den Bereich
+                                lines = [""] * max(1, max_lines)
+                            else:
+                                # Fallback für Terminals ohne Kitty-Grafik (z.B. Terminal.app):
+                                max_w = wrap_width if wrap_width and wrap_width > 0 else 30
+                                max_h = max_lines if max_lines > 0 else 15
+                                dims = get_image_pixel_size(thumb)
+                                if dims:
+                                    font_ratio = get_terminal_font_ratio()
+                                    fit_w, fit_h = compute_fit_dimensions(dims[0], dims[1], max_w, max_h, font_ratio)
+                                else:
+                                    fit_w, fit_h = max_w, max_h
+                                lines = make_chafa_preview_lines(thumb, fit_w, fit_h)
+                                if not lines:
+                                    lines = ["[Vorschau nicht verfügbar]"]
+                        else:
+                            ext_desc = "PDF" if path.lower().endswith(".pdf") else "Bild"
+                            lines = [f" [Lade {ext_desc}-Vorschau...]"]
+                    else:
+                        # Dateigroesse pruefen: Riesendateien (Modelle, Videos)
+                        # brauchen keinen vollstaendigen Vorschaucache; sie
+                        # werden nur bis zum Budget gelesen (Scrollen deckt das
+                        # Lesenswerte ab, ohne die App beim Blättern zu blocken).
+                        try:
+                            file_size = os.path.getsize(path)
+                        except OSError:
+                            file_size = 0
+                        VORSCHAU_BUDGET_BYTES = 1 * 1024 * 1024  # 1 MB
+                        with open(path, "r", encoding="utf-8", errors="replace") as f:
+                            gelesen = 0
+                            for _ in range(10000):
+                                line = f.readline()
+                                if not line:
+                                    break
+                                gelesen += len(line)
+                                if gelesen > VORSCHAU_BUDGET_BYTES:
+                                    # Budget erreicht: Vorschau endet hier; der
+                                    # Rest bleibt ungeladen (verhindert Sekunden-
+                                    # langes Einfrieren bei GB-Dateien).
+                                    lines.append("… [weitere Inhalte nicht geladen]")
+                                    break
+                                clean_line = line.rstrip("\r\n").replace("\t", "    ")
+                                clean_line = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_line)
+                                if "\x00" in line or (len(clean_line) == 0 and len(line.strip()) > 0 and file_size > 1024 * 1024):
+                                    # Binaärinhalt in einer Grossdatei: Vorschau
+                                    # abbrechen statt Muell anzeigen bzw. zu lesen.
+                                    lines = ["[Binärdatei oder nicht lesbar]"] if not lines else lines
+                                    break
+                                lines.append(clean_line)
+                except Exception:
+                    lines = ["[Binäre Datei oder nicht lesbar]"]
 
             self.cached_file_preview_path = path
             self.cached_file_preview_key = cache_key
