@@ -43,6 +43,7 @@ _FAST_PATH_PAGE_CACHE: Dict[Tuple[str, int], str] = {}
 _IMAGE_SIZE_MEM: Dict[str, Optional[Tuple[int, int]]] = {}
 _FONT_RATIO_CACHE: Optional[float] = None
 _PDF_PAGE_COUNT_MEM: Dict[str, int] = {}
+_HALBBLOCK_ZEILEN_CACHE: Dict[Tuple[str, int, int], List[str]] = {}
 
 
 def _trigger_ui_wakeup():
@@ -125,6 +126,21 @@ def get_pdf_page_count(path: str) -> int:
                 return pages
     except Exception:
         pass
+
+    # Schneller Fallback über pdfinfo auf Linux
+    pdfinfo = shutil.which("pdfinfo")
+    if pdfinfo:
+        try:
+            res = subprocess.run([pdfinfo, path], capture_output=True, text=True, timeout=0.5)
+            for zeile in res.stdout.splitlines():
+                if zeile.startswith("Pages:"):
+                    wert = zeile.split(":", 1)[1].strip()
+                    if wert.isdigit() and int(wert) > 0:
+                        anzahl = int(wert)
+                        _PDF_PAGE_COUNT_MEM[cache_key] = anzahl
+                        return anzahl
+        except Exception:
+            pass
 
     _PDF_PAGE_COUNT_MEM[cache_key] = 1
     return 1
@@ -533,7 +549,30 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> 
             _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
             return cached_png
 
-        # Konvertierung / Skalierung via sips
+        # 1. Bevorzugt Pillow (direkt in Python, extrem schnell mit JPEG-Draft-Skalierung)
+        try:
+            from PIL import Image as _PIL_Image, ImageOps as _PIL_ImageOps
+            with _PIL_Image.open(path) as img:
+                if ext in (".jpg", ".jpeg"):
+                    try:
+                        img.draft("RGB", (max_dim, max_dim))
+                    except Exception:
+                        pass
+                try:
+                    img = _PIL_ImageOps.exif_transpose(img)
+                except Exception:
+                    pass
+                img.thumbnail((max_dim, max_dim), _PIL_Image.Resampling.BILINEAR)
+                if img.mode not in ("RGB", "RGBA"):
+                    img = img.convert("RGBA" if "transparency" in img.info or img.mode == "P" else "RGB")
+                img.save(cached_png, "PNG", compress_level=1)
+                _THUMB_MEM_CACHE[mem_key] = cached_png
+                _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
+                return cached_png
+        except Exception:
+            pass
+
+        # 2. Konvertierung / Skalierung via sips (macOS nativ)
         sips = shutil.which("sips")
         if sips:
             try:
@@ -546,7 +585,7 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> 
             except (subprocess.TimeoutExpired, OSError):
                 pass
 
-        # Konvertierung via magick / convert (Linux & macOS)
+        # 3. Konvertierung via magick / convert (Linux & macOS Fallback)
         magick = shutil.which("magick") or shutil.which("convert")
         if magick:
             try:
@@ -558,18 +597,6 @@ def generate_preview_thumbnail(path: str, max_dim: int = 800, page: int = 1) -> 
                     return cached_png
             except (subprocess.TimeoutExpired, OSError):
                 pass
-
-        # Konvertierung via Pillow (reines Python)
-        try:
-            from PIL import Image as _PIL_Image
-            with _PIL_Image.open(path) as img:
-                img.thumbnail((max_dim, max_dim))
-                img.save(cached_png, "PNG")
-                _THUMB_MEM_CACHE[mem_key] = cached_png
-                _FAST_PATH_PAGE_CACHE[(path, page)] = cached_png
-                return cached_png
-        except Exception:
-            pass
 
         # SVG: Falls sips/magick scheitern, chafa/direkt probieren
         if ext == ".svg":
@@ -656,32 +683,80 @@ def make_kitty_image_sequence(png_path: str, cols: int, rows: int, row_pos: int,
 
 
 def make_chafa_preview_lines(image_path: str, cols: int, rows: int) -> List[str]:
-    """Erzeugt formatierte ANSI-Textzeilen mit 24-Bit-Halbblöcken via Chafa."""
-    chafa = shutil.which("chafa")
-    if chafa:
-        cmd = [
-            chafa,
-            "-f", "symbols",
-            "--symbols", "half+block",
-            "--colors", "full",
-            "--polite", "on",
-            "--size", f"{cols}x{rows}",
-            image_path
-        ]
-        try:
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=2.0)
-            if res.returncode == 0:
-                lines = res.stdout.splitlines()
-                return lines[:rows]
-        except (subprocess.TimeoutExpired, OSError):
-            pass
+    """Erzeugt formatierte ANSI-Textzeilen mit 24-Bit-Halbblöcken (mit Zwischenspeicher)."""
+    if not image_path or cols <= 0 or rows <= 0:
+        return []
+    ck = (image_path, cols, rows)
+    if ck in _HALBBLOCK_ZEILEN_CACHE:
+        return _HALBBLOCK_ZEILEN_CACHE[ck]
 
-    # Fallback: reines Python über sips (macOS nativ)
-    return make_python_halfblock_lines(image_path, cols, rows)
+    lines = []
+    # 1. Bevorzugt reines Python via Pillow (direkt im Speicher, kein Prozessstart, kein I/O)
+    try:
+        lines = make_python_halfblock_lines(image_path, cols, rows)
+    except Exception:
+        lines = []
+
+    # 2. Externes Chafa als Fallback
+    if not lines:
+        chafa = shutil.which("chafa")
+        if chafa:
+            cmd = [
+                chafa,
+                "-f", "symbols",
+                "--symbols", "half+block",
+                "--colors", "full",
+                "--polite", "on",
+                "--size", f"{cols}x{rows}",
+                image_path
+            ]
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=2.0)
+                if res.returncode == 0:
+                    lines = res.stdout.splitlines()[:rows]
+            except (subprocess.TimeoutExpired, OSError):
+                pass
+
+    if lines:
+        if len(_HALBBLOCK_ZEILEN_CACHE) > 500:
+            _HALBBLOCK_ZEILEN_CACHE.clear()
+        _HALBBLOCK_ZEILEN_CACHE[ck] = lines
+
+    return lines
 
 
 def make_python_halfblock_lines(image_path: str, cols: int, rows: int) -> List[str]:
     """Universeller Python-Halbblock-Renderer für Terminals ohne externes Chafa (macOS & Linux)."""
+    pixel_h = max(2, rows * 2)
+    pixel_w = max(2, cols)
+
+    # 1. Bevorzugt Pillow direkt im Hauptspeicher (ohne Festplatten-I/O und ohne Subprozesse)
+    try:
+        from PIL import Image as _PIL_Image
+        with _PIL_Image.open(image_path) as im:
+            im = im.convert("RGB").resize((pixel_w, pixel_h), _PIL_Image.Resampling.BILINEAR)
+            data = im.tobytes()
+        lines = []
+        stride = pixel_w * 3
+        for r_idx in range(rows):
+            top_y = r_idx * 2
+            bot_y = top_y + 1
+            top_offset = top_y * stride
+            bot_offset = bot_y * stride
+            line_parts = []
+            for c_idx in range(cols):
+                px_top = top_offset + c_idx * 3
+                px_bot = bot_offset + c_idx * 3
+                tr, tg, tb = data[px_top], data[px_top + 1], data[px_top + 2]
+                br, bg, bb = data[px_bot], data[px_bot + 1], data[px_bot + 2]
+                line_parts.append(f"\033[38;2;{tr};{tg};{tb}m\033[48;2;{br};{bg};{bb}m▀")
+            line_parts.append("\033[0m")
+            lines.append("".join(line_parts))
+        return lines
+    except Exception:
+        pass
+
+    # 2. Fallback über sips / magick (Legacy-BMP-Weg)
     sips = shutil.which("sips")
     conv_tool = sips or shutil.which("magick") or shutil.which("convert")
 
@@ -856,6 +931,14 @@ class PreviewWorker:
                         self._active_target = None
 
             # Vorabpufferung für PDF-Folgeseiten & Nachbardateien in Leerlaufphasen
+            # Kurze Ruhephase (60ms) abwarten: Wenn der Benutzer schnell scrollt,
+            # wird sofort die nächste Hauptanfrage verarbeitet statt Nachbarn vorabzupuffern.
+            if prefetch and not self._stop_event.is_set():
+                with self._lock:
+                    hat_neues_ziel = (self._active_target is not None)
+                if hat_neues_ziel or self._wake_event.wait(timeout=0.06):
+                    continue
+
             for pf_path, pf_page in prefetch:
                 with self._lock:
                     if self._active_target is not None or self._stop_event.is_set():

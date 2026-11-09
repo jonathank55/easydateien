@@ -49,6 +49,13 @@ from easydateien_preview import (
     get_pdf_page_count, request_preview,
 )
 
+_STEUERZEICHEN_MUSTER = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+_ARCHIV_ERWEITERUNGEN = {
+    ".zip", ".jar", ".war", ".ear", ".epub",
+    ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp",
+    ".apk", ".whl", ".kmz"
+}
+
 # Programme, die ohne Bedienung durch den Benutzer nicht sinnvoll laufen:
 # Editoren, Pager, Vollbildwerkzeuge, Fernzugriffe, Datenbank-CLIs,
 # Schleifen mit Tastatureingabe und Werkzeuge mit Bestätigungsabfragen.
@@ -1404,34 +1411,8 @@ class EasyDateienActions:
                     lines = ["[Spezialdatei oder nicht lesbar]"]
             else:
                 try:
-                    if zipfile.is_zipfile(path):
-                        with zipfile.ZipFile(path, "r") as zf:
-                            infos = zf.infolist()
-                            zip_entries = []
-                            for info in infos:
-                                fe = FileEntry("", info.filename)
-                                fe.size = info.file_size
-                                fe.is_dir = info.is_dir()
-                                try:
-                                    fe.mtime = time.mktime(info.date_time + (0, 0, -1))
-                                except (OverflowError, ValueError):
-                                    fe.mtime = 0.0
-                                zip_entries.append(fe)
-                            # Gleiche Anordnung wie in den Dateispalten (versteckte Dateien eingeschlossen)
-                            zip_entries = arrange_entries(
-                                zip_entries,
-                                show_hidden=True,
-                                sort_by=cfg.get("sort_by", "name"),
-                                sort_reverse=cfg.get("sort_reverse", True),
-                                sort_dir_first=cfg.get("sort_dir_first", True),
-                            )
-                            lines.append(f"Archivinhalt ({len(infos)} Dateien):")
-                            for fe in zip_entries[:10000]:
-                                if fe.is_dir:
-                                    lines.append(f" {fe.name}")
-                                else:
-                                    lines.append(f" {fe.name} ({format_size(fe.size)})")
-                    elif is_media:
+                    ext = os.path.splitext(path)[1].lower()
+                    if is_media:
                         thumb = get_cached_thumbnail(path, page=cur_pdf_page)
                         if thumb:
                             if supports_kitty_graphics():
@@ -1453,37 +1434,68 @@ class EasyDateienActions:
                         else:
                             ext_desc = "PDF" if path.lower().endswith(".pdf") else "Bild"
                             lines = [f" [Lade {ext_desc}-Vorschau...]"]
+                    elif (ext in _ARCHIV_ERWEITERUNGEN or not ext) and zipfile.is_zipfile(path):
+                        with zipfile.ZipFile(path, "r") as zf:
+                            infos = zf.infolist()
+                            zip_entries = []
+                            for info in infos[:1000]:
+                                fe = FileEntry("", info.filename)
+                                fe.size = info.file_size
+                                fe.is_dir = info.is_dir()
+                                try:
+                                    fe.mtime = time.mktime(info.date_time + (0, 0, -1))
+                                except (OverflowError, ValueError):
+                                    fe.mtime = 0.0
+                                zip_entries.append(fe)
+                            # Gleiche Anordnung wie in den Dateispalten (versteckte Dateien eingeschlossen)
+                            zip_entries = arrange_entries(
+                                zip_entries,
+                                show_hidden=True,
+                                sort_by=cfg.get("sort_by", "name"),
+                                sort_reverse=cfg.get("sort_reverse", True),
+                                sort_dir_first=cfg.get("sort_dir_first", True),
+                            )
+                            lines.append(f"Archivinhalt ({len(infos)} Dateien):")
+                            for fe in zip_entries[:500]:
+                                if fe.is_dir:
+                                    lines.append(f" {fe.name}")
+                                else:
+                                    lines.append(f" {fe.name} ({format_size(fe.size)})")
+                            if len(infos) > 500:
+                                lines.append(f" … [weitere {len(infos) - 500} Dateien im Archiv]")
                     else:
-                        # Dateigroesse pruefen: Riesendateien (Modelle, Videos)
-                        # brauchen keinen vollstaendigen Vorschaucache; sie
-                        # werden nur bis zum Budget gelesen (Scrollen deckt das
-                        # Lesenswerte ab, ohne die App beim Blättern zu blocken).
+                        # Schneller Binärtest (erste 4096 Bytes prüfen)
+                        ist_binaer = False
                         try:
-                            file_size = os.path.getsize(path)
+                            with open(path, "rb") as bf:
+                                auszug = bf.read(4096)
+                                if b"\x00" in auszug:
+                                    ist_binaer = True
                         except OSError:
-                            file_size = 0
-                        VORSCHAU_BUDGET_BYTES = 1 * 1024 * 1024  # 1 MB
-                        with open(path, "r", encoding="utf-8", errors="replace") as f:
-                            gelesen = 0
-                            for _ in range(10000):
-                                line = f.readline()
-                                if not line:
-                                    break
-                                gelesen += len(line)
-                                if gelesen > VORSCHAU_BUDGET_BYTES:
-                                    # Budget erreicht: Vorschau endet hier; der
-                                    # Rest bleibt ungeladen (verhindert Sekunden-
-                                    # langes Einfrieren bei GB-Dateien).
-                                    lines.append("… [weitere Inhalte nicht geladen]")
-                                    break
-                                clean_line = line.rstrip("\r\n").replace("\t", "    ")
-                                clean_line = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", clean_line)
-                                if "\x00" in line or (len(clean_line) == 0 and len(line.strip()) > 0 and file_size > 1024 * 1024):
-                                    # Binaärinhalt in einer Grossdatei: Vorschau
-                                    # abbrechen statt Muell anzeigen bzw. zu lesen.
-                                    lines = ["[Binärdatei oder nicht lesbar]"] if not lines else lines
-                                    break
-                                lines.append(clean_line)
+                            ist_binaer = True
+
+                        if ist_binaer:
+                            lines = ["[Binärdatei oder nicht lesbar]"]
+                        else:
+                            # Echte Textdatei: budgetiert und sicher zeilenweise lesen
+                            VORSCHAU_BUDGET_BYTES = 256 * 1024  # 256 KB
+                            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                                gelesen = 0
+                                max_preview_lines = min(1000, max(100, max_lines * 4))
+                                for _ in range(max_preview_lines):
+                                    line = f.readline(4096)
+                                    if not line:
+                                        break
+                                    gelesen += len(line)
+                                    if gelesen > VORSCHAU_BUDGET_BYTES:
+                                        lines.append("… [weitere Inhalte nicht geladen]")
+                                        break
+                                    clean_line = line.rstrip("\r\n").replace("\t", "    ")
+                                    clean_line = _STEUERZEICHEN_MUSTER.sub("", clean_line)
+                                    if "\x00" in line:
+                                        lines = ["[Binärdatei oder nicht lesbar]"] if not lines else lines
+                                        break
+                                    lines.append(clean_line)
                 except Exception:
                     lines = ["[Binäre Datei oder nicht lesbar]"]
 

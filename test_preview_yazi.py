@@ -363,6 +363,28 @@ class TestPreviewYazi(unittest.TestCase):
         app.build_screen(80, 24)
         self.assertEqual(app.pdf_page, 1)
 
+    def test_grosse_binaerdatei_und_halbblock_cache(self):
+        """Große Binärdateien und Halbblockzeilen werden verzögerungsfrei geladen und zwischengespeichert."""
+        # 10 MB Binärdatei mit Nullbytes
+        bin_pfad = os.path.join(self.base, "archiv.bin")
+        with open(bin_pfad, "wb") as f:
+            f.write(b"\x00\x01\x02\x03" * (256 * 1024))
+
+        app = ed.EasyDateienApp(self.base)
+        lines = app.load_file_preview_lines(bin_pfad, 20, 40)
+        self.assertEqual(lines, ["[Binärdatei oder nicht lesbar]"])
+
+        # Halbblock-Cache prüfen mit gültigem Bild
+        from PIL import Image as _PIL_Image
+        gueltiges_bild = os.path.join(self.base, "echtes_bild.png")
+        _PIL_Image.new("RGB", (40, 20), (100, 150, 200)).save(gueltiges_bild)
+
+        hb1 = ep.make_chafa_preview_lines(gueltiges_bild, 20, 10)
+        self.assertEqual(len(hb1), 10)
+        self.assertIn((gueltiges_bild, 20, 10), ep._HALBBLOCK_ZEILEN_CACHE)
+        hb2 = ep.make_chafa_preview_lines(gueltiges_bild, 20, 10)
+        self.assertEqual(hb1, hb2)
+
 
 if __name__ == "__main__":
     unittest.main()
